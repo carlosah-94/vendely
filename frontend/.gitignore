@@ -1,0 +1,15 @@
+# Backend (Maven / Java)
+backend/shopify/target/
+backend/shopify/*.class
+
+# Frontend (Node)
+frontend/node_modules/
+frontend/dist/
+
+# Variables de entorno
+.env
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+*.log

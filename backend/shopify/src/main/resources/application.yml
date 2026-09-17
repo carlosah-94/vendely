@@ -1,0 +1,20 @@
+## YAML Template.
+---
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/shopify_db}
+    username: ${SPRING_DATASOURCE_USERNAME:shopify_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:shopify_pass}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    show-sql: true
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:cambia-esto-por-una-clave-larga-y-aleatoria-de-al-menos-32-bytes}
+    expiration: ${JWT_EXPIRATION:86400000}
