@@ -10,7 +10,10 @@ spring:
     password: ${SPRING_DATASOURCE_PASSWORD:shopify_pass}
   jpa:
     hibernate:
-      ddl-auto: validate
+    # TEMPORAL: volver a "validate" cuando las entidades Java
+      # (User, Category, Product...) estén adaptadas al esquema Vendely
+      # (login, categorias, productos...). Ver db/init/01_esquema.sql
+      ddl-auto: none
     open-in-view: false
     show-sql: true
 
