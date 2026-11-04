@@ -1,5 +1,5 @@
 backend/shopify/target/
-backend/shopify/*.class
+*.class
 frontend/node_modules/
 frontend/dist/
 .env
