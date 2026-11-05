@@ -1,20 +1,26 @@
-## YAML Template.
----
 server:
   port: ${SERVER_PORT:8080}
 
 spring:
+  autoconfigure:
+    # La seguridad usa JWT con la tabla login: no hace falta el usuario de prueba
+    # en memoria que Spring crea por defecto ("Using generated security password")
+    exclude: org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/shopify_db}
     username: ${SPRING_DATASOURCE_USERNAME:shopify_user}
     password: ${SPRING_DATASOURCE_PASSWORD:shopify_pass}
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: validate      # las tablas las crea db/init; Hibernate solo verifica que coincidan
     open-in-view: false
     show-sql: true
 
 app:
   jwt:
+    # En producción SIEMPRE viene de la variable JWT_SECRET (mínimo 32 caracteres)
     secret: ${JWT_SECRET:cambia-esto-por-una-clave-larga-y-aleatoria-de-al-menos-32-bytes}
-    expiration: ${JWT_EXPIRATION:86400000}
+    expiration: ${JWT_EXPIRATION:86400000}   # 24 horas en milisegundos
+  cors:
+    # Orígenes (frontend) que pueden llamar a la API desde el navegador, separados por coma
+    origenes: ${CORS_ORIGENES:http://localhost:5173,http://localhost:5174}
