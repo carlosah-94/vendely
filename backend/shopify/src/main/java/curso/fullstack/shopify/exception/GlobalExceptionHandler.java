@@ -13,6 +13,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -61,6 +62,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<ApiError> noAutenticado(AuthenticationException ex, HttpServletRequest req) {
         return respuesta(HttpStatus.UNAUTHORIZED, "Debes iniciar sesión", req, null);
+    }
+
+    // Un dato de la ruta con el tipo equivocado, por ejemplo /api/panel/tiendas/abc
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiError> tipoInvalido(MethodArgumentTypeMismatchException ex, HttpServletRequest req) {
+        return respuesta(HttpStatus.BAD_REQUEST, "El valor de '" + ex.getName() + "' no es válido", req, null);
     }
 
     @ExceptionHandler(NoResourceFoundException.class)

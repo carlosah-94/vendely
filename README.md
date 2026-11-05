@@ -14,7 +14,7 @@ FullStack/
 ├── frontend/ # SPA en React
 ├── db/init/ # 01_esquema.sql y 02_datos_iniciales.sql (Docker los ejecuta en orden)
 ├── db/tests/ # 03_pruebas.sql (casos que la base debe aceptar y rechazar)
-├── postman/ # Colecciones de Postman para probar la API
+├── postman/ # Colección de Postman para probar la API (Vendely_API)
 └── docker-compose.yml
 
 
@@ -33,6 +33,7 @@ FullStack/
 
 - Base de datos final (24 tablas, Perú) en `db/init/`, con sus pruebas en `db/tests/`
 - Seguridad: registro, inicio de sesión, JWT, roles, CORS y manejo de errores (ver sección **Seguridad**)
+- Tiendas: el dueño crea, lista y edita sus tiendas; vitrina pública por subdominio (ver sección **Tiendas**)
 
 ### 🚧 Pendiente
 
@@ -110,14 +111,48 @@ public CarritoResponse miCarrito(@AuthenticationPrincipal UsuarioAutenticado yo)
 
 ### Probar con Postman
 
-1. Importa `postman/Vendely_Seguridad.postman_collection.json`.
-2. Ejecuta **Registrar dueño de tienda**: el token se guarda solo en la variable `{{token}}`.
-3. Para registrar clientes hace falta una tienda. Mientras no exista el endpoint de tiendas, créala en la base (el dueño del paso 2 tiene `id_propietario = 1` si la base está vacía):
+1. Importa `postman/Vendely_API.postman_collection.json`.
+2. Con la base recién creada, ejecuta las carpetas **en orden** (clic derecho en la colección → *Run collection*, o carpeta por carpeta):
+   - **1. Registro e inicio de sesión** y **2. Casos que deben fallar**: seguridad.
+   - **3. Tiendas** y **4. Tiendas: casos que deben fallar**: módulo de tiendas.
+3. Los tokens y los ids se guardan solos en las variables de la colección.
 
-   ```sql
-   INSERT INTO tiendas (id_propietario, nombre, subdominio, correo_contacto)
-   VALUES (1, 'Zapatillas Carlos', 'zapatillas-carlos', 'ventas@zapatillas.pe');
-   ```
+> El registro de clientes de la carpeta 1 usa la tienda `zapatillas-carlos`. Si la base está vacía, ejecuta antes la carpeta 3 (que crea una tienda) o crea esa tienda con:
+>
+> ```sql
+> INSERT INTO tiendas (id_propietario, nombre, subdominio, correo_contacto)
+> VALUES (1, 'Zapatillas Carlos', 'zapatillas-carlos', 'ventas@zapatillas.pe');
+> ```
 
-4. Ejecuta el resto de peticiones en orden. La carpeta **Casos que deben fallar** comprueba los errores 400, 401, 404 y 409.
+## Tiendas
 
+Un dueño (rol `ADMIN_TIENDA`) puede tener varias tiendas. Cada tienda se identifica en internet por su **subdominio** (`zapatillas-carlos` → `zapatillas-carlos.vendely.pe`).
+
+| Endpoint | Acceso | Qué hace |
+|---|---|---|
+| `POST /api/panel/tiendas` | ADMIN_TIENDA | Crea una tienda del dueño |
+| `GET /api/panel/tiendas` | ADMIN_TIENDA | Lista **sus** tiendas |
+| `GET /api/panel/tiendas/{idTienda}` | ADMIN_TIENDA (solo si es suya) | Ver una tienda |
+| `PUT /api/panel/tiendas/{idTienda}` | ADMIN_TIENDA (solo si es suya) | Editar nombre, descripción, contacto, logo, color e invitados |
+| `GET /api/public/tiendas/{subdominio}` | Abierto | Datos públicos de una tienda activa (vitrina) |
+
+**Reglas:**
+
+- El subdominio solo acepta letras, números y guiones (se guarda en minúsculas), es único y **no se cambia** después de crear la tienda, porque es la dirección que usan los clientes.
+- Algunos subdominios están reservados por Vendely (`www`, `api`, `admin`, `panel`, `login`…).
+- Una tienda suspendida no aparece en la vitrina pública.
+
+### Regla para los demás módulos del panel: `VerificadorTienda`
+
+El token del dueño no dice qué tienda está administrando, porque puede tener varias. Por eso **toda ruta del panel que reciba un `idTienda` debe comprobar que esa tienda sea del dueño**, usando la misma pieza:
+
+```java
+@GetMapping("/api/panel/tiendas/{idTienda}/productos")
+public List<ProductoResponse> listar(@AuthenticationPrincipal UsuarioAutenticado yo,
+                                     @PathVariable Long idTienda) {
+    Tienda tienda = verificadorTienda.delDueno(yo, idTienda);   // 404 si no existe, 403 si es de otro
+    return productoService.deTienda(tienda.getIdTienda());
+}
+```
+
+Así, si un dueño cambia el número de la URL para entrar a la tienda de otro, la API responde **403 "Esta tienda no es tuya"**.

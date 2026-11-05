@@ -1,0 +1,1600 @@
+{
+  "info": {
+    "name": "Vendely · API",
+    "description": "Colección de la API de Vendely. Ejecuta las carpetas en orden: 1 y 2 (seguridad), 3 y 4 (tiendas). Los tokens e ids se guardan solos en las variables de la colección.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Registro e inicio de sesión",
+      "item": [
+        {
+          "name": "Registrar dueño de tienda",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/registro/dueno",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "registro",
+                "dueno"
+              ]
+            },
+            "description": "Crea la cuenta del panel (rol ADMIN_TIENDA) y sus datos de propietario. Devuelve el token.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario\": \"carlos\",\n  \"correo\": \"carlos@mail.pe\",\n  \"contrasena\": \"Clave1234\",\n  \"nombres\": \"Carlos\",\n  \"apellidoPat\": \"Ramos\",\n  \"apellidoMat\": \"Soto\",\n  \"tipoDocumento\": 2,\n  \"numeroDocumento\": \"20123456789\",\n  \"razonSocial\": \"Zapatillas Carlos S.A.C.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 o 201', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+                  "const r = pm.response.json();",
+                  "if (r.token) { pm.collectionVariables.set('token', r.token); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Iniciar sesión (panel)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Sin subdominio = cuenta del panel.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"carlos@mail.pe\",\n  \"contrasena\": \"Clave1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 o 201', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+                  "const r = pm.response.json();",
+                  "if (r.token) { pm.collectionVariables.set('token', r.token); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registrar cliente en una tienda",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/registro/cliente",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "registro",
+                "cliente"
+              ]
+            },
+            "description": "La tienda debe existir (ver README: tienda de prueba).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subdominio\": \"zapatillas-carlos\",\n  \"usuario\": \"maria\",\n  \"correo\": \"maria@mail.pe\",\n  \"contrasena\": \"Clave1234\",\n  \"nombres\": \"María\",\n  \"apellidoPat\": \"Huamán\",\n  \"aceptaMarketing\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 o 201', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+                  "const r = pm.response.json();",
+                  "if (r.token) { pm.collectionVariables.set('token', r.token); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Iniciar sesión (cliente)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Con subdominio = cliente de esa tienda.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"maria@mail.pe\",\n  \"contrasena\": \"Clave1234\",\n  \"subdominio\": \"zapatillas-carlos\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 o 201', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+                  "const r = pm.response.json();",
+                  "if (r.token) { pm.collectionVariables.set('token', r.token); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mi cuenta",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/yo",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "yo"
+              ]
+            },
+            "description": "Devuelve quién inició sesión según el token.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cambiar contraseña",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/cambiar-contrasena",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "cambiar-contrasena"
+              ]
+            },
+            "description": "Devuelve un token nuevo; los anteriores dejan de servir.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contrasenaActual\": \"Clave1234\",\n  \"contrasenaNueva\": \"Nueva5678\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 o 201', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+                  "const r = pm.response.json();",
+                  "if (r.token) { pm.collectionVariables.set('token', r.token); }"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Casos que deben fallar",
+      "item": [
+        {
+          "name": "Contraseña incorrecta → 401",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"carlos@mail.pe\",\n  \"contrasena\": \"Mala1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Correo repetido → 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/registro/dueno",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "registro",
+                "dueno"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario\": \"carlos2\",\n  \"correo\": \"carlos@mail.pe\",\n  \"contrasena\": \"Clave1234\",\n  \"nombres\": \"Carlos\",\n  \"apellidoPat\": \"Ramos\",\n  \"tipoDocumento\": 1,\n  \"numeroDocumento\": \"12345678\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Datos inválidos → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/registro/dueno",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "registro",
+                "dueno"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario\": \"x\",\n  \"correo\": \"no-es-correo\",\n  \"contrasena\": \"123\",\n  \"nombres\": \"\",\n  \"apellidoPat\": \"R\",\n  \"tipoDocumento\": 1,\n  \"numeroDocumento\": \"123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "RUC mal escrito → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/registro/dueno",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "registro",
+                "dueno"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario\": \"ana\",\n  \"correo\": \"ana@mail.pe\",\n  \"contrasena\": \"Clave1234\",\n  \"nombres\": \"Ana\",\n  \"apellidoPat\": \"Paz\",\n  \"tipoDocumento\": 2,\n  \"numeroDocumento\": \"30123456789\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tienda inexistente → 404",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/registro/cliente",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "registro",
+                "cliente"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subdominio\": \"no-existe\",\n  \"usuario\": \"luis\",\n  \"correo\": \"luis@mail.pe\",\n  \"contrasena\": \"Clave1234\",\n  \"nombres\": \"Luis\",\n  \"apellidoPat\": \"Rojas\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sin token → 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/yo",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "yo"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Token alterado → 401",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}x"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/yo",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "yo"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Tiendas",
+      "item": [
+        {
+          "name": "Iniciar sesión (Carlos, dueño)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Carlos se registró en la carpeta 1. Su token queda en {{token}}.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"carlos@mail.pe\",\n  \"contrasena\": \"Clave1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('token', pm.response.json().token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear tienda",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/panel/tiendas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "panel",
+                "tiendas"
+              ]
+            },
+            "description": "Crea una tienda del dueño. El id queda en {{idTienda}}.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Celulares Carlos\",\n  \"subdominio\": \"{{subdominioNuevo}}\",\n  \"descripcion\": \"Celulares y accesorios con envío a todo el Perú\",\n  \"correoContacto\": \"ventas@celulares.pe\",\n  \"logoUrl\": \"https://placehold.co/200x200/png\",\n  \"colorPrincipal\": \"#1D4ED8\",\n  \"permiteInvitados\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Subdominio distinto en cada ejecución para poder repetir la prueba",
+                  "pm.collectionVariables.set('subdominioNuevo', 'celulares-' + Date.now().toString().slice(-6));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                  "const t = pm.response.json();",
+                  "pm.collectionVariables.set('idTienda', t.idTienda);",
+                  "pm.test('Queda activa', () => pm.expect(t.estado).to.eql('ACTIVA'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mis tiendas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/panel/tiendas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "panel",
+                "tiendas"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Devuelve una lista', () => pm.expect(pm.response.json()).to.be.an('array').that.is.not.empty);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ver mi tienda",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/panel/tiendas/{{idTienda}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "panel",
+                "tiendas",
+                "{{idTienda}}"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Editar mi tienda",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/panel/tiendas/{{idTienda}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "panel",
+                "tiendas",
+                "{{idTienda}}"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Celulares Carlos Perú\",\n  \"descripcion\": \"Ahora también tablets\",\n  \"correoContacto\": \"ventas@celulares.pe\",\n  \"colorPrincipal\": \"#047857\",\n  \"permiteInvitados\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Cambió el nombre', () => pm.expect(pm.response.json().nombre).to.eql('Celulares Carlos Perú'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Vitrina pública (sin token)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/public/tiendas/{{subdominioNuevo}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "public",
+                "tiendas",
+                "{{subdominioNuevo}}"
+              ]
+            },
+            "description": "Lo que ve cualquier visitante.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Tiendas: casos que deben fallar",
+      "item": [
+        {
+          "name": "Preparar: registrar otro dueño",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/registro/dueno",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "registro",
+                "dueno"
+              ]
+            },
+            "description": "Crea un segundo dueño con datos aleatorios para probar el acceso a la tienda de Carlos.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario\": \"otro{{sufijo}}\",\n  \"correo\": \"otro{{sufijo}}@mail.pe\",\n  \"contrasena\": \"Clave1234\",\n  \"nombres\": \"Otro\",\n  \"apellidoPat\": \"Dueño\",\n  \"tipoDocumento\": 1,\n  \"numeroDocumento\": \"{{dniAleatorio}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('dniAleatorio', String(Math.floor(10000000 + Math.random() * 89999999)));",
+                  "pm.collectionVariables.set('sufijo', Date.now().toString().slice(-7));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('tokenOtro', pm.response.json().token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Otro dueño ve la tienda de Carlos → 403",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/panel/tiendas/{{idTienda}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "panel",
+                "tiendas",
+                "{{idTienda}}"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenOtro}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Otro dueño edita la tienda de Carlos → 403",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/panel/tiendas/{{idTienda}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "panel",
+                "tiendas",
+                "{{idTienda}}"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Hackeada\",\n  \"correoContacto\": \"x@mail.pe\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenOtro}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Preparar: registrar un cliente",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/registro/cliente",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "registro",
+                "cliente"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subdominio\": \"{{subdominioNuevo}}\",\n  \"usuario\": \"cli{{sufijo}}\",\n  \"correo\": \"cli{{sufijo}}@mail.pe\",\n  \"contrasena\": \"Clave1234\",\n  \"nombres\": \"Cliente\",\n  \"apellidoPat\": \"Prueba\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('sufijo', Date.now().toString().slice(-7));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('tokenCliente', pm.response.json().token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cliente intenta crear una tienda → 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/panel/tiendas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "panel",
+                "tiendas"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Celulares Carlos\",\n  \"subdominio\": \"tienda-del-cliente\",\n  \"descripcion\": \"Celulares y accesorios con envío a todo el Perú\",\n  \"correoContacto\": \"ventas@celulares.pe\",\n  \"logoUrl\": \"https://placehold.co/200x200/png\",\n  \"colorPrincipal\": \"#1D4ED8\",\n  \"permiteInvitados\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenCliente}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear tienda sin token → 401",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/panel/tiendas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "panel",
+                "tiendas"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Celulares Carlos\",\n  \"subdominio\": \"sin-token\",\n  \"descripcion\": \"Celulares y accesorios con envío a todo el Perú\",\n  \"correoContacto\": \"ventas@celulares.pe\",\n  \"logoUrl\": \"https://placehold.co/200x200/png\",\n  \"colorPrincipal\": \"#1D4ED8\",\n  \"permiteInvitados\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Subdominio repetido → 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/panel/tiendas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "panel",
+                "tiendas"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Celulares Carlos\",\n  \"subdominio\": \"{{subdominioNuevo}}\",\n  \"descripcion\": \"Celulares y accesorios con envío a todo el Perú\",\n  \"correoContacto\": \"ventas@celulares.pe\",\n  \"logoUrl\": \"https://placehold.co/200x200/png\",\n  \"colorPrincipal\": \"#1D4ED8\",\n  \"permiteInvitados\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Subdominio con espacios y símbolos → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/panel/tiendas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "panel",
+                "tiendas"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Celulares Carlos\",\n  \"subdominio\": \"Mi Tienda!\",\n  \"descripcion\": \"Celulares y accesorios con envío a todo el Perú\",\n  \"correoContacto\": \"ventas@celulares.pe\",\n  \"logoUrl\": \"https://placehold.co/200x200/png\",\n  \"colorPrincipal\": \"#1D4ED8\",\n  \"permiteInvitados\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Subdominio reservado → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/panel/tiendas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "panel",
+                "tiendas"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Celulares Carlos\",\n  \"subdominio\": \"admin\",\n  \"descripcion\": \"Celulares y accesorios con envío a todo el Perú\",\n  \"correoContacto\": \"ventas@celulares.pe\",\n  \"logoUrl\": \"https://placehold.co/200x200/png\",\n  \"colorPrincipal\": \"#1D4ED8\",\n  \"permiteInvitados\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Color inválido → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/panel/tiendas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "panel",
+                "tiendas"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Celulares Carlos\",\n  \"subdominio\": \"color-malo\",\n  \"descripcion\": \"Celulares y accesorios con envío a todo el Perú\",\n  \"correoContacto\": \"ventas@celulares.pe\",\n  \"logoUrl\": \"https://placehold.co/200x200/png\",\n  \"colorPrincipal\": \"azul\",\n  \"permiteInvitados\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tienda que no existe → 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/panel/tiendas/999999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "panel",
+                "tiendas",
+                "999999"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Id que no es número → 400",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/panel/tiendas/abc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "panel",
+                "tiendas",
+                "abc"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Vitrina de una tienda que no existe → 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/public/tiendas/no-existe-esta-tienda",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "public",
+                "tiendas",
+                "no-existe-esta-tienda"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "idTienda",
+      "value": ""
+    },
+    {
+      "key": "subdominioNuevo",
+      "value": ""
+    },
+    {
+      "key": "tokenOtro",
+      "value": ""
+    },
+    {
+      "key": "tokenCliente",
+      "value": ""
+    },
+    {
+      "key": "dniAleatorio",
+      "value": ""
+    },
+    {
+      "key": "sufijo",
+      "value": ""
+    }
+  ]
+}
