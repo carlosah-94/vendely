@@ -1,0 +1,212 @@
+package curso.fullstack.shopify.service;
+
+import curso.fullstack.shopify.dto.AuthResponse;
+import curso.fullstack.shopify.dto.CambioContrasenaRequest;
+import curso.fullstack.shopify.dto.LoginRequest;
+import curso.fullstack.shopify.dto.RegistroClienteRequest;
+import curso.fullstack.shopify.dto.RegistroDuenoRequest;
+import curso.fullstack.shopify.dto.UsuarioResponse;
+import curso.fullstack.shopify.entity.Login;
+import curso.fullstack.shopify.entity.Propietario;
+import curso.fullstack.shopify.entity.RolUsuario;
+import curso.fullstack.shopify.entity.Tienda;
+import curso.fullstack.shopify.exception.ApiException;
+import curso.fullstack.shopify.repository.LoginRepository;
+import curso.fullstack.shopify.repository.PropietarioRepository;
+import curso.fullstack.shopify.repository.TiendaRepository;
+import curso.fullstack.shopify.security.JwtService;
+import curso.fullstack.shopify.security.UsuarioAutenticado;
+import java.time.OffsetDateTime;
+import java.util.Locale;
+import java.util.Optional;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+public class AuthService {
+
+    /** Mismo mensaje si falla el correo o la contraseña: así no se revela qué correos existen. */
+    private static final String CREDENCIALES_INVALIDAS = "Correo o contraseña incorrectos";
+
+    private final LoginRepository loginRepository;
+    private final PropietarioRepository propietarioRepository;
+    private final TiendaRepository tiendaRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
+    /** Hash de relleno: se compara aunque el correo no exista, para tardar lo mismo. */
+    private final String hashDeRelleno;
+
+    public AuthService(LoginRepository loginRepository, PropietarioRepository propietarioRepository,
+                       TiendaRepository tiendaRepository, PasswordEncoder passwordEncoder,
+                       JwtService jwtService) {
+        this.loginRepository = loginRepository;
+        this.propietarioRepository = propietarioRepository;
+        this.tiendaRepository = tiendaRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.jwtService = jwtService;
+        this.hashDeRelleno = passwordEncoder.encode("relleno-para-igualar-tiempos");
+    }
+
+    // ------------------------------------------------------------------ registro
+
+    @Transactional
+    public AuthResponse registrarDueno(RegistroDuenoRequest r) {
+        String correo = normalizarCorreo(r.correo());
+        String documento = r.numeroDocumento().trim();
+        validarDocumento(r.tipoDocumento(), documento);
+
+        if (loginRepository.existsByCorreoAndIdTiendaIsNull(correo)) {
+            throw new ApiException(HttpStatus.CONFLICT, "El correo ya está registrado");
+        }
+        if (loginRepository.existsByUsuarioAndIdTiendaIsNull(r.usuario().trim())) {
+            throw new ApiException(HttpStatus.CONFLICT, "El nombre de usuario ya está en uso");
+        }
+        if (propietarioRepository.existsByTipoDocumentoAndNumeroDocumento(r.tipoDocumento(), documento)) {
+            throw new ApiException(HttpStatus.CONFLICT, "El documento ya está registrado");
+        }
+
+        Login login = nuevaCuenta(RolUsuario.ADMIN_TIENDA, null, r.usuario(), correo, r.contrasena(),
+                r.nombres(), r.apellidoPat(), r.apellidoMat(), r.telefono(), false);
+        loginRepository.saveAndFlush(login);
+
+        Propietario p = new Propietario();
+        p.setIdLogin(login.getIdLogin());
+        p.setTipoDocumento(r.tipoDocumento());
+        p.setNumeroDocumento(documento);
+        p.setRazonSocial(vacioANull(r.razonSocial()));
+        propietarioRepository.save(p);
+
+        return respuesta(login);
+    }
+
+    @Transactional
+    public AuthResponse registrarCliente(RegistroClienteRequest r) {
+        Tienda tienda = tiendaActiva(r.subdominio());
+        String correo = normalizarCorreo(r.correo());
+
+        if (loginRepository.existsByCorreoAndIdTienda(correo, tienda.getIdTienda())) {
+            throw new ApiException(HttpStatus.CONFLICT, "El correo ya está registrado en esta tienda");
+        }
+        if (loginRepository.existsByUsuarioAndIdTienda(r.usuario().trim(), tienda.getIdTienda())) {
+            throw new ApiException(HttpStatus.CONFLICT, "El nombre de usuario ya está en uso en esta tienda");
+        }
+
+        Login login = nuevaCuenta(RolUsuario.CLIENTE, tienda.getIdTienda(), r.usuario(), correo, r.contrasena(),
+                r.nombres(), r.apellidoPat(), r.apellidoMat(), r.telefono(),
+                Boolean.TRUE.equals(r.aceptaMarketing()));
+        loginRepository.saveAndFlush(login);
+        return respuesta(login);
+    }
+
+    // ------------------------------------------------------------ inicio de sesión
+
+    @Transactional(readOnly = true)
+    public AuthResponse iniciarSesion(LoginRequest r) {
+        String correo = normalizarCorreo(r.correo());
+        Optional<Login> cuenta;
+
+        if (r.subdominio() == null || r.subdominio().isBlank()) {
+            cuenta = loginRepository.findByCorreoAndIdTiendaIsNull(correo);        // panel
+        } else {
+            Tienda tienda = tiendaActiva(r.subdominio());
+            cuenta = loginRepository.findByCorreoAndIdTienda(correo, tienda.getIdTienda());  // cliente
+        }
+
+        String hash = cuenta.map(Login::getContrasenaHash).orElse(hashDeRelleno);
+        boolean coincide = passwordEncoder.matches(r.contrasena(), hash);
+        if (cuenta.isEmpty() || !coincide) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, CREDENCIALES_INVALIDAS);
+        }
+        if (!cuenta.get().estaActivo()) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "La cuenta está desactivada");
+        }
+        return respuesta(cuenta.get());
+    }
+
+    // --------------------------------------------------------------- mi cuenta
+
+    @Transactional(readOnly = true)
+    public UsuarioResponse miCuenta(UsuarioAutenticado yo) {
+        return UsuarioResponse.desde(buscar(yo.idLogin()));
+    }
+
+    /** Cambia la contraseña y devuelve un token nuevo: los tokens anteriores dejan de servir. */
+    @Transactional
+    public AuthResponse cambiarContrasena(UsuarioAutenticado yo, CambioContrasenaRequest r) {
+        Login login = buscar(yo.idLogin());
+        if (!passwordEncoder.matches(r.contrasenaActual(), login.getContrasenaHash())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "La contraseña actual no es correcta");
+        }
+        login.setContrasenaHash(passwordEncoder.encode(r.contrasenaNueva()));
+        login.setContrasenaCambiadaEn(OffsetDateTime.now());
+        loginRepository.saveAndFlush(login);
+        return respuesta(login);
+    }
+
+    // ------------------------------------------------------------------ apoyo
+
+    private Login nuevaCuenta(RolUsuario rol, Long idTienda, String usuario, String correo, String contrasena,
+                              String nombres, String apellidoPat, String apellidoMat, String telefono,
+                              boolean aceptaMarketing) {
+        Login l = new Login();
+        l.setRol(rol);
+        l.setIdTienda(idTienda);
+        l.setUsuario(usuario.trim());
+        l.setCorreo(correo);
+        l.setContrasenaHash(passwordEncoder.encode(contrasena));
+        l.setNombres(nombres.trim());
+        l.setApellidoPat(apellidoPat.trim());
+        l.setApellidoMat(vacioANull(apellidoMat));
+        l.setTelefono(vacioANull(telefono));
+        l.setAceptaMarketing(aceptaMarketing);
+        return l;
+    }
+
+    private Tienda tiendaActiva(String subdominio) {
+        Tienda t = tiendaRepository.findBySubdominio(subdominio.trim().toLowerCase(Locale.ROOT))
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "La tienda no existe"));
+        if (!t.estaActiva()) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "La tienda está suspendida");
+        }
+        return t;
+    }
+
+    private Login buscar(Long idLogin) {
+        return loginRepository.findById(idLogin)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "La cuenta no existe"));
+    }
+
+    private AuthResponse respuesta(Login login) {
+        return new AuthResponse(jwtService.generarToken(login), "Bearer",
+                jwtService.getExpiracionSegundos(), UsuarioResponse.desde(login));
+    }
+
+    /** La base exige el correo en minúsculas (CHECK ck_login_correo). */
+    private static String normalizarCorreo(String correo) {
+        return correo.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private static String vacioANull(String s) {
+        return (s == null || s.isBlank()) ? null : s.trim();
+    }
+
+    /** Misma regla que el CHECK ck_propietarios_documento, para dar un mensaje claro. */
+    private static void validarDocumento(Short tipo, String numero) {
+        boolean ok = switch (tipo) {
+            case 1 -> numero.matches("^[0-9]{8}$");                    // DNI
+            case 2 -> numero.matches("^(10|15|17|20)[0-9]{9}$");       // RUC
+            case 3 -> numero.matches("^[0-9]{9}$");                    // carné de extranjería
+            default -> false;
+        };
+        if (!ok) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, switch (tipo) {
+                case 1 -> "El DNI debe tener 8 dígitos";
+                case 2 -> "El RUC debe tener 11 dígitos y empezar con 10, 15, 17 o 20";
+                case 3 -> "El carné de extranjería debe tener 9 dígitos";
+                default -> "Tipo de documento inválido";
+            });
+        }
+    }
+}
