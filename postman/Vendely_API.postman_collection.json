@@ -33,7 +33,7 @@
             "description": "Crea la cuenta del panel (rol ADMIN_TIENDA) y sus datos de propietario. Devuelve el token.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"usuario\": \"carlos\",\n  \"correo\": \"carlos@mail.pe\",\n  \"contrasena\": \"Clave1234\",\n  \"nombres\": \"Carlos\",\n  \"apellidoPat\": \"Ramos\",\n  \"apellidoMat\": \"Soto\",\n  \"tipoDocumento\": 2,\n  \"numeroDocumento\": \"20123456789\",\n  \"razonSocial\": \"Zapatillas Carlos S.A.C.\"\n}",
+              "raw": "{\n  \"usuario\": \"carlos\",\n  \"correo\": \"carlos@mail.pe\",\n  \"contrasena\": \"Clave1234\",\n  \"nombres\": \"Carlos\",\n  \"primerApellido\": \"Ramos\",\n  \"segundoApellido\": \"Soto\",\n  \"tipoDocumento\": 2,\n  \"numeroDocumento\": \"20123456789\",\n  \"razonSocial\": \"Zapatillas Carlos S.A.C.\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -108,6 +108,60 @@
           ]
         },
         {
+          "name": "Crear tienda Zapatillas Carlos",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/panel/tiendas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "panel",
+                "tiendas"
+              ]
+            },
+            "description": "Crea la tienda zapatillas-carlos, que usa el registro de clientes de esta carpeta. 201 si se crea; 409 si ya existía (al repetir la colección).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Zapatillas Carlos\",\n  \"subdominio\": \"zapatillas-carlos\",\n  \"correoContacto\": \"ventas@zapatillas.pe\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 (creada) o 409 (ya existía)', () => pm.expect(pm.response.code).to.be.oneOf([201, 409]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Registrar cliente en una tienda",
           "request": {
             "method": "POST",
@@ -132,7 +186,7 @@
             "description": "La tienda debe existir (ver README: tienda de prueba).",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"subdominio\": \"zapatillas-carlos\",\n  \"usuario\": \"maria\",\n  \"correo\": \"maria@mail.pe\",\n  \"contrasena\": \"Clave1234\",\n  \"nombres\": \"María\",\n  \"apellidoPat\": \"Huamán\",\n  \"aceptaMarketing\": true\n}",
+              "raw": "{\n  \"subdominio\": \"zapatillas-carlos\",\n  \"usuario\": \"maria\",\n  \"correo\": \"maria@mail.pe\",\n  \"contrasena\": \"Clave1234\",\n  \"nombres\": \"María\",\n  \"primerApellido\": \"Huamán\",\n  \"aceptaMarketing\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -379,7 +433,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"usuario\": \"carlos2\",\n  \"correo\": \"carlos@mail.pe\",\n  \"contrasena\": \"Clave1234\",\n  \"nombres\": \"Carlos\",\n  \"apellidoPat\": \"Ramos\",\n  \"tipoDocumento\": 1,\n  \"numeroDocumento\": \"12345678\"\n}",
+              "raw": "{\n  \"usuario\": \"carlos2\",\n  \"correo\": \"carlos@mail.pe\",\n  \"contrasena\": \"Clave1234\",\n  \"nombres\": \"Carlos\",\n  \"primerApellido\": \"Ramos\",\n  \"tipoDocumento\": 1,\n  \"numeroDocumento\": \"12345678\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -427,7 +481,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"usuario\": \"x\",\n  \"correo\": \"no-es-correo\",\n  \"contrasena\": \"123\",\n  \"nombres\": \"\",\n  \"apellidoPat\": \"R\",\n  \"tipoDocumento\": 1,\n  \"numeroDocumento\": \"123\"\n}",
+              "raw": "{\n  \"usuario\": \"x\",\n  \"correo\": \"no-es-correo\",\n  \"contrasena\": \"123\",\n  \"nombres\": \"\",\n  \"primerApellido\": \"R\",\n  \"tipoDocumento\": 1,\n  \"numeroDocumento\": \"123\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -475,7 +529,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"usuario\": \"ana\",\n  \"correo\": \"ana@mail.pe\",\n  \"contrasena\": \"Clave1234\",\n  \"nombres\": \"Ana\",\n  \"apellidoPat\": \"Paz\",\n  \"tipoDocumento\": 2,\n  \"numeroDocumento\": \"30123456789\"\n}",
+              "raw": "{\n  \"usuario\": \"ana\",\n  \"correo\": \"ana@mail.pe\",\n  \"contrasena\": \"Clave1234\",\n  \"nombres\": \"Ana\",\n  \"primerApellido\": \"Paz\",\n  \"tipoDocumento\": 2,\n  \"numeroDocumento\": \"30123456789\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -523,7 +577,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"subdominio\": \"no-existe\",\n  \"usuario\": \"luis\",\n  \"correo\": \"luis@mail.pe\",\n  \"contrasena\": \"Clave1234\",\n  \"nombres\": \"Luis\",\n  \"apellidoPat\": \"Rojas\"\n}",
+              "raw": "{\n  \"subdominio\": \"no-existe\",\n  \"usuario\": \"luis\",\n  \"correo\": \"luis@mail.pe\",\n  \"contrasena\": \"Clave1234\",\n  \"nombres\": \"Luis\",\n  \"primerApellido\": \"Rojas\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -939,7 +993,7 @@
             "description": "Crea un segundo dueño con datos aleatorios para probar el acceso a la tienda de Carlos.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"usuario\": \"otro{{sufijo}}\",\n  \"correo\": \"otro{{sufijo}}@mail.pe\",\n  \"contrasena\": \"Clave1234\",\n  \"nombres\": \"Otro\",\n  \"apellidoPat\": \"Dueño\",\n  \"tipoDocumento\": 1,\n  \"numeroDocumento\": \"{{dniAleatorio}}\"\n}",
+              "raw": "{\n  \"usuario\": \"otro{{sufijo}}\",\n  \"correo\": \"otro{{sufijo}}@mail.pe\",\n  \"contrasena\": \"Clave1234\",\n  \"nombres\": \"Otro\",\n  \"primerApellido\": \"Dueño\",\n  \"tipoDocumento\": 1,\n  \"numeroDocumento\": \"{{dniAleatorio}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1094,7 +1148,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"subdominio\": \"{{subdominioNuevo}}\",\n  \"usuario\": \"cli{{sufijo}}\",\n  \"correo\": \"cli{{sufijo}}@mail.pe\",\n  \"contrasena\": \"Clave1234\",\n  \"nombres\": \"Cliente\",\n  \"apellidoPat\": \"Prueba\"\n}",
+              "raw": "{\n  \"subdominio\": \"{{subdominioNuevo}}\",\n  \"usuario\": \"cli{{sufijo}}\",\n  \"correo\": \"cli{{sufijo}}@mail.pe\",\n  \"contrasena\": \"Clave1234\",\n  \"nombres\": \"Cliente\",\n  \"primerApellido\": \"Prueba\"\n}",
               "options": {
                 "raw": {
                   "language": "json"

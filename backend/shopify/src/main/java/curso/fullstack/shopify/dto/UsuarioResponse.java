@@ -8,13 +8,13 @@ public record UsuarioResponse(
         String usuario,
         String correo,
         String nombres,
-        String apellidoPat,
-        String apellidoMat,
+        String primerApellido,
+        String segundoApellido,
         String rol,
         Long idTienda
 ) {
     public static UsuarioResponse desde(Login l) {
         return new UsuarioResponse(l.getIdLogin(), l.getUsuario(), l.getCorreo(), l.getNombres(),
-                l.getApellidoPat(), l.getApellidoMat(), l.getRol().name(), l.getIdTienda());
+                l.getPrimerApellido(), l.getSegundoApellido(), l.getRol().name(), l.getIdTienda());
     }
 }

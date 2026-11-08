@@ -41,13 +41,14 @@ public class Login {
     @Column(name = "nombres", nullable = false, length = 80)
     private String nombres;
 
-    @Column(name = "apellido_pat", nullable = false, length = 80)
-    private String apellidoPat;
+    @Column(name = "primer_apellido", nullable = false, length = 80)
+    private String primerApellido;
 
-    @Column(name = "apellido_mat", length = 80)
-    private String apellidoMat;
+    @Column(name = "segundo_apellido", length = 80)
+    private String segundoApellido;
 
-    @Column(name = "telefono", length = 20)
+    /** Formato internacional E.164: +51987654321 (CHECK ck_login_telefono). */
+    @Column(name = "telefono", length = 16)
     private String telefono;
 
     @Column(name = "acepta_marketing", nullable = false)
@@ -92,10 +93,10 @@ public class Login {
     public void setContrasenaHash(String contrasenaHash) { this.contrasenaHash = contrasenaHash; }
     public String getNombres() { return nombres; }
     public void setNombres(String nombres) { this.nombres = nombres; }
-    public String getApellidoPat() { return apellidoPat; }
-    public void setApellidoPat(String apellidoPat) { this.apellidoPat = apellidoPat; }
-    public String getApellidoMat() { return apellidoMat; }
-    public void setApellidoMat(String apellidoMat) { this.apellidoMat = apellidoMat; }
+    public String getPrimerApellido() { return primerApellido; }
+    public void setPrimerApellido(String primerApellido) { this.primerApellido = primerApellido; }
+    public String getSegundoApellido() { return segundoApellido; }
+    public void setSegundoApellido(String segundoApellido) { this.segundoApellido = segundoApellido; }
     public String getTelefono() { return telefono; }
     public void setTelefono(String telefono) { this.telefono = telefono; }
     public Boolean getAceptaMarketing() { return aceptaMarketing; }

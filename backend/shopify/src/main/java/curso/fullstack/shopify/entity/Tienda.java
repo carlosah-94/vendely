@@ -24,6 +24,10 @@ public class Tienda {
     @Column(name = "id_propietario", nullable = false)
     private Long idPropietario;
 
+    /** País donde vende (ISO 3166-1: PE, CL…). Define su moneda e impuesto. No cambia después de crear la tienda (T8). */
+    @Column(name = "id_pais", nullable = false, length = 2, columnDefinition = "bpchar(2)", updatable = false)
+    private String idPais = "PE";
+
     @Column(name = "nombre", nullable = false, length = 150)
     private String nombre;
 
@@ -69,6 +73,8 @@ public class Tienda {
     public Long getIdTienda() { return idTienda; }
     public Long getIdPropietario() { return idPropietario; }
     public void setIdPropietario(Long idPropietario) { this.idPropietario = idPropietario; }
+    public String getIdPais() { return idPais; }
+    public void setIdPais(String idPais) { this.idPais = idPais; }
     public String getNombre() { return nombre; }
     public void setNombre(String nombre) { this.nombre = nombre; }
     public String getSubdominio() { return subdominio; }
