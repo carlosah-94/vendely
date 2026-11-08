@@ -2,10 +2,6 @@ server:
   port: ${SERVER_PORT:8080}
 
 spring:
-  autoconfigure:
-    # La seguridad usa JWT con la tabla login: no hace falta el usuario de prueba
-    # en memoria que Spring crea por defecto ("Using generated security password")
-    exclude: org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/shopify_db}
     username: ${SPRING_DATASOURCE_USERNAME:shopify_user}
