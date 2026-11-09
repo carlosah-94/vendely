@@ -14,12 +14,18 @@ import curso.fullstack.shopify.exception.ApiException;
 import curso.fullstack.shopify.repository.LoginRepository;
 import curso.fullstack.shopify.repository.PropietarioRepository;
 import curso.fullstack.shopify.repository.TiendaRepository;
+import curso.fullstack.shopify.security.CuentaUserDetails;
 import curso.fullstack.shopify.security.JwtService;
 import curso.fullstack.shopify.security.UsuarioAutenticado;
+import curso.fullstack.shopify.security.UsuarioDetailsService;
 import java.time.OffsetDateTime;
 import java.util.Locale;
-import java.util.Optional;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,7 +33,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AuthService {
 
-    /** Mismo mensaje si falla el correo o la contraseña: así no se revela qué correos existen. */
+    /**
+     * Mismo mensaje si falla el correo o la contraseña: así no se revela qué
+     * correos existen.
+     */
     private static final String CREDENCIALES_INVALIDAS = "Correo o contraseña incorrectos";
 
     private final LoginRepository loginRepository;
@@ -35,18 +44,17 @@ public class AuthService {
     private final TiendaRepository tiendaRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
-    /** Hash de relleno: se compara aunque el correo no exista, para tardar lo mismo. */
-    private final String hashDeRelleno;
+    private final AuthenticationManager authenticationManager;
 
     public AuthService(LoginRepository loginRepository, PropietarioRepository propietarioRepository,
-                       TiendaRepository tiendaRepository, PasswordEncoder passwordEncoder,
-                       JwtService jwtService) {
+            TiendaRepository tiendaRepository, PasswordEncoder passwordEncoder,
+            JwtService jwtService, AuthenticationManager authenticationManager) {
         this.loginRepository = loginRepository;
         this.propietarioRepository = propietarioRepository;
         this.tiendaRepository = tiendaRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
-        this.hashDeRelleno = passwordEncoder.encode("relleno-para-igualar-tiempos");
+        this.authenticationManager = authenticationManager;
     }
 
     // ------------------------------------------------------------------ registro
@@ -102,27 +110,29 @@ public class AuthService {
 
     // ------------------------------------------------------------ inicio de sesión
 
+    /**
+     * El AuthenticationManager busca la cuenta con UsuarioDetailsService,
+     * compara la contraseña con BCrypt y revisa si la cuenta está activa.
+     */
     @Transactional(readOnly = true)
     public AuthResponse iniciarSesion(LoginRequest r) {
         String correo = normalizarCorreo(r.correo());
-        Optional<Login> cuenta;
-
-        if (r.subdominio() == null || r.subdominio().isBlank()) {
-            cuenta = loginRepository.findByCorreoAndIdTiendaIsNull(correo);        // panel
-        } else {
-            Tienda tienda = tiendaActiva(r.subdominio());
-            cuenta = loginRepository.findByCorreoAndIdTienda(correo, tienda.getIdTienda());  // cliente
+        Long idTienda = null;
+        if (r.subdominio() != null && !r.subdominio().isBlank()) {
+            idTienda = tiendaActiva(r.subdominio()).getIdTienda();
         }
 
-        String hash = cuenta.map(Login::getContrasenaHash).orElse(hashDeRelleno);
-        boolean coincide = passwordEncoder.matches(r.contrasena(), hash);
-        if (cuenta.isEmpty() || !coincide) {
+        try {
+            Authentication autenticacion = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            UsuarioDetailsService.clave(correo, idTienda), r.contrasena()));
+            Login login = ((CuentaUserDetails) autenticacion.getPrincipal()).getLogin();
+            return respuesta(login);
+        } catch (DisabledException e) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "La cuenta está desactivada");
+        } catch (AuthenticationException e) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, CREDENCIALES_INVALIDAS);
         }
-        if (!cuenta.get().estaActivo()) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "La cuenta está desactivada");
-        }
-        return respuesta(cuenta.get());
     }
 
     // --------------------------------------------------------------- mi cuenta
@@ -132,7 +142,10 @@ public class AuthService {
         return UsuarioResponse.desde(buscar(yo.idLogin()));
     }
 
-    /** Cambia la contraseña y devuelve un token nuevo: los tokens anteriores dejan de servir. */
+    /**
+     * Cambia la contraseña y devuelve un token nuevo: los tokens anteriores dejan
+     * de servir.
+     */
     @Transactional
     public AuthResponse cambiarContrasena(UsuarioAutenticado yo, CambioContrasenaRequest r) {
         Login login = buscar(yo.idLogin());
@@ -148,8 +161,8 @@ public class AuthService {
     // ------------------------------------------------------------------ apoyo
 
     private Login nuevaCuenta(RolUsuario rol, Long idTienda, String usuario, String correo, String contrasena,
-                              String nombres, String apellidoPat, String apellidoMat, String telefono,
-                              boolean aceptaMarketing) {
+            String nombres, String apellidoPat, String apellidoMat, String telefono,
+            boolean aceptaMarketing) {
         Login l = new Login();
         l.setRol(rol);
         l.setIdTienda(idTienda);
@@ -192,12 +205,15 @@ public class AuthService {
         return (s == null || s.isBlank()) ? null : s.trim();
     }
 
-    /** Misma regla que el CHECK ck_propietarios_documento, para dar un mensaje claro. */
+    /**
+     * Misma regla que el CHECK ck_propietarios_documento, para dar un mensaje
+     * claro.
+     */
     private static void validarDocumento(Short tipo, String numero) {
         boolean ok = switch (tipo) {
-            case 1 -> numero.matches("^[0-9]{8}$");                    // DNI
-            case 2 -> numero.matches("^(10|15|17|20)[0-9]{9}$");       // RUC
-            case 3 -> numero.matches("^[0-9]{9}$");                    // carné de extranjería
+            case 1 -> numero.matches("^[0-9]{8}$"); // DNI
+            case 2 -> numero.matches("^(10|15|17|20)[0-9]{9}$"); // RUC
+            case 3 -> numero.matches("^[0-9]{9}$"); // carné de extranjería
             default -> false;
         };
         if (!ok) {
