@@ -12,7 +12,7 @@ Clon simplificado de un e-commerce, desarrollado como proyecto del curso Full St
 FullStack/
 ├── backend/shopify/ # API REST en Spring Boot (proyecto NetBeans/Maven)
 ├── frontend/ # SPA en React
-├── db/init/ # 01_esquema.sql y 02_datos_iniciales.sql (Docker los ejecuta en orden)
+├── db/init/ # 01_esquema.sql, 02_datos_iniciales.sql y 03_usuarios_prueba.sql (Docker los ejecuta en orden)
 ├── db/tests/ # 03_pruebas.sql (casos que la base debe aceptar y rechazar)
 ├── postman/ # Colección de Postman para probar la API (Vendely_API)
 └── docker-compose.yml
@@ -31,7 +31,7 @@ FullStack/
 - Estructura de carpetas del frontend: `components/`, `pages/`, `services/`, `context/`
 - Dependencias del frontend instaladas: `react-router-dom`, `axios`, `tailwindcss`
 
-- Base de datos final (24 tablas, Perú) en `db/init/`, con sus pruebas en `db/tests/`
+- Base de datos final (30 tablas, multipaís) en `db/init/`, con sus pruebas en `db/tests/`
 - Seguridad: registro, inicio de sesión, JWT, roles, CORS y manejo de errores (ver sección **Seguridad**)
 - Tiendas: el dueño crea, lista y edita sus tiendas; vitrina pública por subdominio (ver sección **Tiendas**)
 
@@ -109,6 +109,24 @@ public CarritoResponse miCarrito(@AuthenticationPrincipal UsuarioAutenticado yo)
 }
 ```
 
+### Usuarios de prueba
+
+Al crear la base, `db/init/03_usuarios_prueba.sql` deja una cuenta lista por cada rol:
+
+| Rol | Correo | Contraseña | Cómo iniciar sesión |
+|---|---|---|---|
+| SUPERADMIN | `admin@vendely.pe` | `Admin1234` | Sin `subdominio` |
+| ADMIN_TIENDA | `dueno@vendely.pe` | `Dueno1234` | Sin `subdominio` (dueño de la tienda `moda-lima`) |
+| CLIENTE | `cliente@vendely.pe` | `Cliente1234` | Con `"subdominio": "moda-lima"` |
+
+Ejemplo (`POST /api/auth/login`):
+
+```json
+{ "correo": "cliente@vendely.pe", "contrasena": "Cliente1234", "subdominio": "moda-lima" }
+```
+
+Si la base ya existía antes de agregar este archivo, hay que recrearla para que se ejecute: `docker compose down -v` y `docker compose up -d db`.
+
 ### Probar con Postman
 
 1. Importa `postman/Vendely_API.postman_collection.json`.
@@ -125,7 +143,7 @@ public CarritoResponse miCarrito(@AuthenticationPrincipal UsuarioAutenticado yo)
 > npx newman run postman/Vendely_API.postman_collection.json
 > ```
 >
-> La primera ejecución debe hacerse con la base recién creada (`docker compose down -v` y `docker compose up -d db`): la carpeta 1 registra a Carlos con un correo fijo.
+> La colección se puede ejecutar varias veces seguidas: los registros aceptan 409 si la cuenta ya existe y **Restaurar contraseña** devuelve la contraseña a `Clave1234` al final de la carpeta 1.
 
 ## Tiendas
 
