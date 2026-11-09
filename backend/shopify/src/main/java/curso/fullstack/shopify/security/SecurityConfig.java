@@ -14,6 +14,11 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.AccountStatusUserDetailsChecker;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.AuthenticationProvider;
+import org.springframework.security.authentication.ProviderManager;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -96,6 +101,29 @@ public class SecurityConfig {
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
+    }
+
+    /**
+     * El "portero": pide la ficha al UsuarioDetailsService y compara la
+     * contraseña con BCrypt. Primero revisa la contraseña y DESPUÉS si la
+     * cuenta está activa: así nadie descubre qué cuentas existen probando
+     * contraseñas al azar.
+     */
+    @Bean
+    public AuthenticationProvider authenticationProvider(UsuarioDetailsService usuarioDetailsService,
+                                                         PasswordEncoder passwordEncoder) {
+        DaoAuthenticationProvider proveedor = new DaoAuthenticationProvider();
+        proveedor.setUserDetailsService(usuarioDetailsService);
+        proveedor.setPasswordEncoder(passwordEncoder);
+        proveedor.setPreAuthenticationChecks(cuenta -> { });
+        proveedor.setPostAuthenticationChecks(new AccountStatusUserDetailsChecker());
+        return proveedor;
+    }
+
+    /** Lo usa AuthService para iniciar sesión. */
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationProvider authenticationProvider) {
+        return new ProviderManager(authenticationProvider);
     }
 
     /** CORS: solo el frontend de Vendely puede llamar a la API desde el navegador. */
