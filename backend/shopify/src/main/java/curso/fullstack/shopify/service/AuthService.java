@@ -68,7 +68,7 @@ public class AuthService {
         }
 
         Login login = nuevaCuenta(RolUsuario.ADMIN_TIENDA, null, r.usuario(), correo, r.contrasena(),
-                r.nombres(), r.apellidoPat(), r.apellidoMat(), r.telefono(), false);
+                r.nombres(), r.primerApellido(), r.segundoApellido(), r.telefono(), false);
         loginRepository.saveAndFlush(login);
 
         Propietario p = new Propietario();
@@ -94,7 +94,7 @@ public class AuthService {
         }
 
         Login login = nuevaCuenta(RolUsuario.CLIENTE, tienda.getIdTienda(), r.usuario(), correo, r.contrasena(),
-                r.nombres(), r.apellidoPat(), r.apellidoMat(), r.telefono(),
+                r.nombres(), r.primerApellido(), r.segundoApellido(), r.telefono(),
                 Boolean.TRUE.equals(r.aceptaMarketing()));
         loginRepository.saveAndFlush(login);
         return respuesta(login);
@@ -148,7 +148,7 @@ public class AuthService {
     // ------------------------------------------------------------------ apoyo
 
     private Login nuevaCuenta(RolUsuario rol, Long idTienda, String usuario, String correo, String contrasena,
-                              String nombres, String apellidoPat, String apellidoMat, String telefono,
+                              String nombres, String primerApellido, String segundoApellido, String telefono,
                               boolean aceptaMarketing) {
         Login l = new Login();
         l.setRol(rol);
@@ -157,8 +157,8 @@ public class AuthService {
         l.setCorreo(correo);
         l.setContrasenaHash(passwordEncoder.encode(contrasena));
         l.setNombres(nombres.trim());
-        l.setApellidoPat(apellidoPat.trim());
-        l.setApellidoMat(vacioANull(apellidoMat));
+        l.setPrimerApellido(primerApellido.trim());
+        l.setSegundoApellido(vacioANull(segundoApellido));
         l.setTelefono(vacioANull(telefono));
         l.setAceptaMarketing(aceptaMarketing);
         return l;
@@ -192,13 +192,16 @@ public class AuthService {
         return (s == null || s.isBlank()) ? null : s.trim();
     }
 
-    /** Misma regla que el CHECK ck_propietarios_documento, para dar un mensaje claro. */
+    /**
+     * Para los documentos de Perú (1 DNI · 2 RUC · 3 CE) se valida aquí para dar un mensaje claro.
+     * Los demás tipos (RUT, RFC, NIT…) los valida la base con el patrón de tipos_documento (trigger T13).
+     */
     private static void validarDocumento(Short tipo, String numero) {
         boolean ok = switch (tipo) {
             case 1 -> numero.matches("^[0-9]{8}$");                    // DNI
             case 2 -> numero.matches("^(10|15|17|20)[0-9]{9}$");       // RUC
             case 3 -> numero.matches("^[0-9]{9}$");                    // carné de extranjería
-            default -> false;
+            default -> true;                                           // lo valida la base
         };
         if (!ok) {
             throw new ApiException(HttpStatus.BAD_REQUEST, switch (tipo) {

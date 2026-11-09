@@ -28,17 +28,17 @@ public class Propietario {
     @Column(name = "id_rol", nullable = false)
     private Short idRol = RolUsuario.ADMIN_TIENDA.getId();
 
-    /** 1 DNI · 2 RUC · 3 carné de extranjería */
+    /** id de tipos_documento: 1 DNI · 2 RUC · 3 CE (Perú) · 4 RUT (Chile)… El formato lo valida el trigger T13. */
     @Column(name = "tipo_documento", nullable = false)
     private Short tipoDocumento;
 
-    @Column(name = "numero_documento", nullable = false, length = 12)
+    @Column(name = "numero_documento", nullable = false, length = 20)
     private String numeroDocumento;
 
     @Column(name = "razon_social", length = 150)
     private String razonSocial;
 
-    @Column(name = "telefono_comercial", length = 20)
+    @Column(name = "telefono_comercial", length = 16)
     private String telefonoComercial;
 
     @Column(name = "estado", nullable = false)

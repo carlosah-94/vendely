@@ -1,20 +1,45 @@
 -- =====================================================================
---  VENDELY · Modelo de base de datos · versión PERÚ
---  PostgreSQL 15 o superior · 24 tablas · normalizado hasta 3FN
+--  VENDELY · Modelo de base de datos · versión 3 · INTERNACIONAL
+--  PostgreSQL 15 o superior · 30 tablas · normalizado hasta 3FN
 --  Requiere la extensión btree_gist (viene incluida en PostgreSQL).
 --
---  Alcance: las tiendas venden y envían dentro del Perú. Por eso no hay
---  columnas ni tablas de país: todo es Perú y todo es en soles (PEN).
+--  Cómo funciona (igual que Shopify):
+--    · El DUEÑO crea su cuenta en la plataforma (vendely.com) y crea su
+--      tienda en un país habilitado. El país de la tienda define su moneda,
+--      su impuesto y su lista oficial de direcciones (ubigeo en Perú…).
+--    · El CLIENTE entra por la dirección de la tienda (subdominio) y compra
+--      como invitado o con una cuenta que es solo de ESA tienda: el mismo
+--      correo puede registrarse en otra tienda.
+--    · La tienda vende dentro de su país y AL EXTRANJERO:
+--        - siempre cobra en SU moneda (el banco del comprador convierte);
+--          al extranjero se le muestra un precio aproximado en su moneda
+--          con el tipo de cambio del día;
+--        - una venta al extranjero es una exportación: no lleva impuesto y
+--          la aduana del país de destino cobra al comprador al recibir;
+--        - el envío se cobra por región dentro del país y por país hacia
+--          el extranjero. Si no hay tarifa para un país, no se vende ahí.
 --
 --  Convenciones
---    · Llaves: id_<tabla>. Las tablas puente sin hijas usan llave
+--    · Llaves: id_<tabla>. Las tablas puente y de detalle usan llave
 --      primaria compuesta; las entidades con hijas usan id + UNIQUE.
+--    · Países con su código ISO 3166-1 (PE, CL, US) y monedas ISO 4217
+--      (PEN, CLP, USD). Teléfonos en formato internacional E.164 (+51987654321).
 --    · Estados como SMALLINT con CHECK (los códigos están comentados).
---    · Montos en NUMERIC(12,2). Fechas en TIMESTAMPTZ.
---    · Los precios de los productos INCLUYEN el IGV.
+--    · Montos en NUMERIC(12,2), en la moneda de la tienda. Fechas en TIMESTAMPTZ.
+--    · Los precios de los productos INCLUYEN el impuesto del país de la tienda.
 --
---  Bloques: 1 territorio e impuestos · 2 usuarios y tiendas ·
---           3 catálogo · 4 ofertas · 5 carrito · 6 pedidos y pagos
+--    · Los montos respetan los decimales de la moneda de la tienda: en pesos
+--      chilenos no hay centavos (T16, y T2 redondea el impuesto).
+--    · Las direcciones pueden guardar latitud y longitud (opcionales) para
+--      ubicarlas en un mapa.
+--    · Precio único: el extranjero paga el mismo precio de lista que el
+--      cliente nacional (impuesto incluido). La tienda no le cobra IGV, pero
+--      tampoco le rebaja el precio. Es una decisión de negocio (Shopify la
+--      permite); si se quisiera rebajar, el backend calcularía el subtotal
+--      de una exportación como precio ÷ (1 + tasa).
+--
+--  Bloques: 1 países, monedas, territorio e impuestos · 2 usuarios, tiendas
+--           y envíos · 3 catálogo · 4 ofertas · 5 carrito · 6 pedidos y pagos
 -- =====================================================================
 
 BEGIN;
@@ -23,49 +48,141 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 
 -- ---------------------------------------------------------------------
--- 1. TERRITORIO E IMPUESTOS
+-- 1. PAÍSES, MONEDAS, TERRITORIO E IMPUESTOS
 -- ---------------------------------------------------------------------
 
--- 1. Ubigeo del INEI: departamentos (nivel 1), provincias (nivel 2) y
---    distritos (nivel 3) en una sola tabla. Cada fila apunta a su "padre".
-CREATE TABLE divisiones (
-    id_division     BIGSERIAL     PRIMARY KEY,
-    nivel           SMALLINT      NOT NULL,                     -- 1 departamento · 2 provincia · 3 distrito
-    id_padre        BIGINT        NULL,                         -- NULL solo en los departamentos
-    nivel_padre     SMALLINT      GENERATED ALWAYS AS (nivel - 1) STORED,
-    codigo_ubigeo   VARCHAR(6)    NOT NULL UNIQUE,              -- 15 · 1501 · 150122
-    nombre          VARCHAR(100)  NOT NULL,
-    CONSTRAINT uq_divisiones_nivel UNIQUE (id_division, nivel), -- para las FK compuestas
-    -- el padre está exactamente un nivel arriba (FK compuesta):
-    CONSTRAINT fk_divisiones_padre
-        FOREIGN KEY (id_padre, nivel_padre) REFERENCES divisiones (id_division, nivel),
-    CONSTRAINT ck_divisiones_nivel  CHECK (nivel BETWEEN 1 AND 3),
-    CONSTRAINT ck_divisiones_padre  CHECK ((nivel = 1) = (id_padre IS NULL)),
-    -- 2 dígitos por nivel: departamento 2, provincia 4, distrito 6
-    CONSTRAINT ck_divisiones_codigo CHECK (codigo_ubigeo ~ '^[0-9]+$' AND length(codigo_ubigeo) = nivel * 2)
+-- 1. Monedas del mundo (código ISO 4217; nombres y decimales de Unicode CLDR). Una moneda puede usarse en varios
+--    países: Ecuador, El Salvador y EE. UU. usan el dólar (USD).
+CREATE TABLE monedas (
+    id_moneda   CHAR(3)       PRIMARY KEY,                     -- PEN · CLP · USD
+    nombre      VARCHAR(60)   NOT NULL,                        -- sol peruano
+    decimales   SMALLINT      NOT NULL DEFAULT 2,              -- CLP 0 · PEN 2 (según Unicode CLDR): ningún monto lleva más decimales (T16)
+    CONSTRAINT ck_monedas_codigo    CHECK (id_moneda ~ '^[A-Z]{3}$'),
+    CONSTRAINT ck_monedas_decimales CHECK (decimales BETWEEN 0 AND 4)
 );
 
--- 2. Impuestos al consumo con su historial (IGV).
+-- 2. Todos los países del mundo (ISO 3166-1). Sirven como DESTINO de envíos.
+--    Los que tienen estado 1 están HABILITADOS para crear tiendas: Vendely
+--    tiene COMPLETA su lista oficial de direcciones, y cargados su impuesto
+--    y sus documentos. Habilitar un país lo hace el superadmin.
+CREATE TABLE paises (
+    id_pais                 CHAR(2)       PRIMARY KEY,          -- ISO 3166-1: PE · CL · US
+    nombre                  VARCHAR(80)   NOT NULL UNIQUE,
+    id_moneda               CHAR(3)       NOT NULL REFERENCES monedas (id_moneda),
+    prefijo_telefono        VARCHAR(5)    NULL,                 -- +51 · +56 · +1
+    zona_horaria            VARCHAR(40)   NULL,                 -- America/Lima: define la FECHA de un pedido
+    requiere_codigo_postal  BOOLEAN       NOT NULL DEFAULT FALSE,
+    patron_codigo_postal    VARCHAR(60)   NULL,                 -- formato (expresión regular); NULL = sin formato
+    estado                  SMALLINT      NOT NULL DEFAULT 0,   -- 1 habilitado para crear tiendas · 0 solo destino
+    CONSTRAINT ck_paises_codigo   CHECK (id_pais ~ '^[A-Z]{2}$'),
+    CONSTRAINT ck_paises_prefijo  CHECK (prefijo_telefono IS NULL OR prefijo_telefono ~ '^\+[0-9]{1,4}$'),
+    -- la zona horaria debe existir: si no existe, PostgreSQL da error al evaluarla
+    CONSTRAINT ck_paises_zona     CHECK (zona_horaria IS NULL
+                                         OR (TIMESTAMPTZ '2000-01-01 00:00+00' AT TIME ZONE zona_horaria) IS NOT NULL),
+    -- un país habilitado necesita su zona horaria (para saber la fecha de sus pedidos)
+    CONSTRAINT ck_paises_habilitado CHECK (estado = 0 OR zona_horaria IS NOT NULL),
+    -- el patrón debe ser una expresión regular válida y si el código es obligatorio, debe haber patrón
+    CONSTRAINT ck_paises_patron   CHECK (patron_codigo_postal IS NULL OR ('' ~ patron_codigo_postal) IS NOT NULL),
+    CONSTRAINT ck_paises_postal   CHECK (NOT requiere_codigo_postal OR patron_codigo_postal IS NOT NULL),
+    CONSTRAINT ck_paises_estado   CHECK (estado IN (0, 1))
+);
+
+-- 3. Cómo se llama cada nivel territorial en cada país:
+--    Perú 1 Departamento · 2 Provincia · 3 Distrito
+--    Chile 1 Región · 2 Provincia · 3 Comuna
+--    México 1 Estado · 2 Municipio
+CREATE TABLE niveles_division (
+    id_pais         CHAR(2)      NOT NULL REFERENCES paises (id_pais),
+    nivel           SMALLINT     NOT NULL,
+    nivel_anterior  SMALLINT     GENERATED ALWAYS AS (NULLIF(nivel - 1, 0)) STORED,  -- NULL en el nivel 1
+    nombre          VARCHAR(40)  NOT NULL,
+    PRIMARY KEY (id_pais, nivel),                               -- llave compuesta
+    -- sin huecos: el nivel 3 de un país exige que exista su nivel 2 (FK compuesta a la misma tabla)
+    CONSTRAINT fk_niveles_anterior
+        FOREIGN KEY (id_pais, nivel_anterior) REFERENCES niveles_division (id_pais, nivel),
+    CONSTRAINT uq_niveles_nombre UNIQUE (id_pais, nombre),
+    CONSTRAINT ck_niveles_nivel  CHECK (nivel BETWEEN 1 AND 4)
+);
+
+-- 4. División territorial de todos los países en una sola tabla. Cada fila
+--    apunta a su "padre": distrito → provincia → departamento (Perú),
+--    comuna → provincia → región (Chile), municipio → estado (México).
+--    Se cargan para los países habilitados (completas) y los que están en
+--    preparación. Una dirección que usa una división apunta al ÚLTIMO nivel (T12).
+CREATE TABLE divisiones (
+    id_division   BIGSERIAL     PRIMARY KEY,
+    id_pais       CHAR(2)       NOT NULL,
+    nivel         SMALLINT      NOT NULL,
+    id_padre      BIGINT        NULL,                           -- NULL solo en el nivel 1
+    nivel_padre   SMALLINT      GENERATED ALWAYS AS (nivel - 1) STORED,
+    codigo        VARCHAR(12)   NOT NULL,                       -- código oficial: ubigeo 150122 · CUT 13101 · INEGI 09015
+    nombre        VARCHAR(100)  NOT NULL,
+    CONSTRAINT uq_divisiones_codigo UNIQUE (id_pais, codigo),   -- el "13" de Perú y el "13" de Chile son distintos
+    CONSTRAINT uq_divisiones_nivel  UNIQUE (id_division, nivel),           -- para la FK de tarifas_envio
+    CONSTRAINT uq_divisiones_pais   UNIQUE (id_division, nivel, id_pais),  -- para la FK del padre
+    CONSTRAINT uq_divisiones_id_pais UNIQUE (id_division, id_pais),        -- para la FK de direcciones
+    -- el nivel existe en ese país (FK compuesta):
+    CONSTRAINT fk_divisiones_nivel
+        FOREIGN KEY (id_pais, nivel) REFERENCES niveles_division (id_pais, nivel),
+    -- el padre está exactamente un nivel arriba y en el MISMO país (FK compuesta):
+    CONSTRAINT fk_divisiones_padre
+        FOREIGN KEY (id_padre, nivel_padre, id_pais) REFERENCES divisiones (id_division, nivel, id_pais),
+    CONSTRAINT ck_divisiones_padre  CHECK ((nivel = 1) = (id_padre IS NULL)),
+    CONSTRAINT ck_divisiones_codigo CHECK (codigo ~ '^[0-9A-Z]+$')
+);
+
+-- 5. Impuesto al consumo de cada país, con su historial (IGV 18 % en Perú,
+--    IVA 19 % en Chile…). En cada fecha rige UNA sola tasa por país.
 --    Una tasa no se edita: se cierra con vigente_hasta y se crea otra.
 CREATE TABLE impuestos (
     id_impuesto    SMALLSERIAL   PRIMARY KEY,
-    nombre         VARCHAR(20)   NOT NULL,                      -- IGV
+    id_pais        CHAR(2)       NOT NULL REFERENCES paises (id_pais),
+    nombre         VARCHAR(20)   NOT NULL,                      -- IGV · IVA
     tasa           NUMERIC(5,2)  NOT NULL,                      -- 18.00 = 18 %
     vigente_desde  DATE          NOT NULL,
     vigente_hasta  DATE          NULL,                          -- NULL = tasa actual
     CONSTRAINT ck_impuestos_tasa   CHECK (tasa BETWEEN 0 AND 100),
     CONSTRAINT ck_impuestos_fechas CHECK (vigente_hasta IS NULL OR vigente_hasta > vigente_desde),
-    -- los periodos de un mismo impuesto no se cruzan: en cada fecha rige una sola tasa
+    -- los periodos de un mismo país no se cruzan: en cada fecha rige una sola tasa
     CONSTRAINT ex_impuestos_periodo EXCLUDE USING gist (
-        nombre WITH =,
+        id_pais WITH =,
         daterange(vigente_desde, vigente_hasta, '[)') WITH &&)
 );
 
+-- 6. Documentos de identidad o tributarios de cada país, con su formato.
+--    Los códigos 1, 2 y 3 son los de Perú (igual que en la versión 1).
+CREATE TABLE tipos_documento (
+    id_tipo_documento  SMALLINT      PRIMARY KEY,              -- 1 DNI · 2 RUC · 3 CE (Perú) · 4 RUT (Chile)…
+    id_pais            CHAR(2)       NOT NULL REFERENCES paises (id_pais),
+    codigo             VARCHAR(10)   NOT NULL,                 -- DNI · RUC · RUT · RFC · NIT
+    nombre             VARCHAR(80)   NOT NULL,
+    patron             VARCHAR(120)  NOT NULL,                 -- formato (expresión regular)
+    estado             SMALLINT      NOT NULL DEFAULT 1,
+    CONSTRAINT uq_tipos_documento_codigo UNIQUE (id_pais, codigo),
+    -- el patrón es una expresión regular válida y cubre el texto completo (^…$)
+    CONSTRAINT ck_tipos_documento_patron CHECK (('' ~ patron) IS NOT NULL AND patron LIKE '^%$'),
+    CONSTRAINT ck_tipos_documento_estado CHECK (estado IN (0, 1))
+);
+
+-- 7. Tipo de cambio del día entre dos monedas. Lo guarda el backend (por
+--    ejemplo, una vez al día desde una API de tipos de cambio). Sirve para
+--    MOSTRAR al comprador extranjero un precio aproximado en su moneda: el
+--    cobro siempre es en la moneda de la tienda y su banco hace la conversión.
+CREATE TABLE tipos_cambio (
+    moneda_origen   CHAR(3)        NOT NULL REFERENCES monedas (id_moneda),  -- la de la tienda: PEN
+    moneda_destino  CHAR(3)        NOT NULL REFERENCES monedas (id_moneda),  -- la del comprador: CLP
+    fecha           DATE           NOT NULL,
+    tasa            NUMERIC(18,6)  NOT NULL,                    -- 1 PEN = 270.000000 CLP
+    PRIMARY KEY (moneda_origen, moneda_destino, fecha),         -- llave compuesta: una tasa por par de monedas y por día
+    CONSTRAINT ck_tipos_cambio_monedas CHECK (moneda_origen <> moneda_destino),
+    CONSTRAINT ck_tipos_cambio_tasa    CHECK (tasa > 0)
+);
+
 -- ---------------------------------------------------------------------
--- 2. USUARIOS Y TIENDAS
+-- 2. USUARIOS, TIENDAS Y ENVÍOS
 -- ---------------------------------------------------------------------
 
--- 3. Tipo de cuenta en la plataforma.
+-- 8. Tipo de cuenta en la plataforma.
 CREATE TABLE roles (
     id_rol       SMALLINT      PRIMARY KEY,                     -- 1 SUPERADMIN · 2 ADMIN_TIENDA · 3 CLIENTE
     nombre       VARCHAR(30)   NOT NULL UNIQUE,
@@ -74,7 +191,7 @@ CREATE TABLE roles (
     CONSTRAINT ck_roles_estado CHECK (estado IN (0, 1))
 );
 
--- 4. Cuentas de acceso. Una cuenta de CLIENTE pertenece a una sola tienda
+-- 9. Cuentas de acceso. Una cuenta de CLIENTE pertenece a una sola tienda
 --    (id_tienda obligatorio); las cuentas del panel no tienen tienda.
 --    Una misma persona puede tener varias filas (panel + cliente en cada
 --    tienda) con el mismo correo; al iniciar sesión elige con cuál entrar.
@@ -86,9 +203,9 @@ CREATE TABLE login (
     correo                  VARCHAR(150)  NOT NULL,
     contrasena_hash         VARCHAR(255)  NOT NULL,             -- BCrypt, nunca la contraseña real
     nombres                 VARCHAR(80)   NOT NULL,
-    apellido_pat            VARCHAR(80)   NOT NULL,
-    apellido_mat            VARCHAR(80)   NULL,
-    telefono                VARCHAR(20)   NULL,
+    primer_apellido         VARCHAR(80)   NOT NULL,
+    segundo_apellido        VARCHAR(80)   NULL,                 -- NULL en países donde se usa un solo apellido
+    telefono                VARCHAR(16)   NULL,                 -- formato internacional: +51987654321
     acepta_marketing        BOOLEAN       NOT NULL DEFAULT FALSE,
     estado                  SMALLINT      NOT NULL DEFAULT 1,   -- 1 activo · 0 inactivo
     contrasena_cambiada_en  TIMESTAMPTZ   NULL,
@@ -102,18 +219,19 @@ CREATE TABLE login (
     CONSTRAINT uq_login_tienda  UNIQUE (id_login, id_tienda),   -- para las FK de carritos y pedidos
     CONSTRAINT ck_login_cliente CHECK ((id_rol = 3) = (id_tienda IS NOT NULL)),
     CONSTRAINT ck_login_correo  CHECK (correo = lower(correo) AND correo LIKE '%_@_%._%'),
+    CONSTRAINT ck_login_telefono CHECK (telefono IS NULL OR telefono ~ '^\+[1-9][0-9]{6,14}$'),
     CONSTRAINT ck_login_estado  CHECK (estado IN (0, 1))
 );
 
--- 5. Datos comerciales del dueño de una o varias tiendas.
+-- 10. Datos comerciales del dueño de una o varias tiendas.
 CREATE TABLE propietarios (
     id_propietario      BIGSERIAL     PRIMARY KEY,
     id_login            BIGINT        NOT NULL UNIQUE,
     id_rol              SMALLINT      NOT NULL DEFAULT 2,       -- siempre 2: solo una cuenta del panel es dueña
-    tipo_documento      SMALLINT      NOT NULL,                 -- 1 DNI · 2 RUC · 3 carné de extranjería
-    numero_documento    VARCHAR(12)   NOT NULL,
+    tipo_documento      SMALLINT      NOT NULL REFERENCES tipos_documento (id_tipo_documento),  -- 1 DNI · 2 RUC · 4 RUT…
+    numero_documento    VARCHAR(20)   NOT NULL,                 -- su formato lo valida T13 con el patrón del tipo
     razon_social        VARCHAR(150)  NULL,
-    telefono_comercial  VARCHAR(20)   NULL,
+    telefono_comercial  VARCHAR(16)   NULL,                     -- formato internacional: +51987654321
     estado              SMALLINT      NOT NULL DEFAULT 1,
     fecha_creacion      TIMESTAMPTZ   NOT NULL DEFAULT now(),
     fecha_modificacion  TIMESTAMPTZ   NOT NULL DEFAULT now(),
@@ -121,20 +239,19 @@ CREATE TABLE propietarios (
         FOREIGN KEY (id_login, id_rol) REFERENCES login (id_login, id_rol),
     CONSTRAINT uq_propietarios_documento UNIQUE (tipo_documento, numero_documento),
     CONSTRAINT ck_propietarios_rol    CHECK (id_rol = 2),
-    -- el número debe tener el formato de su tipo de documento
-    CONSTRAINT ck_propietarios_documento CHECK (
-           (tipo_documento = 1 AND numero_documento ~ '^[0-9]{8}$')                -- DNI: 8 dígitos
-        OR (tipo_documento = 2 AND numero_documento ~ '^(10|15|17|20)[0-9]{9}$')   -- RUC: 11 dígitos
-        OR (tipo_documento = 3 AND numero_documento ~ '^[0-9]{9}$')),              -- CE: 9 dígitos
+    CONSTRAINT ck_propietarios_telefono CHECK (telefono_comercial IS NULL OR telefono_comercial ~ '^\+[1-9][0-9]{6,14}$'),
     CONSTRAINT ck_propietarios_estado CHECK (estado IN (0, 1))
 );
 
--- 6. Cada tienda (tenant).
+-- 11. Cada tienda (tenant).
 CREATE TABLE tiendas (
     id_tienda             BIGSERIAL     PRIMARY KEY,
     id_propietario        BIGINT        NOT NULL REFERENCES propietarios (id_propietario),
+    -- país donde vende: define su moneda, su impuesto y a dónde envía. No cambia (T8).
+    -- DEFAULT 'PE' para que el backend actual (que aún no envía el país) siga funcionando.
+    id_pais               CHAR(2)       NOT NULL DEFAULT 'PE' REFERENCES paises (id_pais),
     nombre                VARCHAR(150)  NOT NULL,
-    subdominio            VARCHAR(63)   NOT NULL UNIQUE,        -- zapatillas-carlos.vendely.pe
+    subdominio            VARCHAR(63)   NOT NULL UNIQUE,        -- zapatillas-carlos.vendely.com
     descripcion           TEXT          NULL,
     correo_contacto       VARCHAR(150)  NOT NULL,
     logo_url              VARCHAR(500)  NULL,
@@ -153,42 +270,61 @@ CREATE TABLE tiendas (
 ALTER TABLE login
     ADD CONSTRAINT fk_login_tienda FOREIGN KEY (id_tienda) REFERENCES tiendas (id_tienda);
 
--- 7. Direcciones de envío y facturación. id_login NULL = compra como invitado.
+-- 12. Direcciones de envío y facturación. id_login NULL = compra como invitado.
 CREATE TABLE direcciones (
     id_direccion    BIGSERIAL     PRIMARY KEY,
-    id_login        BIGINT        NULL REFERENCES login (id_login),
-    id_distrito     BIGINT        NOT NULL,
-    nivel_distrito  SMALLINT      NOT NULL DEFAULT 3,           -- siempre 3: la dirección apunta a un distrito
+    id_login        BIGINT        NULL REFERENCES login (id_login),   -- NULL = dirección de un invitado
+    id_pais         CHAR(2)       NOT NULL REFERENCES paises (id_pais),
+    -- País habilitado (lista oficial completa): la división del último nivel
+    -- (distrito en Perú, comuna en Chile, municipio en México).
+    -- Otro país: NULL, y se escriben region y ciudad, como en Shopify. Lo revisa T12.
+    id_division     BIGINT        NULL,
+    region          VARCHAR(100)  NULL,                         -- estado o provincia escrito (solo sin lista oficial)
+    ciudad          VARCHAR(100)  NULL,                         -- ciudad escrita (solo sin lista oficial)
     destinatario    VARCHAR(160)  NOT NULL,
-    telefono        VARCHAR(20)   NOT NULL,
+    telefono        VARCHAR(16)   NOT NULL,                     -- formato internacional: +56912345678
     direccion       VARCHAR(200)  NOT NULL,                     -- calle, número, interior
     referencia      VARCHAR(200)  NULL,
-    codigo_postal   VARCHAR(12)   NULL,
+    codigo_postal   VARCHAR(12)   NULL,                         -- obligatorio si el país lo exige (T12)
+    -- Ubicación en el mapa (opcional): el cliente marca un pin o el backend la
+    -- obtiene de un servicio de mapas. 6 decimales ≈ 11 cm. Miraflores ≈ −12.12, −77.03.
+    latitud         NUMERIC(9,6)  NULL,
+    longitud        NUMERIC(9,6)  NULL,
     predeterminada  BOOLEAN       NOT NULL DEFAULT FALSE,
     estado          SMALLINT      NOT NULL DEFAULT 1,           -- 1 activa · 0 eliminada (se conserva por los pedidos)
     fecha_creacion  TIMESTAMPTZ   NOT NULL DEFAULT now(),
-    -- solo se puede elegir un DISTRITO (FK compuesta):
-    CONSTRAINT fk_direcciones_distrito
-        FOREIGN KEY (id_distrito, nivel_distrito) REFERENCES divisiones (id_division, nivel),
-    CONSTRAINT ck_direcciones_nivel  CHECK (nivel_distrito = 3),
-    CONSTRAINT ck_direcciones_estado CHECK (estado IN (0, 1))
+    -- la división es del MISMO país que la dirección (FK compuesta):
+    CONSTRAINT fk_direcciones_division
+        FOREIGN KEY (id_division, id_pais) REFERENCES divisiones (id_division, id_pais),
+    -- o se elige de la lista oficial, o se escribe la ciudad; nunca las dos cosas
+    CONSTRAINT ck_direcciones_ubicacion CHECK (
+           (id_division IS NOT NULL AND region IS NULL AND ciudad IS NULL)
+        OR (id_division IS NULL AND ciudad IS NOT NULL)),
+    CONSTRAINT ck_direcciones_telefono CHECK (telefono ~ '^\+[1-9][0-9]{6,14}$'),
+    -- coordenadas: las dos o ninguna, y dentro del rango del planeta
+    CONSTRAINT ck_direcciones_coordenadas CHECK (
+        (latitud IS NULL) = (longitud IS NULL)
+        AND (latitud  IS NULL OR latitud  BETWEEN -90  AND 90)
+        AND (longitud IS NULL OR longitud BETWEEN -180 AND 180)),
+    CONSTRAINT ck_direcciones_estado   CHECK (estado IN (0, 1))
 );
 
--- 8. Costo de envío de cada tienda a cada departamento.
+-- 13. Costo de envío de cada tienda DENTRO de su país, por división de
+--     primer nivel (departamento en Perú, región en Chile, estado en México).
 CREATE TABLE tarifas_envio (
     id_tienda           BIGINT        NOT NULL REFERENCES tiendas (id_tienda) ON DELETE CASCADE,
-    id_departamento     BIGINT        NOT NULL,
-    nivel_departamento  SMALLINT      NOT NULL DEFAULT 1,       -- siempre 1: la tarifa es por departamento
-    costo               NUMERIC(12,2) NOT NULL,
+    id_division         BIGINT        NOT NULL,
+    nivel_division      SMALLINT      NOT NULL DEFAULT 1,       -- siempre 1: la tarifa es por división de primer nivel
+    costo               NUMERIC(12,2) NOT NULL,                 -- en la moneda del país de la tienda
     envio_gratis_desde  NUMERIC(12,2) NULL,                     -- NULL = nunca es gratis
     dias_entrega_min    SMALLINT      NULL,
     dias_entrega_max    SMALLINT      NULL,
     estado              SMALLINT      NOT NULL DEFAULT 1,
-    PRIMARY KEY (id_tienda, id_departamento),                   -- llave compuesta
-    -- solo se puede elegir un DEPARTAMENTO (FK compuesta):
-    CONSTRAINT fk_tarifas_departamento
-        FOREIGN KEY (id_departamento, nivel_departamento) REFERENCES divisiones (id_division, nivel),
-    CONSTRAINT ck_tarifas_nivel  CHECK (nivel_departamento = 1),
+    PRIMARY KEY (id_tienda, id_division),                       -- llave compuesta
+    -- solo se puede elegir una división de nivel 1 (FK compuesta):
+    CONSTRAINT fk_tarifas_division
+        FOREIGN KEY (id_division, nivel_division) REFERENCES divisiones (id_division, nivel),
+    CONSTRAINT ck_tarifas_nivel  CHECK (nivel_division = 1),
     CONSTRAINT ck_tarifas_costo  CHECK (costo >= 0),
     CONSTRAINT ck_tarifas_gratis CHECK (envio_gratis_desde IS NULL OR envio_gratis_desde > 0),
     CONSTRAINT ck_tarifas_dias   CHECK (dias_entrega_min IS NULL OR dias_entrega_max IS NULL
@@ -196,11 +332,30 @@ CREATE TABLE tarifas_envio (
     CONSTRAINT ck_tarifas_estado CHECK (estado IN (0, 1))
 );
 
+-- 14. Costo de envío de cada tienda a cada PAÍS extranjero. Una tienda vende
+--     a un país extranjero solo si tiene una tarifa activa para ese país
+--     (como las zonas de envío de Shopify).
+CREATE TABLE tarifas_internacionales (
+    id_tienda           BIGINT        NOT NULL REFERENCES tiendas (id_tienda) ON DELETE CASCADE,
+    id_pais             CHAR(2)       NOT NULL REFERENCES paises (id_pais),   -- distinto del país de la tienda (T12)
+    costo               NUMERIC(12,2) NOT NULL,                 -- en la moneda de la tienda
+    envio_gratis_desde  NUMERIC(12,2) NULL,                     -- NULL = nunca es gratis
+    dias_entrega_min    SMALLINT      NULL,
+    dias_entrega_max    SMALLINT      NULL,
+    estado              SMALLINT      NOT NULL DEFAULT 1,       -- 1 activa · 0 pausada (no se vende a ese país)
+    PRIMARY KEY (id_tienda, id_pais),                           -- llave compuesta: una tarifa por país
+    CONSTRAINT ck_tarifas_int_costo  CHECK (costo >= 0),
+    CONSTRAINT ck_tarifas_int_gratis CHECK (envio_gratis_desde IS NULL OR envio_gratis_desde > 0),
+    CONSTRAINT ck_tarifas_int_dias   CHECK (dias_entrega_min IS NULL OR dias_entrega_max IS NULL
+                                            OR dias_entrega_min <= dias_entrega_max),
+    CONSTRAINT ck_tarifas_int_estado CHECK (estado IN (0, 1))
+);
+
 -- ---------------------------------------------------------------------
 -- 3. CATÁLOGO
 -- ---------------------------------------------------------------------
 
--- 9. Categorías (colecciones) de cada tienda.
+-- 15. Categorías (colecciones) de cada tienda.
 CREATE TABLE categorias (
     id_categoria    BIGSERIAL     PRIMARY KEY,
     id_tienda       BIGINT        NOT NULL REFERENCES tiendas (id_tienda) ON DELETE CASCADE,
@@ -214,7 +369,7 @@ CREATE TABLE categorias (
     CONSTRAINT ck_categorias_estado CHECK (estado IN (0, 1))
 );
 
--- 10. Ficha general de cada producto (precio y stock van en la variante).
+-- 16. Ficha general de cada producto (precio y stock van en la variante).
 CREATE TABLE productos (
     id_producto         BIGSERIAL     PRIMARY KEY,
     id_tienda           BIGINT        NOT NULL REFERENCES tiendas (id_tienda) ON DELETE CASCADE,
@@ -230,7 +385,7 @@ CREATE TABLE productos (
     CONSTRAINT ck_productos_estado CHECK (estado IN (0, 1, 2))
 );
 
--- 11. Un producto puede estar en varias categorías y una categoría
+-- 17. Un producto puede estar en varias categorías y una categoría
 --     tiene muchos productos (muchos a muchos).
 CREATE TABLE producto_categorias (
     id_producto   BIGINT  NOT NULL REFERENCES productos (id_producto) ON DELETE CASCADE,
@@ -238,7 +393,7 @@ CREATE TABLE producto_categorias (
     PRIMARY KEY (id_producto, id_categoria)                     -- llave compuesta
 );
 
--- 12. Opciones de un producto: "Talla", "Color", "Almacenamiento"… (máx. 3).
+-- 18. Opciones de un producto: "Talla", "Color", "Almacenamiento"… (máx. 3).
 CREATE TABLE producto_opciones (
     id_producto  BIGINT       NOT NULL REFERENCES productos (id_producto) ON DELETE CASCADE,
     posicion     SMALLINT     NOT NULL,
@@ -248,7 +403,7 @@ CREATE TABLE producto_opciones (
     CONSTRAINT ck_producto_opciones_pos    CHECK (posicion BETWEEN 1 AND 3)
 );
 
--- 13. Cada combinación vendible de un producto (42 / Negro).
+-- 19. Cada combinación vendible de un producto (42 / Negro).
 CREATE TABLE variantes (
     id_variante     BIGSERIAL     PRIMARY KEY,
     id_producto     BIGINT        NOT NULL REFERENCES productos (id_producto) ON DELETE CASCADE,
@@ -261,7 +416,7 @@ CREATE TABLE variantes (
     CONSTRAINT ck_variantes_estado   CHECK (estado IN (0, 1))
 );
 
--- 14. Valor de cada opción en cada variante: (variante 1, opción 1, "42").
+-- 20. Valor de cada opción en cada variante: (variante 1, opción 1, "42").
 CREATE TABLE variante_valores (
     id_variante  BIGINT       NOT NULL,
     id_producto  BIGINT       NOT NULL,
@@ -278,7 +433,7 @@ CREATE TABLE variante_valores (
         ON DELETE CASCADE
 );
 
--- 15. Fotos de cada producto.
+-- 21. Fotos de cada producto.
 CREATE TABLE imagenes_producto (
     id_imagen          BIGSERIAL     PRIMARY KEY,
     id_producto        BIGINT        NOT NULL REFERENCES productos (id_producto) ON DELETE CASCADE,
@@ -289,12 +444,12 @@ CREATE TABLE imagenes_producto (
     CONSTRAINT ck_imagenes_posicion CHECK (posicion >= 1)
 );
 
--- 16. Historial de precios. Un precio NO se edita: se cierra (fecha_fin)
+-- 22. Historial de precios. Un precio NO se edita: se cierra (fecha_fin)
 --     y se crea otro; así los pedidos siempre apuntan al precio cobrado.
 CREATE TABLE precios (
     id_precio          BIGSERIAL      PRIMARY KEY,
     id_variante        BIGINT         NOT NULL REFERENCES variantes (id_variante) ON DELETE CASCADE,
-    monto              NUMERIC(12,2)  NOT NULL,                 -- en soles, con IGV incluido
+    monto              NUMERIC(12,2)  NOT NULL,                 -- en la moneda del país, con el impuesto incluido
     monto_comparacion  NUMERIC(12,2)  NULL,                     -- precio "antes" (tachado)
     fecha_inicio       TIMESTAMPTZ    NOT NULL DEFAULT now(),
     fecha_fin          TIMESTAMPTZ    NULL,                     -- NULL = vigente
@@ -308,7 +463,7 @@ CREATE TABLE precios (
         tstzrange(fecha_inicio, fecha_fin, '[)') WITH &&)
 );
 
--- 17. Stock de cada variante (relación 1 a 1: la llave es la variante).
+-- 23. Stock de cada variante (relación 1 a 1: la llave es la variante).
 CREATE TABLE inventario (
     id_variante              BIGINT       PRIMARY KEY REFERENCES variantes (id_variante) ON DELETE CASCADE,
     cantidad_disponible      INTEGER      NOT NULL DEFAULT 0,
@@ -323,7 +478,7 @@ CREATE TABLE inventario (
 -- 4. OFERTAS
 -- ---------------------------------------------------------------------
 
--- 18. Promociones de la tienda.
+-- 24. Promociones de la tienda.
 CREATE TABLE ofertas (
     id_oferta       BIGSERIAL      PRIMARY KEY,
     id_tienda       BIGINT         NOT NULL REFERENCES tiendas (id_tienda) ON DELETE CASCADE,
@@ -342,7 +497,7 @@ CREATE TABLE ofertas (
     CONSTRAINT ck_ofertas_estado CHECK (estado IN (0, 1))
 );
 
--- 19. Qué productos entran en cada oferta (tabla puente).
+-- 25. Qué productos entran en cada oferta (tabla puente).
 CREATE TABLE oferta_productos (
     id_oferta    BIGINT  NOT NULL REFERENCES ofertas (id_oferta) ON DELETE CASCADE,
     id_producto  BIGINT  NOT NULL REFERENCES productos (id_producto) ON DELETE CASCADE,
@@ -353,7 +508,7 @@ CREATE TABLE oferta_productos (
 -- 5. CARRITO
 -- ---------------------------------------------------------------------
 
--- 20. Carrito de un cliente o de un visitante.
+-- 26. Carrito de un cliente o de un visitante.
 CREATE TABLE carritos (
     id_carrito          BIGSERIAL     PRIMARY KEY,
     id_tienda           BIGINT        NOT NULL REFERENCES tiendas (id_tienda) ON DELETE CASCADE,
@@ -366,7 +521,7 @@ CREATE TABLE carritos (
         FOREIGN KEY (id_login, id_tienda) REFERENCES login (id_login, id_tienda)
 );
 
--- 21. Lo que hay en cada carrito (tabla puente carrito–variante).
+-- 27. Lo que hay en cada carrito (tabla puente carrito–variante).
 CREATE TABLE items_carrito (
     id_carrito      BIGINT       NOT NULL REFERENCES carritos (id_carrito) ON DELETE CASCADE,
     id_variante     BIGINT       NOT NULL REFERENCES variantes (id_variante) ON DELETE CASCADE,
@@ -380,7 +535,7 @@ CREATE TABLE items_carrito (
 -- 6. PEDIDOS Y PAGOS
 -- ---------------------------------------------------------------------
 
--- 22. Cada compra. Los montos son una "foto" de la venta.
+-- 28. Cada compra. Los montos son una "foto" de la venta.
 CREATE TABLE pedidos (
     id_pedido                 BIGSERIAL      PRIMARY KEY,
     id_tienda                 BIGINT         NOT NULL REFERENCES tiendas (id_tienda),
@@ -388,11 +543,16 @@ CREATE TABLE pedidos (
     id_login                  BIGINT         NULL,              -- NULL = compra como invitado
     id_direccion_envio        BIGINT         NOT NULL REFERENCES direcciones (id_direccion),
     id_direccion_facturacion  BIGINT         NULL REFERENCES direcciones (id_direccion),
-    id_impuesto               SMALLINT       NOT NULL REFERENCES impuestos (id_impuesto),  -- IGV aplicado
+    id_impuesto               SMALLINT       NULL REFERENCES impuestos (id_impuesto),  -- NULL = exportación (T2)
+    moneda                    CHAR(3)        NOT NULL REFERENCES monedas (id_moneda),  -- la de la tienda; la pone T2
+    -- Solo si el comprador vio el precio en otra moneda: cuál y de qué día era el
+    -- tipo de cambio. El monto aproximado que vio = total × tasa (no se guarda).
+    moneda_cliente            CHAR(3)        NULL,
+    fecha_tipo_cambio         DATE           NULL,
     correo_contacto           VARCHAR(150)   NOT NULL,
     subtotal                  NUMERIC(12,2)  NOT NULL,          -- suma de las líneas, ya con descuentos
     costo_envio               NUMERIC(12,2)  NOT NULL,          -- si no se envía, el trigger lo toma de la tarifa
-    monto_impuestos           NUMERIC(12,2)  NOT NULL,          -- IGV incluido en el total (lo valida el trigger)
+    monto_impuestos           NUMERIC(12,2)  NOT NULL,          -- impuesto incluido en el total (lo valida el trigger)
     total                     NUMERIC(12,2)  NOT NULL,          -- si no se envía, el trigger lo calcula
     estado                    SMALLINT       NOT NULL DEFAULT 0,  -- 0 sin enviar · 1 enviado · 2 entregado · 3 cancelado
     notas                     TEXT           NULL,
@@ -401,14 +561,21 @@ CREATE TABLE pedidos (
     -- el cliente debe ser de ESTA tienda (FK compuesta):
     CONSTRAINT fk_pedidos_login
         FOREIGN KEY (id_login, id_tienda) REFERENCES login (id_login, id_tienda),
+    -- el tipo de cambio mostrado existe y es de la moneda de la tienda a la del cliente (FK compuesta):
+    CONSTRAINT fk_pedidos_tipo_cambio
+        FOREIGN KEY (moneda, moneda_cliente, fecha_tipo_cambio)
+        REFERENCES tipos_cambio (moneda_origen, moneda_destino, fecha),
     CONSTRAINT uq_pedidos_numero   UNIQUE (id_tienda, numero_pedido),   -- como serie + número
+    CONSTRAINT ck_pedidos_cambio   CHECK ((moneda_cliente IS NULL) = (fecha_tipo_cambio IS NULL)),
+    -- sin impuesto (exportación) no puede haber monto de impuesto
+    CONSTRAINT ck_pedidos_exportacion CHECK (id_impuesto IS NOT NULL OR monto_impuestos = 0),
     CONSTRAINT ck_pedidos_montos   CHECK (subtotal >= 0 AND costo_envio >= 0 AND monto_impuestos >= 0),
-    CONSTRAINT ck_pedidos_total    CHECK (total = subtotal + costo_envio),  -- precios con IGV incluido
+    CONSTRAINT ck_pedidos_total    CHECK (total = subtotal + costo_envio),  -- precios con impuesto incluido
     CONSTRAINT ck_pedidos_impuesto CHECK (monto_impuestos <= total),
     CONSTRAINT ck_pedidos_estado   CHECK (estado BETWEEN 0 AND 3)
 );
 
--- 23. Líneas del pedido (tabla puente pedido–variante).
+-- 29. Líneas del pedido (tabla puente pedido–variante).
 CREATE TABLE detalle_pedido (
     id_pedido           BIGINT         NOT NULL REFERENCES pedidos (id_pedido) ON DELETE CASCADE,
     id_variante         BIGINT         NOT NULL REFERENCES variantes (id_variante),
@@ -427,17 +594,17 @@ CREATE TABLE detalle_pedido (
     CONSTRAINT ck_detalle_sin_oferta CHECK (id_oferta IS NOT NULL OR descuento_unitario = 0)  -- sin oferta, sin descuento
 );
 
--- 24. Intentos de pago de cada pedido.
+-- 30. Intentos de pago de cada pedido.
 CREATE TABLE pagos (
     id_pago                 BIGSERIAL      PRIMARY KEY,
     id_pedido               BIGINT         NOT NULL REFERENCES pedidos (id_pedido),
-    proveedor               SMALLINT       NOT NULL,            -- 1 Culqi · 2 PayPal · 3 Mercado Pago · 4 manual (Yape, transferencia)
-    monto                   NUMERIC(12,2)  NOT NULL,
+    proveedor               SMALLINT       NOT NULL,            -- 1 Culqi · 2 PayPal · 3 Mercado Pago · 4 manual (Yape, transferencia) · 5 Stripe
+    monto                   NUMERIC(12,2)  NOT NULL,            -- en la moneda del pedido (la de la tienda)
     estado                  SMALLINT       NOT NULL DEFAULT 0,  -- 0 pendiente · 1 aprobado · 2 rechazado · 3 reembolsado
     referencia_transaccion  VARCHAR(120)   NULL UNIQUE,         -- código que devuelve la pasarela
     fecha_creacion          TIMESTAMPTZ    NOT NULL DEFAULT now(),
     fecha_pago              TIMESTAMPTZ    NULL,
-    CONSTRAINT ck_pagos_proveedor CHECK (proveedor BETWEEN 1 AND 4),
+    CONSTRAINT ck_pagos_proveedor CHECK (proveedor BETWEEN 1 AND 5),
     CONSTRAINT ck_pagos_monto     CHECK (monto > 0),
     CONSTRAINT ck_pagos_estado    CHECK (estado BETWEEN 0 AND 3),
     CONSTRAINT ck_pagos_fecha     CHECK (estado NOT IN (1, 3) OR fecha_pago IS NOT NULL)
@@ -450,7 +617,7 @@ CREATE TABLE pagos (
 -- ---------------------------------------------------------------------
 
 -- Reglas de negocio con índice único parcial
-CREATE UNIQUE INDEX uq_impuesto_vigente  ON impuestos (nombre) WHERE vigente_hasta IS NULL;
+CREATE UNIQUE INDEX uq_impuesto_vigente  ON impuestos (id_pais) WHERE vigente_hasta IS NULL;
 CREATE UNIQUE INDEX uq_precio_vigente    ON precios (id_variante) WHERE fecha_fin IS NULL;
 CREATE UNIQUE INDEX uq_direccion_predet  ON direcciones (id_login) WHERE predeterminada AND estado = 1;
 CREATE UNIQUE INDEX uq_pago_aprobado     ON pagos (id_pedido) WHERE estado = 1;
@@ -461,7 +628,7 @@ CREATE INDEX ix_login_correo             ON login (correo);           -- elegir 
 CREATE INDEX ix_login_rol                ON login (id_rol);
 CREATE INDEX ix_tiendas_propietario      ON tiendas (id_propietario);
 CREATE INDEX ix_direcciones_login        ON direcciones (id_login);
-CREATE INDEX ix_direcciones_distrito     ON direcciones (id_distrito);
+CREATE INDEX ix_direcciones_division     ON direcciones (id_division);
 CREATE INDEX ix_productos_tienda_estado  ON productos (id_tienda, estado);
 CREATE INDEX ix_producto_categorias_cat  ON producto_categorias (id_categoria);
 CREATE INDEX ix_variantes_producto       ON variantes (id_producto);
@@ -475,7 +642,15 @@ CREATE INDEX ix_pedidos_login            ON pedidos (id_login);
 CREATE INDEX ix_detalle_variante         ON detalle_pedido (id_variante);
 CREATE INDEX ix_pagos_pedido             ON pagos (id_pedido);
 -- Índices para las llaves foráneas que no tenían uno (PostgreSQL no los crea solo)
-CREATE INDEX ix_tarifas_departamento     ON tarifas_envio (id_departamento);
+CREATE INDEX ix_tarifas_division         ON tarifas_envio (id_division);
+CREATE INDEX ix_divisiones_nivel         ON divisiones (id_pais, nivel);
+CREATE INDEX ix_tiendas_pais             ON tiendas (id_pais);
+CREATE INDEX ix_paises_moneda            ON paises (id_moneda);
+CREATE INDEX ix_tipos_cambio_destino     ON tipos_cambio (moneda_destino);
+CREATE INDEX ix_direcciones_pais         ON direcciones (id_pais);
+CREATE INDEX ix_tarifas_int_pais         ON tarifas_internacionales (id_pais);
+CREATE INDEX ix_pedidos_moneda           ON pedidos (moneda);
+CREATE INDEX ix_pedidos_tipo_cambio      ON pedidos (moneda, moneda_cliente, fecha_tipo_cambio);
 CREATE INDEX ix_variante_valores_opcion  ON variante_valores (id_producto, posicion);
 CREATE INDEX ix_pedidos_dir_envio        ON pedidos (id_direccion_envio);
 CREATE INDEX ix_pedidos_dir_facturacion  ON pedidos (id_direccion_facturacion);
@@ -506,24 +681,49 @@ CREATE TRIGGER tg_inventario_fecha   BEFORE UPDATE ON inventario   FOR EACH ROW 
 CREATE TRIGGER tg_carritos_fecha     BEFORE UPDATE ON carritos     FOR EACH ROW EXECUTE FUNCTION fn_fecha_modificacion();
 CREATE TRIGGER tg_pedidos_fecha      BEFORE UPDATE ON pedidos      FOR EACH ROW EXECUTE FUNCTION fn_fecha_modificacion();
 
+-- Ayudas para los triggers: país, moneda y zona horaria de una tienda, y la
+-- división de primer nivel (departamento, región, estado) de cualquier división.
+CREATE FUNCTION fn_pais_de_tienda(p_tienda BIGINT) RETURNS paises AS $$
+    SELECT p.* FROM tiendas t JOIN paises p USING (id_pais) WHERE t.id_tienda = p_tienda;
+$$ LANGUAGE sql STABLE;
+
+CREATE FUNCTION fn_decimales_tienda(p_tienda BIGINT) RETURNS SMALLINT AS $$
+    SELECT m.decimales FROM tiendas t JOIN paises p USING (id_pais) JOIN monedas m USING (id_moneda)
+     WHERE t.id_tienda = p_tienda;
+$$ LANGUAGE sql STABLE;
+
+CREATE FUNCTION fn_division_nivel1(p_division BIGINT) RETURNS BIGINT AS $$
+    WITH RECURSIVE sube AS (
+        SELECT id_division, id_padre FROM divisiones WHERE id_division = p_division
+        UNION ALL
+        SELECT d.id_division, d.id_padre FROM divisiones d JOIN sube s ON d.id_division = s.id_padre)
+    SELECT id_division FROM sube WHERE id_padre IS NULL;
+$$ LANGUAGE sql STABLE;
+
 -- T2. Reglas del pedido (al crearlo, y al cambiar su dirección o sus montos)
 --     · La tienda debe estar activa (no suspendida).
 --     · Un pedido con un pago aprobado ya no cambia sus montos.
 --     · Recibe el siguiente número de su tienda (#1001, #1002…). El UPDATE
 --       bloquea la fila de la tienda: dos pedidos simultáneos esperan su
 --       turno y nunca reciben el mismo número.
---     · Si el backend no indica el IGV, se usa la tasa vigente en la fecha del
---       pedido (no la última creada: un cambio de IGV se registra antes de
---       que empiece a regir). Si lo indica, debe estar vigente en esa fecha.
---       La fecha se toma en hora de Lima: un pedido de las 11 p. m. del 31 de
---       diciembre es del 31, aunque en UTC ya sea 1 de enero.
+--     · Se cobra SIEMPRE en la moneda de la tienda (pedidos.moneda), y no cambia.
+--     · VENTA NACIONAL (la dirección de envío está en el país de la tienda):
+--       lleva el impuesto del país (IGV en Perú, IVA en Chile). Si el backend
+--       no lo indica, se usa la tasa vigente en la fecha del pedido, tomada
+--       en la hora del país de la tienda (paises.zona_horaria). Si lo
+--       indica, debe ser de ese país y estar vigente en esa fecha. El envío
+--       sale de tarifas_envio, según la región (nivel 1) de la dirección.
+--     · VENTA AL EXTRANJERO (exportación): NO lleva impuesto (id_impuesto
+--       NULL y monto_impuestos 0); la aduana del país de destino cobra al
+--       comprador al recibir. El envío sale de tarifas_internacionales, según
+--       el país de destino: si la tienda no tiene tarifa para ese país, no
+--       vende a ese país.
 --     · Las direcciones deben ser del mismo cliente del pedido (o de un
 --       invitado de esa misma tienda) y estar activas.
---     · La tienda debe tener una tarifa activa para el departamento de la
---       dirección de envío, y costo_envio debe coincidir con esa tarifa
---       (0 si el subtotal llega al monto de envío gratis).
---     · total y monto_impuestos se calculan si no se envían, y si se envían
---       deben cuadrar: IGV incluido = total × tasa / (100 + tasa).
+--     · costo_envio, total y monto_impuestos se calculan si no se envían, y
+--       si se envían deben cuadrar: impuesto incluido = total × tasa / (100 + tasa).
+--     · Una venta nacional necesita una dirección elegida de la lista oficial
+--       (si se escribió a mano antes de habilitar el país, se pide otra).
 CREATE FUNCTION fn_validar_direccion_pedido(p_direccion BIGINT, p_login BIGINT,
                                             p_tienda BIGINT, p_pedido BIGINT) RETURNS VOID AS $$
 DECLARE d RECORD;
@@ -550,13 +750,27 @@ CREATE FUNCTION fn_preparar_pedido() RETURNS trigger AS $$
 DECLARE
     v_nuevo    BOOLEAN := (TG_OP = 'INSERT');
     v_envio    BOOLEAN;   -- ¿hay que revisar la tarifa?
-    v_montos   BOOLEAN;   -- ¿hay que revisar total e IGV?
-    v_dep      BIGINT;
+    v_montos   BOOLEAN;   -- ¿hay que revisar total e impuesto?
+    v_pais     paises;    -- país de la tienda (moneda, zona horaria)
+    v_fecha    DATE;      -- fecha del pedido en la hora de ese país
+    v_destino  CHAR(2);   -- país de la dirección de envío
+    v_division BIGINT;    -- división de la dirección de envío (solo ventas nacionales)
+    v_export   BOOLEAN;   -- ¿es una venta al extranjero?
     v_tarifa   RECORD;
     v_costo    NUMERIC(12,2);
     v_tasa     NUMERIC(5,2);
-    v_igv      NUMERIC(12,2);
+    v_imp      NUMERIC(12,2);
+    v_dec      SMALLINT;  -- decimales de la moneda de la tienda
 BEGIN
+    v_pais := fn_pais_de_tienda(NEW.id_tienda);
+    IF v_pais.id_pais IS NULL THEN RETURN NEW; END IF;   -- tienda inexistente: la FK se encarga
+    v_fecha := (NEW.fecha_creacion AT TIME ZONE v_pais.zona_horaria)::date;
+
+    SELECT id_pais, id_division INTO v_destino, v_division
+      FROM direcciones WHERE id_direccion = NEW.id_direccion_envio;
+    IF NOT FOUND THEN RETURN NEW; END IF;                -- dirección inexistente: la FK se encarga
+    v_export := (v_destino <> v_pais.id_pais);
+
     IF v_nuevo THEN
         IF (SELECT estado FROM tiendas WHERE id_tienda = NEW.id_tienda) <> 1 THEN
             RAISE EXCEPTION 'La tienda % está suspendida y no puede recibir pedidos', NEW.id_tienda;
@@ -567,25 +781,65 @@ BEGIN
          WHERE id_tienda = NEW.id_tienda
         RETURNING ultimo_numero_pedido INTO NEW.numero_pedido;
 
-        IF NEW.id_impuesto IS NULL THEN
+        IF NEW.moneda IS NULL THEN
+            NEW.moneda := v_pais.id_moneda;
+        END IF;
+
+        IF NOT v_export AND NEW.id_impuesto IS NULL THEN
             SELECT id_impuesto INTO NEW.id_impuesto
               FROM impuestos
-             WHERE nombre = 'IGV'
-               AND vigente_desde <= (NEW.fecha_creacion AT TIME ZONE 'America/Lima')::date
-               AND (vigente_hasta IS NULL OR vigente_hasta > (NEW.fecha_creacion AT TIME ZONE 'America/Lima')::date);
+             WHERE id_pais = v_pais.id_pais
+               AND vigente_desde <= v_fecha
+               AND (vigente_hasta IS NULL OR vigente_hasta > v_fecha);
             IF NOT FOUND THEN
-                RAISE EXCEPTION 'No hay una tasa de IGV vigente para el %', (NEW.fecha_creacion AT TIME ZONE 'America/Lima')::date;
+                RAISE EXCEPTION 'No hay un impuesto vigente en % para el %', v_pais.id_pais, v_fecha;
             END IF;
         END IF;
     END IF;
 
-    -- La tasa aplicada debe estar vigente en la fecha del pedido
-    IF v_nuevo OR (NEW.id_impuesto, NEW.fecha_creacion) IS DISTINCT FROM (OLD.id_impuesto, OLD.fecha_creacion) THEN
-        IF NOT EXISTS (SELECT 1 FROM impuestos
-                        WHERE id_impuesto = NEW.id_impuesto
-                          AND vigente_desde <= (NEW.fecha_creacion AT TIME ZONE 'America/Lima')::date
-                          AND (vigente_hasta IS NULL OR vigente_hasta > (NEW.fecha_creacion AT TIME ZONE 'America/Lima')::date)) THEN
-            RAISE EXCEPTION 'La tasa % no estaba vigente el %', NEW.id_impuesto, (NEW.fecha_creacion AT TIME ZONE 'America/Lima')::date;
+    -- El pedido se cobra en la moneda de la tienda, y eso no cambia
+    IF v_nuevo AND NEW.moneda <> v_pais.id_moneda THEN
+        RAISE EXCEPTION 'El pedido se cobra en la moneda de la tienda (%), no en %', v_pais.id_moneda, NEW.moneda;
+    END IF;
+    IF NOT v_nuevo AND NEW.moneda IS DISTINCT FROM OLD.moneda THEN
+        RAISE EXCEPTION 'La moneda de un pedido no se cambia';
+    END IF;
+
+    -- Los montos respetan los decimales de la moneda (en pesos chilenos no hay centavos)
+    SELECT decimales INTO v_dec FROM monedas WHERE id_moneda = NEW.moneda;
+    IF NEW.subtotal <> round(NEW.subtotal, v_dec)
+       OR NEW.costo_envio <> round(NEW.costo_envio, v_dec)
+       OR NEW.total <> round(NEW.total, v_dec) THEN
+        RAISE EXCEPTION 'En % los montos van con % decimales', NEW.moneda, v_dec;
+    END IF;
+
+    -- El tipo de cambio mostrado no puede ser de un día posterior al pedido
+    IF NEW.fecha_tipo_cambio IS NOT NULL AND NEW.fecha_tipo_cambio > v_fecha THEN
+        RAISE EXCEPTION 'El tipo de cambio del % es posterior a la fecha del pedido (%)', NEW.fecha_tipo_cambio, v_fecha;
+    END IF;
+
+    -- Impuesto: el del país de la tienda en ventas nacionales; ninguno en exportaciones
+    IF v_nuevo OR (NEW.id_impuesto, NEW.fecha_creacion, NEW.id_direccion_envio)
+                  IS DISTINCT FROM (OLD.id_impuesto, OLD.fecha_creacion, OLD.id_direccion_envio) THEN
+        IF v_export THEN
+            IF NEW.id_impuesto IS NOT NULL THEN
+                RAISE EXCEPTION 'El pedido va a % y la tienda es de %: es una exportación y no lleva impuesto',
+                    v_destino, v_pais.id_pais;
+            END IF;
+        ELSE
+            IF NEW.id_impuesto IS NULL THEN
+                RAISE EXCEPTION 'Una venta dentro de % debe llevar su impuesto', v_pais.id_pais;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM impuestos
+                            WHERE id_impuesto = NEW.id_impuesto AND id_pais = v_pais.id_pais) THEN
+                RAISE EXCEPTION 'La tasa % no es de % (país de la tienda)', NEW.id_impuesto, v_pais.id_pais;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM impuestos
+                            WHERE id_impuesto = NEW.id_impuesto
+                              AND vigente_desde <= v_fecha
+                              AND (vigente_hasta IS NULL OR vigente_hasta > v_fecha)) THEN
+                RAISE EXCEPTION 'La tasa % no estaba vigente el %', NEW.id_impuesto, v_fecha;
+            END IF;
         END IF;
     END IF;
 
@@ -614,19 +868,29 @@ BEGIN
         PERFORM fn_validar_direccion_pedido(NEW.id_direccion_facturacion, NEW.id_login, NEW.id_tienda, NEW.id_pedido);
     END IF;
 
-    -- Tarifa de envío: distrito → provincia → departamento
+    -- Tarifa de envío: por región dentro del país, por país hacia el extranjero
     IF v_envio THEN
-        SELECT pro.id_padre INTO v_dep
-          FROM direcciones d
-          JOIN divisiones dis ON dis.id_division = d.id_distrito
-          JOIN divisiones pro ON pro.id_division = dis.id_padre
-         WHERE d.id_direccion = NEW.id_direccion_envio;
-
-        SELECT costo, envio_gratis_desde INTO v_tarifa
-          FROM tarifas_envio
-         WHERE id_tienda = NEW.id_tienda AND id_departamento = v_dep AND estado = 1;
-        IF NOT FOUND THEN
-            RAISE EXCEPTION 'La tienda % no tiene una tarifa de envío activa para ese departamento', NEW.id_tienda;
+        IF v_export THEN
+            SELECT costo, envio_gratis_desde INTO v_tarifa
+              FROM tarifas_internacionales
+             WHERE id_tienda = NEW.id_tienda AND id_pais = v_destino AND estado = 1;
+            IF NOT FOUND THEN
+                RAISE EXCEPTION 'La tienda % no envía a % (no tiene una tarifa internacional activa para ese país)',
+                    NEW.id_tienda, v_destino;
+            END IF;
+        ELSE
+            -- una venta nacional necesita la ubicación de la lista oficial (la
+            -- dirección pudo escribirse a mano antes de habilitar el país)
+            IF v_division IS NULL THEN
+                RAISE EXCEPTION 'La dirección % se escribió a mano: para una venta dentro de % registre una dirección elegida de la lista oficial',
+                    NEW.id_direccion_envio, v_pais.id_pais;
+            END IF;
+            SELECT costo, envio_gratis_desde INTO v_tarifa
+              FROM tarifas_envio
+             WHERE id_tienda = NEW.id_tienda AND id_division = fn_division_nivel1(v_division) AND estado = 1;
+            IF NOT FOUND THEN
+                RAISE EXCEPTION 'La tienda % no tiene una tarifa de envío activa para esa zona', NEW.id_tienda;
+            END IF;
         END IF;
 
         v_costo := CASE WHEN v_tarifa.envio_gratis_desde IS NOT NULL
@@ -635,21 +899,25 @@ BEGIN
         IF NEW.costo_envio IS NULL THEN
             NEW.costo_envio := v_costo;
         ELSIF NEW.costo_envio <> v_costo THEN
-            RAISE EXCEPTION 'El costo de envío debe ser S/ % según la tarifa de la tienda', v_costo;
+            RAISE EXCEPTION 'El costo de envío debe ser % % según la tarifa de la tienda', v_costo, NEW.moneda;
         END IF;
     END IF;
 
-    -- Total e IGV incluido (con la tasa de la tabla impuestos)
+    -- Total e impuesto incluido (0 en una exportación)
     IF v_montos THEN
         IF NEW.total IS NULL THEN
             NEW.total := NEW.subtotal + NEW.costo_envio;
         END IF;
-        SELECT tasa INTO v_tasa FROM impuestos WHERE id_impuesto = NEW.id_impuesto;
-        v_igv := round(NEW.total * v_tasa / (100 + v_tasa), 2);
+        IF NEW.id_impuesto IS NULL THEN
+            v_tasa := 0;
+        ELSE
+            SELECT tasa INTO v_tasa FROM impuestos WHERE id_impuesto = NEW.id_impuesto;
+        END IF;
+        v_imp := round(NEW.total * v_tasa / (100 + v_tasa), v_dec);
         IF NEW.monto_impuestos IS NULL THEN
-            NEW.monto_impuestos := v_igv;
-        ELSIF NEW.monto_impuestos <> v_igv THEN
-            RAISE EXCEPTION 'El IGV incluido debe ser S/ % (total × % / %)', v_igv, v_tasa, 100 + v_tasa;
+            NEW.monto_impuestos := v_imp;
+        ELSIF NEW.monto_impuestos <> v_imp THEN
+            RAISE EXCEPTION 'El impuesto incluido debe ser % % (total × % / %)', v_imp, NEW.moneda, v_tasa, 100 + v_tasa;
         END IF;
     END IF;
     RETURN NEW;
@@ -689,11 +957,27 @@ CREATE TRIGGER tg_precios_inmutable
     BEFORE UPDATE ON precios
     FOR EACH ROW EXECUTE FUNCTION fn_precio_inmutable();
 
--- T4. Una tasa de impuesto ya creada no se modifica: solo se cierra una vez con
---     vigente_hasta, y nunca antes de un pedido que ya la usó.
+-- T4. Una tasa de impuesto ya creada no se modifica (ni su país): solo se
+--     cierra una vez con vigente_hasta, y nunca antes de un pedido que ya
+--     la usó (la fecha del pedido se toma en la hora de ese país).
+--     La tasa VIGENTE HOY de un país con tiendas no se borra: sus tiendas
+--     se quedarían sin poder vender. (Una tasa usada en pedidos tampoco se
+--     borra: lo impide la FK de pedidos. Una tasa futura mal programada sí.)
 CREATE FUNCTION fn_impuesto_inmutable() RETURNS trigger AS $$
+DECLARE v_hoy DATE;
 BEGIN
+    IF TG_OP = 'DELETE' THEN
+        SELECT (now() AT TIME ZONE zona_horaria)::date INTO v_hoy FROM paises WHERE id_pais = OLD.id_pais;
+        IF EXISTS (SELECT 1 FROM tiendas WHERE id_pais = OLD.id_pais)
+           AND OLD.vigente_desde <= v_hoy AND (OLD.vigente_hasta IS NULL OR OLD.vigente_hasta > v_hoy) THEN
+            RAISE EXCEPTION 'La tasa % es la vigente en %, que tiene tiendas: no se borra (ciérrala con vigente_hasta)',
+                OLD.id_impuesto, OLD.id_pais;
+        END IF;
+        RETURN OLD;
+    END IF;
+
     IF NEW.tasa IS DISTINCT FROM OLD.tasa
+       OR NEW.id_pais IS DISTINCT FROM OLD.id_pais
        OR NEW.nombre IS DISTINCT FROM OLD.nombre
        OR NEW.vigente_desde IS DISTINCT FROM OLD.vigente_desde THEN
         RAISE EXCEPTION 'Una tasa no se edita: ciérrala con vigente_hasta y crea una nueva';
@@ -704,8 +988,9 @@ BEGIN
     END IF;
     -- y no puede cerrarse antes de un pedido que ya la usó
     IF OLD.vigente_hasta IS NULL AND NEW.vigente_hasta IS NOT NULL AND EXISTS (
-        SELECT 1 FROM pedidos
-         WHERE id_impuesto = NEW.id_impuesto AND (fecha_creacion AT TIME ZONE 'America/Lima')::date >= NEW.vigente_hasta) THEN
+        SELECT 1 FROM pedidos p, paises pa
+         WHERE pa.id_pais = NEW.id_pais AND p.id_impuesto = NEW.id_impuesto
+           AND (p.fecha_creacion AT TIME ZONE pa.zona_horaria)::date >= NEW.vigente_hasta) THEN
         RAISE EXCEPTION 'La tasa % se usó en un pedido posterior a esa fecha de cierre', NEW.id_impuesto;
     END IF;
     RETURN NEW;
@@ -713,7 +998,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER tg_impuestos_inmutable
-    BEFORE UPDATE ON impuestos
+    BEFORE UPDATE OR DELETE ON impuestos
     FOR EACH ROW EXECUTE FUNCTION fn_impuesto_inmutable();
 
 -- T5. Variantes: cada variante tiene un valor para cada opción de su
@@ -866,10 +1151,11 @@ BEGIN
             END IF;
             -- el descuento por unidad sale de la oferta y nunca supera el precio
             v_desc := CASE v_of.tipo_descuento
-                          WHEN 1 THEN round(v_precio.monto * v_of.valor / 100, 2)
+                          WHEN 1 THEN round(v_precio.monto * v_of.valor / 100, fn_decimales_tienda(v_ped.id_tienda))
                           ELSE least(v_of.valor, v_precio.monto) END;
             IF v_desc IS NOT NULL AND NEW.descuento_unitario <> v_desc THEN
-                RAISE EXCEPTION 'El descuento por unidad debe ser S/ % según la oferta %', v_desc, NEW.id_oferta;
+                RAISE EXCEPTION 'El descuento por unidad debe ser % % según la oferta %',
+                    v_desc, (fn_pais_de_tienda(v_ped.id_tienda)).id_moneda, NEW.id_oferta;
             END IF;
         END IF;
     END IF;
@@ -882,8 +1168,9 @@ CREATE TRIGGER tg_detalle_consistente
     FOR EACH ROW EXECUTE FUNCTION fn_detalle_consistente();
 
 -- T8. Una fila no cambia de dueño: un producto, una categoría, una oferta,
---     un carrito o un pedido no se pasan a otra tienda, y una variante no se
---     pasa a otro producto. (Si se permitiera, se saltarían las reglas de T6 y T7.)
+--     un carrito o un pedido no se pasan a otra tienda, una variante no se
+--     pasa a otro producto y una tienda no se pasa a otro país.
+--     (Si se permitiera, se saltarían las reglas de T6, T7 y T12.)
 CREATE FUNCTION fn_dueno_inmutable() RETURNS trigger AS $$
 BEGIN
     IF to_jsonb(NEW) -> TG_ARGV[0] IS DISTINCT FROM to_jsonb(OLD) -> TG_ARGV[0] THEN
@@ -899,14 +1186,23 @@ CREATE TRIGGER tg_ofertas_dueno    BEFORE UPDATE ON ofertas    FOR EACH ROW EXEC
 CREATE TRIGGER tg_carritos_dueno   BEFORE UPDATE ON carritos   FOR EACH ROW EXECUTE FUNCTION fn_dueno_inmutable('id_tienda');
 CREATE TRIGGER tg_pedidos_dueno    BEFORE UPDATE ON pedidos    FOR EACH ROW EXECUTE FUNCTION fn_dueno_inmutable('id_tienda');
 CREATE TRIGGER tg_variantes_dueno  BEFORE UPDATE ON variantes  FOR EACH ROW EXECUTE FUNCTION fn_dueno_inmutable('id_producto');
+-- Una tienda no cambia de país: sus precios, tarifas y pedidos están en su moneda
+CREATE TRIGGER tg_tiendas_pais     BEFORE UPDATE ON tiendas    FOR EACH ROW EXECUTE FUNCTION fn_dueno_inmutable('id_pais');
 
 -- T9. Una dirección que ya se usó en un pedido no se edita: el pedido debe
 --     seguir mostrando la dirección a la que se envió. Solo se puede
 --     archivar (estado = 0) o quitar como predeterminada; para cambiarla,
 --     el cliente crea una dirección nueva.
+--     Excepción: si no tenía coordenadas, se pueden llenar UNA vez (el
+--     backend las obtiene del servicio de mapas después del pedido); las que
+--     ya tenía no cambian.
 CREATE FUNCTION fn_direccion_usada_inmutable() RETURNS trigger AS $$
+DECLARE v_libres TEXT[] := ARRAY['estado', 'predeterminada'];
 BEGIN
-    IF (to_jsonb(NEW) - 'estado' - 'predeterminada') IS DISTINCT FROM (to_jsonb(OLD) - 'estado' - 'predeterminada')
+    IF OLD.latitud IS NULL THEN
+        v_libres := v_libres || ARRAY['latitud', 'longitud'];
+    END IF;
+    IF (to_jsonb(NEW) - v_libres) IS DISTINCT FROM (to_jsonb(OLD) - v_libres)
        AND EXISTS (SELECT 1 FROM pedidos
                     WHERE OLD.id_direccion IN (id_direccion_envio, id_direccion_facturacion)) THEN
         RAISE EXCEPTION 'La dirección % ya se usó en un pedido: archívala y crea una nueva', OLD.id_direccion;
@@ -921,12 +1217,12 @@ CREATE TRIGGER tg_direcciones_usada
 
 -- T10. Un pago aprobado cubre exactamente el total del pedido.
 CREATE FUNCTION fn_pago_monto() RETURNS trigger AS $$
-DECLARE v_total NUMERIC(12,2);
+DECLARE v_total NUMERIC(12,2); v_moneda CHAR(3);
 BEGIN
     IF NEW.estado = 1 THEN
-        SELECT total INTO v_total FROM pedidos WHERE id_pedido = NEW.id_pedido;
+        SELECT total, moneda INTO v_total, v_moneda FROM pedidos WHERE id_pedido = NEW.id_pedido;
         IF FOUND AND NEW.monto <> v_total THEN
-            RAISE EXCEPTION 'Un pago aprobado debe ser igual al total del pedido (S/ %)', v_total;
+            RAISE EXCEPTION 'Un pago aprobado debe ser igual al total del pedido (% %)', v_total, v_moneda;
         END IF;
     END IF;
     RETURN NEW;
@@ -973,5 +1269,265 @@ CREATE TRIGGER tg_oferta_productos_usada
 CREATE TRIGGER tg_ofertas_usada
     BEFORE UPDATE ON ofertas
     FOR EACH ROW EXECUTE FUNCTION fn_oferta_usada();
+
+-- T12. Países y direcciones coherentes.
+--      · Una tienda nueva solo se crea en un país habilitado (estado 1).
+--      · tarifas_envio es para regiones del país de la tienda (una tienda de
+--        Chile no pone tarifa nacional para Lima) y tarifas_internacionales
+--        es para países distintos del de la tienda.
+--      · Una dirección en un país HABILITADO (su lista oficial está completa)
+--        apunta a una división del ÚLTIMO nivel (distrito en Perú, comuna en
+--        Chile, municipio en México). En los demás países se escribe la
+--        ciudad (o se elige una división, si su lista ya está cargada).
+--      · El código postal se exige y se valida según el país.
+CREATE FUNCTION fn_pais_coherente() RETURNS trigger AS $$
+DECLARE
+    v_pais_div    CHAR(2);
+    v_nivel       SMALLINT;
+    v_ultimo      SMALLINT;
+    v_pais        paises;
+BEGIN
+    CASE TG_TABLE_NAME
+    WHEN 'tiendas' THEN
+        IF (SELECT estado FROM paises WHERE id_pais = NEW.id_pais) = 0 THEN
+            RAISE EXCEPTION 'Vendely todavía no está habilitado para crear tiendas en %', NEW.id_pais;
+        END IF;
+
+    WHEN 'tarifas_envio' THEN
+        SELECT id_pais INTO v_pais_div FROM divisiones WHERE id_division = NEW.id_division;
+        v_pais := fn_pais_de_tienda(NEW.id_tienda);
+        IF v_pais_div IS DISTINCT FROM v_pais.id_pais AND v_pais_div IS NOT NULL AND v_pais.id_pais IS NOT NULL THEN
+            RAISE EXCEPTION 'La tienda % es de %: su tarifa nacional no puede ser para una zona de % (use tarifas_internacionales)',
+                NEW.id_tienda, v_pais.id_pais, v_pais_div;
+        END IF;
+
+    WHEN 'tarifas_internacionales' THEN
+        v_pais := fn_pais_de_tienda(NEW.id_tienda);
+        IF NEW.id_pais = v_pais.id_pais THEN
+            RAISE EXCEPTION 'La tienda % es de %: para su propio país usa tarifas_envio, por región',
+                NEW.id_tienda, NEW.id_pais;
+        END IF;
+
+    WHEN 'direcciones' THEN
+        -- solo se revisa al crearla o si cambia su ubicación (T9 protege las ya usadas)
+        IF TG_OP = 'UPDATE' AND (NEW.id_pais, NEW.id_division, NEW.codigo_postal)
+                                IS NOT DISTINCT FROM (OLD.id_pais, OLD.id_division, OLD.codigo_postal) THEN
+            RETURN NEW;
+        END IF;
+        SELECT * INTO v_pais FROM paises WHERE id_pais = NEW.id_pais;
+        IF NOT FOUND THEN RETURN NEW; END IF;          -- la FK se encarga
+        SELECT max(nivel) INTO v_ultimo FROM niveles_division WHERE id_pais = NEW.id_pais;
+
+        -- país habilitado: su lista oficial está completa y es obligatoria
+        IF v_pais.estado = 1 AND NEW.id_division IS NULL THEN
+            RAISE EXCEPTION 'En % la ubicación se elige de la lista oficial (%): falta id_division',
+                NEW.id_pais, (SELECT nombre FROM niveles_division WHERE id_pais = NEW.id_pais AND nivel = v_ultimo);
+        END IF;
+        -- si se eligió una división (de cualquier país), debe ser del último nivel
+        IF NEW.id_division IS NOT NULL THEN
+            SELECT nivel INTO v_nivel FROM divisiones WHERE id_division = NEW.id_division;
+            IF v_nivel <> v_ultimo THEN
+                RAISE EXCEPTION 'La dirección debe apuntar al último nivel de % (%), no a un(a) %',
+                    NEW.id_pais,
+                    (SELECT nombre FROM niveles_division WHERE id_pais = NEW.id_pais AND nivel = v_ultimo),
+                    (SELECT nombre FROM niveles_division WHERE id_pais = NEW.id_pais AND nivel = v_nivel);
+            END IF;
+        END IF;
+
+        IF NEW.codigo_postal IS NULL AND v_pais.requiere_codigo_postal THEN
+            RAISE EXCEPTION 'En % el código postal es obligatorio', NEW.id_pais;
+        END IF;
+        IF NEW.codigo_postal IS NOT NULL AND v_pais.patron_codigo_postal IS NOT NULL
+           AND NEW.codigo_postal !~ v_pais.patron_codigo_postal THEN
+            RAISE EXCEPTION 'El código postal "%" no tiene el formato de %', NEW.codigo_postal, NEW.id_pais;
+        END IF;
+    END CASE;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER tg_tiendas_pais_habilitado BEFORE INSERT ON tiendas
+    FOR EACH ROW EXECUTE FUNCTION fn_pais_coherente();
+CREATE TRIGGER tg_tarifas_envio_pais      BEFORE INSERT OR UPDATE ON tarifas_envio
+    FOR EACH ROW EXECUTE FUNCTION fn_pais_coherente();
+CREATE TRIGGER tg_tarifas_int_pais        BEFORE INSERT OR UPDATE ON tarifas_internacionales
+    FOR EACH ROW EXECUTE FUNCTION fn_pais_coherente();
+CREATE TRIGGER tg_direcciones_pais        BEFORE INSERT OR UPDATE ON direcciones
+    FOR EACH ROW EXECUTE FUNCTION fn_pais_coherente();
+
+-- T13. El número de documento del dueño tiene el formato de su tipo
+--      (DNI de 8 dígitos, RUT chileno 12345678-5, RFC mexicano…). El formato
+--      está en tipos_documento.patron, por eso no puede ser un CHECK.
+--      Si se cambia el patrón de un tipo, los documentos ya registrados
+--      deben seguir cumpliéndolo. Un tipo que ya usan dueños no cambia de país.
+CREATE FUNCTION fn_documento_valido() RETURNS trigger AS $$
+DECLARE v_tipo RECORD;
+BEGIN
+    IF TG_TABLE_NAME = 'tipos_documento' THEN
+        IF EXISTS (SELECT 1 FROM propietarios
+                    WHERE tipo_documento = NEW.id_tipo_documento AND numero_documento !~ NEW.patron) THEN
+            RAISE EXCEPTION 'Hay documentos % registrados que no cumplen el nuevo formato', NEW.codigo;
+        END IF;
+        IF NEW.id_pais IS DISTINCT FROM OLD.id_pais
+           AND EXISTS (SELECT 1 FROM propietarios WHERE tipo_documento = OLD.id_tipo_documento) THEN
+            RAISE EXCEPTION 'El tipo de documento % (%) ya lo usan dueños: su país no se cambia', OLD.codigo, OLD.id_pais;
+        END IF;
+        RETURN NEW;
+    END IF;
+
+    SELECT codigo, id_pais, patron INTO v_tipo FROM tipos_documento WHERE id_tipo_documento = NEW.tipo_documento;
+    IF FOUND AND NEW.numero_documento !~ v_tipo.patron THEN
+        RAISE EXCEPTION 'El número "%" no tiene el formato de % (%)', NEW.numero_documento, v_tipo.codigo, v_tipo.id_pais;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER tg_propietarios_documento BEFORE INSERT OR UPDATE ON propietarios
+    FOR EACH ROW EXECUTE FUNCTION fn_documento_valido();
+CREATE TRIGGER tg_tipos_documento_patron BEFORE UPDATE ON tipos_documento
+    FOR EACH ROW EXECUTE FUNCTION fn_documento_valido();
+
+-- T14. Un tipo de cambio que ya se mostró en un pedido no se edita: el pedido
+--      debe poder decir siempre qué precio aproximado vio el comprador.
+--      (Borrarlo ya lo impide la FK compuesta de pedidos.)
+CREATE FUNCTION fn_tipo_cambio_usado() RETURNS trigger AS $$
+BEGIN
+    IF NEW.tasa IS DISTINCT FROM OLD.tasa AND EXISTS (
+        SELECT 1 FROM pedidos
+         WHERE moneda = OLD.moneda_origen AND moneda_cliente = OLD.moneda_destino
+           AND fecha_tipo_cambio = OLD.fecha) THEN
+        RAISE EXCEPTION 'El tipo de cambio % → % del % ya se usó en pedidos: no se edita',
+            OLD.moneda_origen, OLD.moneda_destino, OLD.fecha;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER tg_tipos_cambio_usado
+    BEFORE UPDATE ON tipos_cambio
+    FOR EACH ROW EXECUTE FUNCTION fn_tipo_cambio_usado();
+
+-- T15. Un país con tiendas no cambia lo que ya usan sus tiendas, y un país
+--      solo se habilita si tiene lo mínimo para vender.
+--      · Con tiendas: su moneda y su zona horaria no cambian (los precios ya
+--        guardados están en esa moneda y las fechas de sus pedidos, en esa hora),
+--        y no se deshabilita (sus tiendas seguirían vendiendo, pero ya se
+--        podrían guardar direcciones escritas a mano en ese país).
+--      · Un formato de código postal nuevo (o volverlo obligatorio) debe
+--        cumplirse en las direcciones activas que ya existen.
+--      · Para habilitarlo (estado 1) debe tener: zona horaria (la exige el
+--        CHECK ck_paises_habilitado), una moneda de 0 a 2 decimales (los
+--        montos se guardan con 2), niveles territoriales, divisiones en su
+--        último nivel, un impuesto vigente hoy y al menos un tipo de
+--        documento activo. (Que la lista esté COMPLETA no se puede
+--        comprobar: eso lo revisa el superadmin.)
+--      · Una moneda que ya usan tiendas no cambia sus decimales.
+CREATE FUNCTION fn_pais_protegido() RETURNS trigger AS $$
+DECLARE v_ultimo SMALLINT; v_hoy DATE; v_dec SMALLINT;
+BEGIN
+    IF TG_TABLE_NAME = 'monedas' THEN
+        IF NEW.decimales IS DISTINCT FROM OLD.decimales AND EXISTS (
+            SELECT 1 FROM tiendas t JOIN paises p USING (id_pais) WHERE p.id_moneda = OLD.id_moneda) THEN
+            RAISE EXCEPTION 'La moneda % ya la usan tiendas: sus decimales (%) no se cambian', OLD.id_moneda, OLD.decimales;
+        END IF;
+        RETURN NEW;
+    END IF;
+
+    IF TG_OP = 'UPDATE' AND EXISTS (SELECT 1 FROM tiendas WHERE id_pais = OLD.id_pais) THEN
+        IF NEW.id_moneda IS DISTINCT FROM OLD.id_moneda THEN
+            RAISE EXCEPTION '% ya tiene tiendas: su moneda (%) no se cambia', OLD.id_pais, OLD.id_moneda;
+        END IF;
+        IF NEW.zona_horaria IS DISTINCT FROM OLD.zona_horaria THEN
+            RAISE EXCEPTION '% ya tiene tiendas: su zona horaria (%) no se cambia', OLD.id_pais, OLD.zona_horaria;
+        END IF;
+        IF OLD.estado = 1 AND NEW.estado = 0 THEN
+            RAISE EXCEPTION '% ya tiene tiendas: no se deshabilita', OLD.id_pais;
+        END IF;
+    END IF;
+
+    IF TG_OP = 'UPDATE' AND (NEW.patron_codigo_postal, NEW.requiere_codigo_postal)
+                            IS DISTINCT FROM (OLD.patron_codigo_postal, OLD.requiere_codigo_postal) THEN
+        IF EXISTS (SELECT 1 FROM direcciones
+                    WHERE id_pais = NEW.id_pais AND estado = 1
+                      AND ((codigo_postal IS NULL AND NEW.requiere_codigo_postal)
+                        OR (codigo_postal IS NOT NULL AND NEW.patron_codigo_postal IS NOT NULL
+                            AND codigo_postal !~ NEW.patron_codigo_postal))) THEN
+            RAISE EXCEPTION 'Hay direcciones activas de % que no cumplen el nuevo formato de código postal', NEW.id_pais;
+        END IF;
+    END IF;
+
+    IF NEW.estado = 1 AND (TG_OP = 'INSERT' OR OLD.estado = 0) THEN
+        IF NEW.zona_horaria IS NULL THEN
+            RETURN NEW;                       -- lo rechaza el CHECK ck_paises_habilitado, con su mensaje
+        END IF;
+        SELECT decimales INTO v_dec FROM monedas WHERE id_moneda = NEW.id_moneda;
+        IF v_dec > 2 THEN
+            RAISE EXCEPTION 'No se puede habilitar %: su moneda (%) usa % decimales y los montos se guardan con 2',
+                NEW.id_pais, NEW.id_moneda, v_dec;
+        END IF;
+        SELECT max(nivel) INTO v_ultimo FROM niveles_division WHERE id_pais = NEW.id_pais;
+        IF v_ultimo IS NULL THEN
+            RAISE EXCEPTION 'No se puede habilitar %: no tiene niveles territoriales', NEW.id_pais;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM divisiones WHERE id_pais = NEW.id_pais AND nivel = v_ultimo) THEN
+            RAISE EXCEPTION 'No se puede habilitar %: no tiene divisiones en su último nivel (%)', NEW.id_pais,
+                (SELECT nombre FROM niveles_division WHERE id_pais = NEW.id_pais AND nivel = v_ultimo);
+        END IF;
+        v_hoy := (now() AT TIME ZONE NEW.zona_horaria)::date;
+        IF NOT EXISTS (SELECT 1 FROM impuestos WHERE id_pais = NEW.id_pais AND vigente_desde <= v_hoy
+                          AND (vigente_hasta IS NULL OR vigente_hasta > v_hoy)) THEN
+            RAISE EXCEPTION 'No se puede habilitar %: no tiene un impuesto vigente', NEW.id_pais;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM tipos_documento WHERE id_pais = NEW.id_pais AND estado = 1) THEN
+            RAISE EXCEPTION 'No se puede habilitar %: no tiene tipos de documento', NEW.id_pais;
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER tg_paises_protegido
+    BEFORE INSERT OR UPDATE ON paises
+    FOR EACH ROW EXECUTE FUNCTION fn_pais_protegido();
+CREATE TRIGGER tg_monedas_protegida
+    BEFORE UPDATE ON monedas
+    FOR EACH ROW EXECUTE FUNCTION fn_pais_protegido();
+
+-- T16. Los montos que guarda la tienda respetan los decimales de su moneda:
+--      en pesos chilenos (0 decimales) no se acepta un precio de 19990.55.
+--      (Los montos del pedido los revisa T2.)
+CREATE FUNCTION fn_monto_en_moneda() RETURNS trigger AS $$
+DECLARE v_tienda BIGINT; v_dec SMALLINT; v_montos NUMERIC[];
+BEGIN
+    CASE TG_TABLE_NAME
+    WHEN 'precios' THEN
+        SELECT p.id_tienda INTO v_tienda FROM variantes v JOIN productos p USING (id_producto)
+         WHERE v.id_variante = NEW.id_variante;
+        v_montos := ARRAY[NEW.monto, NEW.monto_comparacion];
+    WHEN 'ofertas' THEN
+        v_tienda := NEW.id_tienda;
+        v_montos := CASE WHEN NEW.tipo_descuento = 2 THEN ARRAY[NEW.valor] ELSE ARRAY[]::NUMERIC[] END;
+    ELSE  -- tarifas_envio y tarifas_internacionales
+        v_tienda := NEW.id_tienda;
+        v_montos := ARRAY[NEW.costo, NEW.envio_gratis_desde];
+    END CASE;
+    v_dec := fn_decimales_tienda(v_tienda);
+    IF v_dec IS NOT NULL AND EXISTS (SELECT 1 FROM unnest(v_montos) m WHERE m IS NOT NULL AND m <> round(m, v_dec)) THEN
+        RAISE EXCEPTION 'En la moneda de la tienda (%) los montos van con % decimales',
+            (fn_pais_de_tienda(v_tienda)).id_moneda, v_dec;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER tg_precios_monto       BEFORE INSERT ON precios
+    FOR EACH ROW EXECUTE FUNCTION fn_monto_en_moneda();
+CREATE TRIGGER tg_ofertas_monto       BEFORE INSERT OR UPDATE ON ofertas
+    FOR EACH ROW EXECUTE FUNCTION fn_monto_en_moneda();
+CREATE TRIGGER tg_tarifas_envio_monto BEFORE INSERT OR UPDATE ON tarifas_envio
+    FOR EACH ROW EXECUTE FUNCTION fn_monto_en_moneda();
+CREATE TRIGGER tg_tarifas_int_monto   BEFORE INSERT OR UPDATE ON tarifas_internacionales
+    FOR EACH ROW EXECUTE FUNCTION fn_monto_en_moneda();
 
 COMMIT;

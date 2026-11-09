@@ -117,12 +117,15 @@ public CarritoResponse miCarrito(@AuthenticationPrincipal UsuarioAutenticado yo)
    - **3. Tiendas** y **4. Tiendas: casos que deben fallar**: módulo de tiendas.
 3. Los tokens y los ids se guardan solos en las variables de la colección.
 
-> El registro de clientes de la carpeta 1 usa la tienda `zapatillas-carlos`. Si la base está vacía, ejecuta antes la carpeta 3 (que crea una tienda) o crea esa tienda con:
+> La carpeta 1 crea sola la tienda `zapatillas-carlos` (petición **Crear tienda Zapatillas Carlos**), que usa el registro de clientes. Si ya existía, responde 409 y la prueba igual pasa.
 >
-> ```sql
-> INSERT INTO tiendas (id_propietario, nombre, subdominio, correo_contacto)
-> VALUES (1, 'Zapatillas Carlos', 'zapatillas-carlos', 'ventas@zapatillas.pe');
+> Desde la terminal, sin instalar Postman (con el backend corriendo):
+>
+> ```bash
+> npx newman run postman/Vendely_API.postman_collection.json
 > ```
+>
+> La primera ejecución debe hacerse con la base recién creada (`docker compose down -v` y `docker compose up -d db`): la carpeta 1 registra a Carlos con un correo fijo.
 
 ## Tiendas
 
