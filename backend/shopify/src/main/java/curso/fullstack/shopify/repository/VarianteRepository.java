@@ -1,6 +1,7 @@
 package curso.fullstack.shopify.repository;
 
 import curso.fullstack.shopify.entity.Variante;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -26,4 +27,7 @@ public interface VarianteRepository extends JpaRepository<Variante, Long> {
              GROUP BY p.id_tienda, p.nombre, p.estado
             """, nativeQuery = true)
     Optional<Info> buscarInfo(@Param("idVariante") Long idVariante);
+
+    // Issue #10: variantes de un producto. El CRUD del panel gestiona productos SIMPLES (una sola).
+    List<Variante> findByIdProducto(Long idProducto);
 }
