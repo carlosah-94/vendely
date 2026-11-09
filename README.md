@@ -109,6 +109,18 @@ public CarritoResponse miCarrito(@AuthenticationPrincipal UsuarioAutenticado yo)
 }
 ```
 
+### Seguridad en el frontend
+
+El frontend guarda y usa el token así:
+
+1. **Inicio de sesión** (`pages/Login.jsx`): envía correo y contraseña a `POST /api/auth/login`. No se elige rol: el backend responde con el rol de la cuenta.
+2. **Un solo lugar para el token** (`services/api.js`): se guarda en `localStorage` con la clave `vendely_token`, a través de `tokenStorage`.
+3. **Envío automático**: un interceptor de axios agrega `Authorization: Bearer <token>` a cada petición; ninguna pantalla lo hace a mano.
+4. **Sesión vencida**: si el backend responde 401 (token vencido, alterado o de una contraseña ya cambiada), otro interceptor borra el token y la app vuelve al login.
+5. **Al recargar la página** (`context/AuthContext.jsx`): si hay un token guardado, se valida con `GET /api/auth/yo` antes de mostrar el panel.
+6. **Rutas protegidas** (`components/RutaProtegida.jsx`): sin sesión se va al login; con un rol que no corresponde, a "Acceso denegado". Es solo una ayuda visual: la protección real está en el backend (`SecurityConfig`), que rechaza con 401 o 403 aunque alguien salte la pantalla.
+7. **Contenido seguro**: React muestra los textos escapados (un `<script>` escrito en un nombre de producto se ve como texto y no se ejecuta). Por eso no se usa `dangerouslySetInnerHTML`.
+
 ### Usuarios de prueba
 
 Al crear la base, `db/init/03_usuarios_prueba.sql` deja una cuenta lista por cada rol:
