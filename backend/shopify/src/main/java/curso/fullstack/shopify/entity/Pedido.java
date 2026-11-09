@@ -3,10 +3,13 @@ package curso.fullstack.shopify.entity;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import lombok.Getter;
+import lombok.Setter;
 
 /** Tabla "pedidos": una venta. El trigger T2 pone número, moneda, envío, total e impuesto. */
 @Entity
 @Table(name = "pedidos")
+@Getter
 public class Pedido {
 
     @Id
@@ -14,19 +17,24 @@ public class Pedido {
     @Column(name = "id_pedido")
     private Long idPedido;
 
+    @Setter
     @Column(name = "id_tienda", nullable = false, updatable = false)
     private Long idTienda;
 
+    @Setter
     @Column(name = "id_login")
     private Long idLogin;
 
+    @Setter
     @Column(name = "id_direccion_envio", nullable = false)
     private Long idDireccionEnvio;
 
+    @Setter
     @Column(name = "correo_contacto", nullable = false, length = 150)
     private String correoContacto;
 
     /** Lo calcula Java: suma de precio × cantidad de las líneas. */
+    @Setter
     @Column(name = "subtotal", nullable = false, precision = 12, scale = 2)
     private BigDecimal subtotal;
 
@@ -55,24 +63,4 @@ public class Pedido {
 
     @Column(name = "fecha_creacion", insertable = false, updatable = false)
     private OffsetDateTime fechaCreacion;
-
-    public Long getIdPedido() { return idPedido; }
-    public Long getIdTienda() { return idTienda; }
-    public void setIdTienda(Long idTienda) { this.idTienda = idTienda; }
-    public Long getIdLogin() { return idLogin; }
-    public void setIdLogin(Long idLogin) { this.idLogin = idLogin; }
-    public Long getIdDireccionEnvio() { return idDireccionEnvio; }
-    public void setIdDireccionEnvio(Long idDireccionEnvio) { this.idDireccionEnvio = idDireccionEnvio; }
-    public String getCorreoContacto() { return correoContacto; }
-    public void setCorreoContacto(String correoContacto) { this.correoContacto = correoContacto; }
-    public BigDecimal getSubtotal() { return subtotal; }
-    public void setSubtotal(BigDecimal subtotal) { this.subtotal = subtotal; }
-    public Short getEstado() { return estado; }
-    public Integer getNumeroPedido() { return numeroPedido; }
-    public String getMoneda() { return moneda; }
-    public Short getIdImpuesto() { return idImpuesto; }
-    public BigDecimal getCostoEnvio() { return costoEnvio; }
-    public BigDecimal getMontoImpuestos() { return montoImpuestos; }
-    public BigDecimal getTotal() { return total; }
-    public OffsetDateTime getFechaCreacion() { return fechaCreacion; }
 }

@@ -7,6 +7,8 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.OffsetDateTime;
+import lombok.Getter;
+import lombok.Setter;
 
 /**
  * Tabla "propietarios": los datos comerciales del dueño de tiendas.
@@ -15,6 +17,7 @@ import java.time.OffsetDateTime;
  */
 @Entity
 @Table(name = "propietarios")
+@Getter
 public class Propietario {
 
     @Id
@@ -22,6 +25,7 @@ public class Propietario {
     @Column(name = "id_propietario")
     private Long idPropietario;
 
+    @Setter
     @Column(name = "id_login", nullable = false, unique = true)
     private Long idLogin;
 
@@ -29,15 +33,19 @@ public class Propietario {
     private Short idRol = RolUsuario.ADMIN_TIENDA.getId();
 
     /** id de tipos_documento: 1 DNI · 2 RUC · 3 CE (Perú) · 4 RUT (Chile)… El formato lo valida el trigger T13. */
+    @Setter
     @Column(name = "tipo_documento", nullable = false)
     private Short tipoDocumento;
 
+    @Setter
     @Column(name = "numero_documento", nullable = false, length = 20)
     private String numeroDocumento;
 
+    @Setter
     @Column(name = "razon_social", length = 150)
     private String razonSocial;
 
+    @Setter
     @Column(name = "telefono_comercial", length = 16)
     private String telefonoComercial;
 
@@ -49,19 +57,4 @@ public class Propietario {
 
     @Column(name = "fecha_modificacion", insertable = false, updatable = false)
     private OffsetDateTime fechaModificacion;
-
-    public Long getIdPropietario() { return idPropietario; }
-    public Long getIdLogin() { return idLogin; }
-    public void setIdLogin(Long idLogin) { this.idLogin = idLogin; }
-    public Short getIdRol() { return idRol; }
-    public Short getTipoDocumento() { return tipoDocumento; }
-    public void setTipoDocumento(Short tipoDocumento) { this.tipoDocumento = tipoDocumento; }
-    public String getNumeroDocumento() { return numeroDocumento; }
-    public void setNumeroDocumento(String numeroDocumento) { this.numeroDocumento = numeroDocumento; }
-    public String getRazonSocial() { return razonSocial; }
-    public void setRazonSocial(String razonSocial) { this.razonSocial = razonSocial; }
-    public String getTelefonoComercial() { return telefonoComercial; }
-    public void setTelefonoComercial(String telefonoComercial) { this.telefonoComercial = telefonoComercial; }
-    public Short getEstado() { return estado; }
-    public OffsetDateTime getFechaCreacion() { return fechaCreacion; }
 }

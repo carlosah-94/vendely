@@ -1,10 +1,12 @@
 package curso.fullstack.shopify.entity;
 
 import jakarta.persistence.*;
+import lombok.Getter;
 
 /** Tabla "inventario": stock de cada variante. */
 @Entity
 @Table(name = "inventario")
+@Getter
 public class Inventario {
 
     @Id
@@ -16,8 +18,4 @@ public class Inventario {
 
     @Column(name = "stock_minimo", nullable = false)
     private Integer stockMinimo;
-
-    public Long getIdVariante() { return idVariante; }
-    public Integer getCantidadDisponible() { return cantidadDisponible; }
-    public Integer getStockMinimo() { return stockMinimo; }
 }

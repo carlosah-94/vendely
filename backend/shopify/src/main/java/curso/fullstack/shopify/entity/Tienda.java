@@ -7,6 +7,8 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.OffsetDateTime;
+import lombok.Getter;
+import lombok.Setter;
 
 /**
  * Tabla "tiendas". Cada tienda pertenece a un propietario y se identifica
@@ -14,6 +16,7 @@ import java.time.OffsetDateTime;
  */
 @Entity
 @Table(name = "tiendas")
+@Getter
 public class Tienda {
 
     @Id
@@ -21,34 +24,43 @@ public class Tienda {
     @Column(name = "id_tienda")
     private Long idTienda;
 
+    @Setter
     @Column(name = "id_propietario", nullable = false)
     private Long idPropietario;
 
     /** País donde vende (ISO 3166-1: PE, CL…). Define su moneda e impuesto. No cambia después de crear la tienda (T8). */
+    @Setter
     @Column(name = "id_pais", nullable = false, length = 2, columnDefinition = "bpchar(2)", updatable = false)
     private String idPais = "PE";
 
+    @Setter
     @Column(name = "nombre", nullable = false, length = 150)
     private String nombre;
 
     /** Solo minúsculas, números y guiones (CHECK ck_tiendas_subdominio). No se cambia después de crear la tienda. */
+    @Setter
     @Column(name = "subdominio", nullable = false, unique = true, length = 63, updatable = false)
     private String subdominio;
 
+    @Setter
     @Column(name = "descripcion", columnDefinition = "text")
     private String descripcion;
 
+    @Setter
     @Column(name = "correo_contacto", nullable = false, length = 150)
     private String correoContacto;
 
+    @Setter
     @Column(name = "logo_url", length = 500)
     private String logoUrl;
 
     /** Color de la marca en formato #RRGGBB */
+    @Setter
     @Column(name = "color_principal", length = 7)
     private String colorPrincipal;
 
     /** true = se puede comprar sin crear cuenta */
+    @Setter
     @Column(name = "permite_invitados", nullable = false)
     private Boolean permiteInvitados = true;
 
@@ -57,6 +69,7 @@ public class Tienda {
     private Integer ultimoNumeroPedido;
 
     /** 1 activa · 0 suspendida */
+    @Setter
     @Column(name = "estado", nullable = false)
     private Short estado = 1;
 
@@ -69,29 +82,4 @@ public class Tienda {
     public boolean estaActiva() {
         return estado != null && estado == 1;
     }
-
-    public Long getIdTienda() { return idTienda; }
-    public Long getIdPropietario() { return idPropietario; }
-    public void setIdPropietario(Long idPropietario) { this.idPropietario = idPropietario; }
-    public String getIdPais() { return idPais; }
-    public void setIdPais(String idPais) { this.idPais = idPais; }
-    public String getNombre() { return nombre; }
-    public void setNombre(String nombre) { this.nombre = nombre; }
-    public String getSubdominio() { return subdominio; }
-    public void setSubdominio(String subdominio) { this.subdominio = subdominio; }
-    public String getDescripcion() { return descripcion; }
-    public void setDescripcion(String descripcion) { this.descripcion = descripcion; }
-    public String getCorreoContacto() { return correoContacto; }
-    public void setCorreoContacto(String correoContacto) { this.correoContacto = correoContacto; }
-    public String getLogoUrl() { return logoUrl; }
-    public void setLogoUrl(String logoUrl) { this.logoUrl = logoUrl; }
-    public String getColorPrincipal() { return colorPrincipal; }
-    public void setColorPrincipal(String colorPrincipal) { this.colorPrincipal = colorPrincipal; }
-    public Boolean getPermiteInvitados() { return permiteInvitados; }
-    public void setPermiteInvitados(Boolean permiteInvitados) { this.permiteInvitados = permiteInvitados; }
-    public Integer getUltimoNumeroPedido() { return ultimoNumeroPedido; }
-    public Short getEstado() { return estado; }
-    public void setEstado(Short estado) { this.estado = estado; }
-    public OffsetDateTime getFechaCreacion() { return fechaCreacion; }
-    public OffsetDateTime getFechaModificacion() { return fechaModificacion; }
 }

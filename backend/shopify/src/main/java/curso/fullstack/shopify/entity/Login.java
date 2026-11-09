@@ -7,6 +7,8 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.OffsetDateTime;
+import lombok.Getter;
+import lombok.Setter;
 
 /**
  * Tabla "login": una sola tabla de cuentas para los tres roles.
@@ -15,6 +17,7 @@ import java.time.OffsetDateTime;
  */
 @Entity
 @Table(name = "login")
+@Getter
 public class Login {
 
     @Id
@@ -25,40 +28,51 @@ public class Login {
     @Column(name = "id_rol", nullable = false)
     private Short idRol;
 
+    @Setter
     @Column(name = "id_tienda")
     private Long idTienda;
 
+    @Setter
     @Column(name = "usuario", nullable = false, length = 50)
     private String usuario;
 
+    @Setter
     @Column(name = "correo", nullable = false, length = 150)
     private String correo;
 
     /** Solo el hash BCrypt. La contraseña real nunca se guarda. */
+    @Setter
     @Column(name = "contrasena_hash", nullable = false, length = 255)
     private String contrasenaHash;
 
+    @Setter
     @Column(name = "nombres", nullable = false, length = 80)
     private String nombres;
 
+    @Setter
     @Column(name = "primer_apellido", nullable = false, length = 80)
     private String primerApellido;
 
+    @Setter
     @Column(name = "segundo_apellido", length = 80)
     private String segundoApellido;
 
     /** Formato internacional E.164: +51987654321 (CHECK ck_login_telefono). */
+    @Setter
     @Column(name = "telefono", length = 16)
     private String telefono;
 
+    @Setter
     @Column(name = "acepta_marketing", nullable = false)
     private Boolean aceptaMarketing = false;
 
     /** 1 activo · 0 inactivo */
+    @Setter
     @Column(name = "estado", nullable = false)
     private Short estado = 1;
 
     /** Si cambia, los tokens emitidos antes dejan de servir. */
+    @Setter
     @Column(name = "contrasena_cambiada_en")
     private OffsetDateTime contrasenaCambiadaEn;
 
@@ -80,31 +94,4 @@ public class Login {
     public boolean estaActivo() {
         return estado != null && estado == 1;
     }
-
-    public Long getIdLogin() { return idLogin; }
-    public Short getIdRol() { return idRol; }
-    public Long getIdTienda() { return idTienda; }
-    public void setIdTienda(Long idTienda) { this.idTienda = idTienda; }
-    public String getUsuario() { return usuario; }
-    public void setUsuario(String usuario) { this.usuario = usuario; }
-    public String getCorreo() { return correo; }
-    public void setCorreo(String correo) { this.correo = correo; }
-    public String getContrasenaHash() { return contrasenaHash; }
-    public void setContrasenaHash(String contrasenaHash) { this.contrasenaHash = contrasenaHash; }
-    public String getNombres() { return nombres; }
-    public void setNombres(String nombres) { this.nombres = nombres; }
-    public String getPrimerApellido() { return primerApellido; }
-    public void setPrimerApellido(String primerApellido) { this.primerApellido = primerApellido; }
-    public String getSegundoApellido() { return segundoApellido; }
-    public void setSegundoApellido(String segundoApellido) { this.segundoApellido = segundoApellido; }
-    public String getTelefono() { return telefono; }
-    public void setTelefono(String telefono) { this.telefono = telefono; }
-    public Boolean getAceptaMarketing() { return aceptaMarketing; }
-    public void setAceptaMarketing(Boolean aceptaMarketing) { this.aceptaMarketing = aceptaMarketing; }
-    public Short getEstado() { return estado; }
-    public void setEstado(Short estado) { this.estado = estado; }
-    public OffsetDateTime getContrasenaCambiadaEn() { return contrasenaCambiadaEn; }
-    public void setContrasenaCambiadaEn(OffsetDateTime contrasenaCambiadaEn) { this.contrasenaCambiadaEn = contrasenaCambiadaEn; }
-    public OffsetDateTime getFechaCreacion() { return fechaCreacion; }
-    public OffsetDateTime getFechaModificacion() { return fechaModificacion; }
 }
