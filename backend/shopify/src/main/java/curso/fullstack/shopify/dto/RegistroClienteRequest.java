@@ -23,9 +23,12 @@ public record RegistroClienteRequest(
         String contrasena,
 
         @NotBlank @Size(max = 80) String nombres,
-        @NotBlank @Size(max = 80) String apellidoPat,
-        @Size(max = 80) String apellidoMat,
-        @Size(max = 20) String telefono,
+        @NotBlank @Size(max = 80) String primerApellido,
+        @Size(max = 80) String segundoApellido,
+
+        @Pattern(regexp = "^\\+[1-9][0-9]{6,14}$",
+                 message = "El teléfono debe tener formato internacional, por ejemplo +51987654321")
+        String telefono,
 
         Boolean aceptaMarketing
 ) {}

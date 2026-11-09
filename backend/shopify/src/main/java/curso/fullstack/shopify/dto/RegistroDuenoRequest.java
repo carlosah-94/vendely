@@ -1,7 +1,6 @@
 package curso.fullstack.shopify.dto;
 
 import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -23,14 +22,17 @@ public record RegistroDuenoRequest(
         String contrasena,
 
         @NotBlank @Size(max = 80) String nombres,
-        @NotBlank @Size(max = 80) String apellidoPat,
-        @Size(max = 80) String apellidoMat,
-        @Size(max = 20) String telefono,
+        @NotBlank @Size(max = 80) String primerApellido,
+        @Size(max = 80) String segundoApellido,
 
-        @NotNull @Min(1) @Max(3)
-        Short tipoDocumento,          // 1 DNI · 2 RUC · 3 carné de extranjería
+        @Pattern(regexp = "^\\+[1-9][0-9]{6,14}$",
+                 message = "El teléfono debe tener formato internacional, por ejemplo +51987654321")
+        String telefono,
 
-        @NotBlank @Size(max = 12)
+        @NotNull @Min(1)
+        Short tipoDocumento,          // id de tipos_documento: 1 DNI · 2 RUC · 3 CE (Perú) · 4 RUT (Chile)…
+
+        @NotBlank @Size(max = 20)
         String numeroDocumento,
 
         @Size(max = 150) String razonSocial
