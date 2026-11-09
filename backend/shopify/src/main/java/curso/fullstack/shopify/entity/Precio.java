@@ -3,10 +3,12 @@ package curso.fullstack.shopify.entity;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import lombok.Getter;
 
 /** Tabla "precios": historial de precios de cada variante (incluyen el impuesto). */
 @Entity
 @Table(name = "precios")
+@Getter
 public class Precio {
 
     @Id
@@ -26,10 +28,4 @@ public class Precio {
     /** null = vigente */
     @Column(name = "fecha_fin")
     private OffsetDateTime fechaFin;
-
-    public Long getIdPrecio() { return idPrecio; }
-    public Long getIdVariante() { return idVariante; }
-    public BigDecimal getMonto() { return monto; }
-    public OffsetDateTime getFechaInicio() { return fechaInicio; }
-    public OffsetDateTime getFechaFin() { return fechaFin; }
 }

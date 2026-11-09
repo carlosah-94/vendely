@@ -1,10 +1,12 @@
 package curso.fullstack.shopify.entity;
 
 import jakarta.persistence.*;
+import lombok.Getter;
 
 /** Tabla "direcciones" (solo lo necesario para validar el envío). */
 @Entity
 @Table(name = "direcciones")
+@Getter
 public class Direccion {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -17,8 +19,4 @@ public class Direccion {
     /** 1 activa · 0 archivada */
     @Column(name = "estado", nullable = false)
     private Short estado;
-
-    public Long getIdDireccion() { return idDireccion; }
-    public Long getIdLogin() { return idLogin; }
-    public Short getEstado() { return estado; }
 }
