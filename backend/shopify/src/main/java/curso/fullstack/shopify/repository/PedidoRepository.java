@@ -16,6 +16,9 @@ public interface PedidoRepository extends JpaRepository<Pedido, Long> {
     // "Mis pedidos" del cliente: filtrar por tienda Y por cliente evita que vea pedidos ajenos.
     List<Pedido> findByIdTiendaAndIdLoginOrderByFechaCreacionDesc(Long idTienda, Long idLogin);
 
+    // Issue #9: un cliente con ventas no se elimina (la FK pedidos → login lo impide); se avisa con 409.
+    boolean existsByIdLogin(Long idLogin);
+
     /**
      * El pedido solo si es de esa tienda. Buscar por id + tienda (y no solo por id) es lo que
      * impide ver o borrar una venta de otra tienda: si es ajena, vuelve vacío → 404.
