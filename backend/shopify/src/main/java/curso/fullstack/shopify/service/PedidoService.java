@@ -2,6 +2,7 @@ package curso.fullstack.shopify.service;
 
 import curso.fullstack.shopify.dto.LineaVentaRequest;
 import curso.fullstack.shopify.dto.LineaVentaResponse;
+import curso.fullstack.shopify.dto.PedidoResumenResponse;
 import curso.fullstack.shopify.dto.VentaRequest;
 import curso.fullstack.shopify.dto.VentaResponse;
 import curso.fullstack.shopify.entity.*;
@@ -13,6 +14,8 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import java.math.BigDecimal;
 import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -129,6 +132,124 @@ public class PedidoService {
         }
         detallePedidoRepository.saveAll(detalles);
 
+        return VentaResponse.desde(p, lineas);
+    }
+
+    // =====================================================================
+    // Issue #8 · Consultar y eliminar ventas (panel del dueño)
+    // =====================================================================
+
+    /**
+     * Lista de ventas de una tienda (RF3.2): número, fecha, cliente y total.
+     * readOnly = true porque solo lee: Hibernate no revisa cambios y la consulta es más liviana.
+     */
+    @Transactional(readOnly = true)
+    public List<PedidoResumenResponse> listar(UsuarioAutenticado yo, Long idTienda) {
+        // Primero se comprueba que la tienda sea del dueño: 404 si no existe, 403 si es de otro.
+        verificadorTienda.delDueno(yo, idTienda);
+        return resumenes(pedidoRepository.findByIdTiendaOrderByFechaCreacionDesc(idTienda));
+    }
+
+    /** Detalle de una venta con sus productos, cantidades y precios (RF3.2). */
+    @Transactional(readOnly = true)
+    public VentaResponse detalle(UsuarioAutenticado yo, Long idTienda, Long idPedido) {
+        verificadorTienda.delDueno(yo, idTienda);
+        // buscarEnTienda: si el pedido es de otra tienda responde 404 (no revela que existe).
+        return conLineas(buscarEnTienda(idPedido, idTienda));
+    }
+
+    /**
+     * Elimina una venta y devuelve su stock (RF3.4).
+     * Todo va en UNA transacción: si algo falla a mitad (por ejemplo, al borrar), el stock
+     * devuelto también se deshace y la base queda como estaba. Nunca "medio eliminada".
+     */
+    @Transactional
+    public void eliminar(UsuarioAutenticado yo, Long idTienda, Long idPedido) {
+        verificadorTienda.delDueno(yo, idTienda);
+        Pedido p = buscarEnTienda(idPedido, idTienda);
+
+        // Con un pago aprobado el dinero ya se cobró: borrar la venta descuadraría la caja.
+        // Se responde 409 (conflicto con el estado actual) con un mensaje claro, sin tocar nada.
+        if (pedidoRepository.tienePagoAprobado(idPedido)) {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    "El pedido #" + p.getNumeroPedido() + " ya tiene un pago aprobado: no se puede eliminar");
+        }
+
+        // 1. El stock vuelve ANTES de borrar: después, las líneas ya no existirían (cascade).
+        inventarioRepository.devolverStock(idPedido);
+        // 2. La FK de pagos no tiene cascade: los pagos pendientes o rechazados se quitan antes.
+        pedidoRepository.borrarPagosNoAprobados(idPedido);
+        // 3. Se borra el pedido; sus líneas (detalle_pedido) las borra la base con ON DELETE CASCADE.
+        pedidoRepository.delete(p);
+        // flush envía el DELETE ya, dentro de la transacción: si la base lo rechaza, el error sale
+        // aquí y @Transactional deshace también el paso 1 (el stock no queda devuelto de más).
+        pedidoRepository.flush();
+    }
+
+    // =====================================================================
+    // Issue #8 · El cliente solo ve SUS pedidos
+    // =====================================================================
+
+    /**
+     * "Mis pedidos". El idLogin y la tienda salen del TOKEN (yo), nunca de la URL ni del JSON:
+     * así un cliente no puede pedir los pedidos de otro cambiando un número.
+     */
+    @Transactional(readOnly = true)
+    public List<PedidoResumenResponse> misPedidos(UsuarioAutenticado yo) {
+        return resumenes(pedidoRepository.findByIdTiendaAndIdLoginOrderByFechaCreacionDesc(yo.idTienda(), yo.idLogin()));
+    }
+
+    /** Detalle de uno de sus pedidos; si es de otro cliente, 404 (no se revela que existe). */
+    @Transactional(readOnly = true)
+    public VentaResponse miPedido(UsuarioAutenticado yo, Long idPedido) {
+        Pedido p = buscarEnTienda(idPedido, yo.idTienda());
+        if (!yo.idLogin().equals(p.getIdLogin())) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "El pedido no existe");
+        }
+        return conLineas(p);
+    }
+
+    // =====================================================================
+    // Apoyo
+    // =====================================================================
+
+    /** Busca el pedido DENTRO de la tienda: si es de otra, 404. Es el candado multi-tienda. */
+    private Pedido buscarEnTienda(Long idPedido, Long idTienda) {
+        return pedidoRepository.findByIdPedidoAndIdTienda(idPedido, idTienda)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El pedido no existe"));
+    }
+
+    /**
+     * Arma la lista con el nombre del cliente. Los clientes se traen todos en UNA consulta
+     * (findAllById) en vez de uno por pedido: con 100 pedidos serían 100 consultas (problema N+1).
+     */
+    private List<PedidoResumenResponse> resumenes(List<Pedido> pedidos) {
+        Set<Long> ids = pedidos.stream().map(Pedido::getIdLogin).filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<Long, Login> clientes = loginRepository.findAllById(ids).stream()
+                .collect(Collectors.toMap(Login::getIdLogin, Function.identity()));
+        return pedidos.stream().map(p -> {
+            Login c = clientes.get(p.getIdLogin());
+            // id_login NULL = compra como invitado: se muestra su correo de contacto.
+            String nombre = (c == null) ? "Invitado (" + p.getCorreoContacto() + ")"
+                                        : c.getNombres() + " " + c.getPrimerApellido();
+            return PedidoResumenResponse.desde(p, nombre);
+        }).toList();
+    }
+
+    /**
+     * Pedido + sus líneas con el precio que SE COBRÓ: se lee por id_precio (el guardado en la
+     * venta), no el precio actual del producto, que pudo cambiar después.
+     */
+    private VentaResponse conLineas(Pedido p) {
+        List<DetallePedido> detalles = detallePedidoRepository.findByIdPedido(p.getIdPedido());
+        Map<Long, Precio> precios = precioRepository.findAllById(
+                        detalles.stream().map(DetallePedido::getIdPrecio).toList()).stream()
+                .collect(Collectors.toMap(Precio::getIdPrecio, Function.identity()));
+        List<LineaVentaResponse> lineas = detalles.stream().map(d -> {
+            BigDecimal precio = precios.get(d.getIdPrecio()).getMonto();
+            return new LineaVentaResponse(d.getIdVariante(), d.getNombreProducto(), d.getNombreVariante(),
+                    d.getCantidad(), precio, precio.multiply(BigDecimal.valueOf(d.getCantidad())));
+        }).toList();
         return VentaResponse.desde(p, lineas);
     }
 }
