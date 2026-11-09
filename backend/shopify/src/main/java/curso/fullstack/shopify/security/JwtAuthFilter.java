@@ -10,6 +10,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.List;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -21,6 +22,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * Si el token es válido, deja anotado quién es el usuario para el resto de la petición.
  * Si no hay token o no sirve, no anota a nadie: las rutas protegidas responderán 401.
  */
+@Slf4j
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
 
@@ -49,6 +51,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                         .ifPresent(l -> autenticar(l, request));
             } catch (JwtException | IllegalArgumentException e) {
                 // Token vencido, alterado o mal formado: se sigue sin usuario.
+                // Se registra el tipo de problema (ExpiredJwtException, SignatureException...), nunca el token.
+                log.warn("Token rechazado en {} {}: {}", request.getMethod(), request.getRequestURI(),
+                        e.getClass().getSimpleName());
             }
         }
         chain.doFilter(request, response);
