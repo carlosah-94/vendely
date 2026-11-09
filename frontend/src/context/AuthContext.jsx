@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { api, tokenStorage } from '../services/api';
+import { api, EVENTO_SESION_EXPIRADA, tokenStorage } from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -9,18 +9,26 @@ const AuthContext = createContext(null);
  */
 export function AuthProvider({ children }) {
   const [usuario, setUsuario] = useState(null);
-  const [cargando, setCargando] = useState(true);
+  // Solo hay algo que cargar si quedó un token guardado de una visita anterior.
+  const [cargando, setCargando] = useState(() => tokenStorage.get() !== null);
 
   // Al abrir la app: si quedó un token guardado, se pregunta al backend de quién es.
   useEffect(() => {
     if (!tokenStorage.get()) {
-      setCargando(false);
       return;
     }
     api.get('/auth/yo')
       .then((respuesta) => setUsuario(respuesta.data))
       .catch(() => tokenStorage.clear())
       .finally(() => setCargando(false));
+  }, []);
+
+
+  // Si el backend rechaza el token en cualquier pantalla, se cierra la sesión.
+  useEffect(() => {
+    const alExpirar = () => setUsuario(null);
+    window.addEventListener(EVENTO_SESION_EXPIRADA, alExpirar);
+    return () => window.removeEventListener(EVENTO_SESION_EXPIRADA, alExpirar);
   }, []);
 
   /** Sin subdominio inicia sesión en el panel; con subdominio, como cliente de esa tienda. */
