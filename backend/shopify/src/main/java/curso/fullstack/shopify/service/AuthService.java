@@ -20,6 +20,7 @@ import curso.fullstack.shopify.security.UsuarioAutenticado;
 import curso.fullstack.shopify.security.UsuarioDetailsService;
 import java.time.OffsetDateTime;
 import java.util.Locale;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.DisabledException;
@@ -30,6 +31,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 public class AuthService {
 
@@ -86,6 +88,7 @@ public class AuthService {
         p.setRazonSocial(vacioANull(r.razonSocial()));
         propietarioRepository.save(p);
 
+        log.info("Cuenta de dueño creada: idLogin={}, idPropietario={}", login.getIdLogin(), p.getIdPropietario());
         return respuesta(login);
     }
 
@@ -105,6 +108,7 @@ public class AuthService {
                 r.nombres(), r.primerApellido(), r.segundoApellido(), r.telefono(),
                 Boolean.TRUE.equals(r.aceptaMarketing()));
         loginRepository.saveAndFlush(login);
+        log.info("Cliente registrado: idLogin={}, tienda={}", login.getIdLogin(), tienda.getIdTienda());
         return respuesta(login);
     }
 
@@ -127,10 +131,14 @@ public class AuthService {
                     new UsernamePasswordAuthenticationToken(
                             UsuarioDetailsService.clave(correo, idTienda), r.contrasena()));
             Login login = ((CuentaUserDetails) autenticacion.getPrincipal()).getLogin();
+            log.info("Inicio de sesión: idLogin={}, rol={}", login.getIdLogin(), login.getRol());
             return respuesta(login);
         } catch (DisabledException e) {
+            log.warn("Inicio de sesión rechazado, cuenta desactivada: {}", ocultar(correo));
             throw new ApiException(HttpStatus.FORBIDDEN, "La cuenta está desactivada");
         } catch (AuthenticationException e) {
+            // Varios fallos seguidos con el mismo correo pueden indicar que alguien adivina contraseñas
+            log.warn("Inicio de sesión fallido: {} ({})", ocultar(correo), idTienda == null ? "panel" : "tienda " + idTienda);
             throw new ApiException(HttpStatus.UNAUTHORIZED, CREDENCIALES_INVALIDAS);
         }
     }
@@ -150,11 +158,13 @@ public class AuthService {
     public AuthResponse cambiarContrasena(UsuarioAutenticado yo, CambioContrasenaRequest r) {
         Login login = buscar(yo.idLogin());
         if (!passwordEncoder.matches(r.contrasenaActual(), login.getContrasenaHash())) {
+            log.warn("Cambio de contraseña rechazado, la actual no coincide: idLogin={}", login.getIdLogin());
             throw new ApiException(HttpStatus.BAD_REQUEST, "La contraseña actual no es correcta");
         }
         login.setContrasenaHash(passwordEncoder.encode(r.contrasenaNueva()));
         login.setContrasenaCambiadaEn(OffsetDateTime.now());
         loginRepository.saveAndFlush(login);
+        log.info("Contraseña cambiada: idLogin={}", login.getIdLogin());
         return respuesta(login);
     }
 
@@ -203,6 +213,18 @@ public class AuthService {
 
     private static String vacioANull(String s) {
         return (s == null || s.isBlank()) ? null : s.trim();
+    }
+
+    /**
+     * Oculta el correo para el log: carlos@mail.pe -> c***@mail.pe.
+     * Sirve para reconocer intentos repetidos sin dejar escrito el correo completo.
+     */
+    private static String ocultar(String correo) {
+        int arroba = correo.indexOf('@');
+        if (arroba <= 0) {
+            return "***";
+        }
+        return correo.charAt(0) + "***" + correo.substring(arroba);
     }
 
     /**

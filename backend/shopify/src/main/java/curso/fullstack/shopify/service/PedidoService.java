@@ -16,10 +16,12 @@ import java.math.BigDecimal;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 public class PedidoService {
 
@@ -97,6 +99,8 @@ public class PedidoService {
                             info.getNombreProducto() + " no tiene un precio vigente"));
 
             if (inventarioRepository.descontar(idVariante, cantidad) == 0) {
+                log.warn("Venta rechazada por stock insuficiente: tienda={}, variante={}, cantidad pedida={}",
+                        idTienda, idVariante, cantidad);
                 throw new ApiException(HttpStatus.CONFLICT, "Stock insuficiente de "
                         + info.getNombreProducto() + " (" + info.getNombreVariante() + ")");
             }
@@ -132,6 +136,8 @@ public class PedidoService {
         }
         detallePedidoRepository.saveAll(detalles);
 
+        log.info("Venta registrada: tienda={}, pedido #{} (id={}), {} producto(s), total {} {}",
+                idTienda, p.getNumeroPedido(), p.getIdPedido(), detalles.size(), p.getTotal(), p.getMoneda());
         return VentaResponse.desde(p, lineas);
     }
 
@@ -184,6 +190,8 @@ public class PedidoService {
         // flush envía el DELETE ya, dentro de la transacción: si la base lo rechaza, el error sale
         // aquí y @Transactional deshace también el paso 1 (el stock no queda devuelto de más).
         pedidoRepository.flush();
+        log.info("Venta eliminada y stock devuelto: tienda={}, pedido #{} (id={})",
+                idTienda, p.getNumeroPedido(), idPedido);
     }
 
     // =====================================================================

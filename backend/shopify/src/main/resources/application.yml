@@ -10,7 +10,23 @@ spring:
     hibernate:
       ddl-auto: validate      # las tablas las crea db/init; Hibernate solo verifica que coincidan
     open-in-view: false
-    show-sql: true
+    # SQL en consola: apagado por defecto (llena el log). Para depurar: JPA_SHOW_SQL=true
+    show-sql: ${JPA_SHOW_SQL:false}
+  mvc:
+    # Spring (con devtools) registra cada error con los valores recibidos, incluso contraseñas.
+    # Se apaga: GlobalExceptionHandler deja su propia línea, sin datos sensibles.
+    log-resolved-exception: false
+
+logging:
+  file:
+    name: logs/vendely.log          # además de la consola, los logs quedan en este archivo
+  logback:
+    rollingpolicy:
+      max-file-size: 10MB           # al llegar a 10 MB empieza un archivo nuevo
+      max-history: 7                # se guardan los últimos 7 días
+  level:
+    root: INFO
+    curso.fullstack.shopify: INFO   # DEBUG para ver más detalle del código de Vendely
 
 app:
   jwt:

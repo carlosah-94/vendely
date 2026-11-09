@@ -14,10 +14,12 @@ import jakarta.persistence.EntityManager;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 public class TiendaService {
 
@@ -57,6 +59,8 @@ public class TiendaService {
         copiarDatos(t, r.nombre(), r.descripcion(), r.correoContacto(), r.logoUrl(), r.colorPrincipal(), r.permiteInvitados());
         tiendaRepository.saveAndFlush(t);
         entityManager.refresh(t);   // trae los valores que pone la base (fecha de creación)
+        log.info("Tienda creada: idTienda={}, subdominio={}, idPropietario={}",
+                t.getIdTienda(), t.getSubdominio(), t.getIdPropietario());
         return TiendaResponse.desde(t);
     }
 
@@ -77,6 +81,7 @@ public class TiendaService {
         Tienda t = verificadorTienda.delDueno(yo, idTienda);
         copiarDatos(t, r.nombre(), r.descripcion(), r.correoContacto(), r.logoUrl(), r.colorPrincipal(), r.permiteInvitados());
         tiendaRepository.saveAndFlush(t);
+        log.info("Tienda actualizada: idTienda={}", idTienda);
         return TiendaResponse.desde(t);
     }
 
