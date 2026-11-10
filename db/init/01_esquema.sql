@@ -928,6 +928,21 @@ CREATE TRIGGER tg_pedidos_preparar
     BEFORE INSERT OR UPDATE ON pedidos
     FOR EACH ROW EXECUTE FUNCTION fn_preparar_pedido();
 
+-- Una tienda con permite_invitados = FALSE no acepta pedidos sin cuenta (id_login NULL).
+CREATE FUNCTION fn_pedido_invitado() RETURNS trigger AS $$
+BEGIN
+    IF NEW.id_login IS NULL
+       AND NOT (SELECT permite_invitados FROM tiendas WHERE id_tienda = NEW.id_tienda) THEN
+        RAISE EXCEPTION 'La tienda no acepta compras como invitado: el cliente debe iniciar sesión';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER tg_pedidos_invitado
+    BEFORE INSERT OR UPDATE OF id_login ON pedidos
+    FOR EACH ROW EXECUTE FUNCTION fn_pedido_invitado();
+
 -- T3. Un precio ya creado no se modifica (ni el monto ni el precio tachado):
 --     solo se cierra una vez con fecha_fin,
 --     y nunca antes de una venta que ya lo usó.

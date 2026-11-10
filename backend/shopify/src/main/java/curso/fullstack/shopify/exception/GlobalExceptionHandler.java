@@ -21,13 +21,16 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /**
- * Convierte cualquier error en una respuesta JSON clara (ApiError) y lo deja anotado en el log.
+ * Convierte cualquier error en una respuesta JSON clara (ApiError) y lo deja
+ * anotado en el log.
  * Nunca envía al frontend detalles internos (SQL, rutas de clases, etc.).
  *
  * Reglas del log:
  * - 4xx (error del usuario): una línea INFO con método, ruta, código y mensaje.
- * - 5xx (error del sistema): ERROR con el detalle completo para poder corregirlo.
- * - Nunca se registran los valores enviados (podrían ser contraseñas), solo los nombres de los campos.
+ * - 5xx (error del sistema): ERROR con el detalle completo para poder
+ * corregirlo.
+ * - Nunca se registran los valores enviados (podrían ser contraseñas), solo los
+ * nombres de los campos.
  */
 @Slf4j
 @RestControllerAdvice
@@ -54,7 +57,8 @@ public class GlobalExceptionHandler {
 
     // Falta un parámetro obligatorio de la URL, por ejemplo ?pagina=
     @ExceptionHandler(MissingServletRequestParameterException.class)
-    public ResponseEntity<ApiError> parametroFaltante(MissingServletRequestParameterException ex, HttpServletRequest req) {
+    public ResponseEntity<ApiError> parametroFaltante(MissingServletRequestParameterException ex,
+            HttpServletRequest req) {
         return respuesta(HttpStatus.BAD_REQUEST, "Falta el parámetro '" + ex.getParameterName() + "'", req, null);
     }
 
@@ -99,7 +103,27 @@ public class GlobalExceptionHandler {
         return respuesta(HttpStatus.METHOD_NOT_ALLOWED, "Método HTTP no permitido en esta ruta", req, null);
     }
 
-    // Cualquier otro error: es un fallo del sistema, se registra completo (con la traza) para corregirlo
+    /**
+     * Un trigger de la base rechazó la operación (RAISE EXCEPTION → código P0001).
+     * Su mensaje ya está escrito para personas, así que se devuelve como 409 en vez
+     * de 500.
+     */
+    @ExceptionHandler(org.springframework.dao.DataAccessException.class)
+    public ResponseEntity<ApiError> reglaDeTrigger(org.springframework.dao.DataAccessException ex,
+            HttpServletRequest req) {
+        for (Throwable c = ex; c != null; c = c.getCause()) {
+            if (c instanceof java.sql.SQLException s && "P0001".equals(s.getSQLState())) {
+                String mensaje = s.getMessage().replaceFirst("^ERROR: ", "").split("\n")[0];
+                log.warn("{} {} -> 409 regla de la base (trigger): {}", req.getMethod(), req.getRequestURI(), mensaje);
+                return cuerpo(HttpStatus.CONFLICT, mensaje, req, null);
+            }
+        }
+        log.error("{} {} -> 500 error de base de datos", req.getMethod(), req.getRequestURI(), ex);
+        return cuerpo(HttpStatus.INTERNAL_SERVER_ERROR, "Ocurrió un error inesperado", req, null);
+    }
+
+    // Cualquier otro error: es un fallo del sistema, se registra completo (con la
+    // traza) para corregirlo
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> inesperado(Exception ex, HttpServletRequest req) {
         log.error("{} {} -> 500 error no controlado", req.getMethod(), req.getRequestURI(), ex);
@@ -108,13 +132,13 @@ public class GlobalExceptionHandler {
 
     /** Deja una línea en el log y arma la respuesta. */
     private ResponseEntity<ApiError> respuesta(HttpStatus status, String mensaje,
-                                               HttpServletRequest req, Map<String, String> campos) {
+            HttpServletRequest req, Map<String, String> campos) {
         log.info("{} {} -> {} {}", req.getMethod(), req.getRequestURI(), status.value(), mensaje);
         return cuerpo(status, mensaje, req, campos);
     }
 
     private ResponseEntity<ApiError> cuerpo(HttpStatus status, String mensaje,
-                                            HttpServletRequest req, Map<String, String> campos) {
+            HttpServletRequest req, Map<String, String> campos) {
         ApiError error = new ApiError(OffsetDateTime.now(), status.value(), status.getReasonPhrase(),
                 mensaje, req.getRequestURI(), campos);
         return ResponseEntity.status(status).body(error);
