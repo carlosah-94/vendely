@@ -53,7 +53,9 @@ export default function LayoutPanel() {
         </div>
       </aside>
 
-      <main className="flex-1 p-8">
+      {/* min-w-0: sin esto, una tabla ancha estira toda la página hacia la derecha
+          en lugar de desplazarse dentro de su propio contenedor. */}
+      <main className="flex-1 min-w-0 p-8">
         <Outlet />
       </main>
     </div>

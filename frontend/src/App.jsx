@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import LayoutPanel from './components/LayoutPanel';
 import RutaProtegida from './components/RutaProtegida';
 import AccesoDenegado from './pages/AccesoDenegado';
+import Clientes from './pages/Clientes';
 import DetalleVenta from './pages/DetalleVenta';
 import EnConstruccion from './pages/EnConstruccion';
 import Inicio from './pages/Inicio';
@@ -22,7 +23,7 @@ export default function App() {
         <Route element={<LayoutPanel />}>
           <Route path="/panel/tiendas" element={<EnConstruccion titulo="Mis tiendas" />} />
           <Route path="/panel/productos" element={<EnConstruccion titulo="Productos" />} />
-          <Route path="/panel/clientes" element={<EnConstruccion titulo="Clientes" />} />
+          <Route path="/panel/clientes" element={<Clientes />} />
           <Route path="/panel/ventas" element={<Ventas />} />
           <Route path="/panel/ventas/nueva" element={<NuevaVenta />} />
           <Route path="/panel/ventas/:idPedido" element={<DetalleVenta />} />
