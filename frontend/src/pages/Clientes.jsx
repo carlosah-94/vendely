@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import FormularioCliente from '../components/FormularioCliente';
+import Mensaje from '../components/Mensaje';
 import SelectorTienda from '../components/SelectorTienda';
+import { useTiendaActual } from '../hooks/useTiendaActual';
 import { mensajeDeError } from '../services/api';
 import { eliminarCliente, listarClientes } from '../services/clientes';
 
@@ -8,74 +10,82 @@ import { eliminarCliente, listarClientes } from '../services/clientes';
  * Pantalla de clientes del panel del dueño (tarea #17).
  * Tabla con Editar y Eliminar, botón para crear, y mensajes de éxito y de error.
  * Los datos vienen del CRUD /api/panel/tiendas/{idTienda}/clientes (tarea #9).
+ *
+ * Usa las piezas comunes del panel (las mismas que Ventas): useTiendaActual para saber
+ * con qué tienda se trabaja, SelectorTienda para cambiarla y Mensaje para los avisos.
  */
 export default function Clientes() {
-  const [tienda, setTienda] = useState(null);
-  const [clientes, setClientes] = useState([]);
-  const [cargando, setCargando] = useState(false);
-  const [mensaje, setMensaje] = useState(null); // { tipo: 'exito' | 'error', texto }
+  const { tiendas, tienda, idTienda, cambiarTienda, cargando: cargandoTiendas, error: errorTiendas } = useTiendaActual();
+
+  // Se guarda de qué tienda son los clientes: si no coincide con la elegida, todavía se están cargando.
+  const [datos, setDatos] = useState({ idTienda: null, clientes: [], error: '' });
+  // Al sumar 1 se vuelve a pedir la lista (después de crear, editar o eliminar).
+  const [version, setVersion] = useState(0);
+  const [aviso, setAviso] = useState('');
+  const [errorAccion, setErrorAccion] = useState('');
   // null = formulario cerrado · 'nuevo' = crear · objeto = editar ese cliente
   const [formulario, setFormulario] = useState(null);
   // Cliente que se pidió eliminar y espera confirmación (null = ninguno)
   const [porEliminar, setPorEliminar] = useState(null);
 
-  const cargar = useCallback(async (t) => {
-    if (!t) {
-      setClientes([]);
-      return;
-    }
-    setCargando(true);
-    try {
-      setClientes(await listarClientes(t.idTienda));
-    } catch (e) {
-      setMensaje({ tipo: 'error', texto: mensajeDeError(e) });
-    } finally {
-      setCargando(false);
-    }
-  }, []);
-
-  // Al elegir una tienda (o al cargarse la guardada) se piden sus clientes en ese momento,
-  // en vez de con un useEffect que reaccione al cambio (así lo recomienda React).
-  function elegirTienda(t) {
-    setTienda(t);
-    cargar(t);
-  }
-
-  // El mensaje de éxito se oculta solo a los 4 segundos; el de error se queda hasta cerrarlo.
   useEffect(() => {
-    if (mensaje?.tipo !== 'exito') {
+    if (!idTienda) {
       return undefined;
     }
-    const t = setTimeout(() => setMensaje(null), 4000);
+    let vigente = true; // evita mostrar la respuesta de una tienda que ya no está elegida
+    listarClientes(idTienda)
+      .then((clientes) => {
+        if (vigente) setDatos({ idTienda, clientes, error: '' });
+      })
+      .catch((e) => {
+        if (vigente) setDatos({ idTienda, clientes: [], error: mensajeDeError(e) });
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [idTienda, version]);
+
+  const cargando = cargandoTiendas || (idTienda !== null && datos.idTienda !== idTienda);
+
+  // El aviso de éxito se oculta solo a los 4 segundos; los errores se quedan hasta cerrarlos.
+  useEffect(() => {
+    if (!aviso) {
+      return undefined;
+    }
+    const t = setTimeout(() => setAviso(''), 4000);
     return () => clearTimeout(t);
-  }, [mensaje]);
+  }, [aviso]);
 
   const cerrarFormulario = useCallback(() => setFormulario(null), []);
 
   function alGuardar(guardado, esNuevo) {
     setFormulario(null);
-    setMensaje({
-      tipo: 'exito',
-      texto: esNuevo
-        ? `Cliente guardado: ${guardado.nombres} ${guardado.primerApellido}`
-        : `Cambios guardados: ${guardado.nombres} ${guardado.primerApellido}`,
-    });
-    cargar(tienda);
+    setErrorAccion('');
+    setAviso(`${esNuevo ? 'Cliente guardado' : 'Cambios guardados'}: ${guardado.nombres} ${guardado.primerApellido}`);
+    setVersion((v) => v + 1);
   }
 
   // Eliminar no se puede deshacer: primero se pide confirmación en una ventana propia
   // (no window.confirm, que no sigue el diseño de la app).
   async function eliminar(cliente) {
     setPorEliminar(null);
+    setErrorAccion('');
     const nombre = `${cliente.nombres} ${cliente.primerApellido}`;
     try {
-      await eliminarCliente(tienda.idTienda, cliente.idLogin);
-      setMensaje({ tipo: 'exito', texto: `Cliente eliminado: ${nombre}` });
-      cargar(tienda);
+      await eliminarCliente(idTienda, cliente.idLogin);
+      setAviso(`Cliente eliminado: ${nombre}`);
+      setVersion((v) => v + 1);
     } catch (e) {
       // Por ejemplo, 409 "El cliente tiene ventas asociadas"
-      setMensaje({ tipo: 'error', texto: mensajeDeError(e) });
+      setErrorAccion(mensajeDeError(e));
     }
+  }
+
+  if (errorTiendas) {
+    return <Mensaje tipo="error" texto={errorTiendas} />;
+  }
+  if (!cargandoTiendas && tiendas.length === 0) {
+    return <Mensaje tipo="info" texto="Todavía no tienes tiendas. Crea una para gestionar sus clientes." />;
   }
 
   return (
@@ -83,7 +93,9 @@ export default function Clientes() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="space-y-1">
           <h1 className="text-2xl font-bold text-slate-800">Clientes</h1>
-          <SelectorTienda onCambio={elegirTienda} />
+          {tiendas.length > 0 && (
+            <SelectorTienda tiendas={tiendas} idTienda={idTienda} onCambiar={cambiarTienda} />
+          )}
         </div>
         {tienda && (
           <button
@@ -95,21 +107,9 @@ export default function Clientes() {
         )}
       </div>
 
-      {mensaje && (
-        <div
-          role={mensaje.tipo === 'error' ? 'alert' : 'status'}
-          className={`flex items-start justify-between gap-3 rounded-md border px-4 py-3 text-sm ${
-            mensaje.tipo === 'exito'
-              ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-              : 'border-red-200 bg-red-50 text-red-700'
-          }`}
-        >
-          <span>{mensaje.texto}</span>
-          <button onClick={() => setMensaje(null)} className="text-lg leading-none opacity-60 hover:opacity-100" aria-label="Cerrar mensaje">
-            ×
-          </button>
-        </div>
-      )}
+      {aviso && <Mensaje tipo="exito" texto={aviso} onCerrar={() => setAviso('')} />}
+      {errorAccion && <Mensaje tipo="error" texto={errorAccion} onCerrar={() => setErrorAccion('')} />}
+      {datos.error && <Mensaje tipo="error" texto={datos.error} />}
 
       {tienda && (
         <div className="overflow-x-auto rounded-xl bg-white shadow">
@@ -128,10 +128,10 @@ export default function Clientes() {
               {cargando && (
                 <tr><td colSpan={6} className="px-4 py-6 text-center text-slate-500">Cargando clientes...</td></tr>
               )}
-              {!cargando && clientes.length === 0 && (
+              {!cargando && datos.clientes.length === 0 && (
                 <tr><td colSpan={6} className="px-4 py-6 text-center text-slate-500">Esta tienda todavía no tiene clientes.</td></tr>
               )}
-              {!cargando && clientes.map((c) => (
+              {!cargando && datos.clientes.map((c) => (
                 <tr key={c.idLogin} className="hover:bg-slate-50">
                   <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-800">
                     {c.nombres} {c.primerApellido} {c.segundoApellido ?? ''}
