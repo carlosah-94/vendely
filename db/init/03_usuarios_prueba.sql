@@ -57,4 +57,18 @@ VALUES (9003, 3, 9001, 'cliente', 'cliente@vendely.pe',
         'Luis', 'Vega', 'Paredes', '+51912345678', TRUE)
 ON CONFLICT DO NOTHING;
 
+-- Dirección del cliente de prueba (Miraflores, Lima): una venta necesita dirección de envío
+INSERT INTO direcciones (id_direccion, id_login, id_pais, id_division, destinatario, telefono,
+                         direccion, referencia, predeterminada)
+SELECT 9001, 9003, 'PE', id_division, 'Luis Vega', '+51912345678',
+       'Av. Larco 123', 'Frente al parque', TRUE
+  FROM divisiones WHERE id_pais = 'PE' AND codigo = '150122'
+ON CONFLICT DO NOTHING;
+
+-- Tarifa de envío a todos los departamentos del Perú: sin tarifa, la base rechaza la venta
+INSERT INTO tarifas_envio (id_tienda, id_division, costo, envio_gratis_desde, dias_entrega_min, dias_entrega_max)
+SELECT 9001, id_division, 10.00, 200.00, 1, 5
+  FROM divisiones WHERE id_pais = 'PE' AND nivel = 1
+ON CONFLICT DO NOTHING;
+
 COMMIT;

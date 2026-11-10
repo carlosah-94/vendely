@@ -33,7 +33,7 @@ public class TiendaService {
     private final EntityManager entityManager;
 
     public TiendaService(TiendaRepository tiendaRepository, VerificadorTienda verificadorTienda,
-                         EntityManager entityManager) {
+            EntityManager entityManager) {
         this.tiendaRepository = tiendaRepository;
         this.verificadorTienda = verificadorTienda;
         this.entityManager = entityManager;
@@ -56,9 +56,13 @@ public class TiendaService {
         Tienda t = new Tienda();
         t.setIdPropietario(propietario.getIdPropietario());
         t.setSubdominio(subdominio);
-        copiarDatos(t, r.nombre(), r.descripcion(), r.correoContacto(), r.logoUrl(), r.colorPrincipal(), r.permiteInvitados());
+        copiarDatos(t, r.nombre(), r.descripcion(), r.correoContacto(), r.logoUrl(), r.colorPrincipal(),
+                r.permiteInvitados());
         tiendaRepository.saveAndFlush(t);
-        entityManager.refresh(t);   // trae los valores que pone la base (fecha de creación)
+        entityManager.refresh(t); // trae los valores que pone la base (fecha de creación)
+        // Sin tarifa de envío la base rechaza cualquier venta: se crea una por defecto
+        // para cada región.
+        tiendaRepository.crearTarifasPorDefecto(t.getIdTienda());
         log.info("Tienda creada: idTienda={}, subdominio={}, idPropietario={}",
                 t.getIdTienda(), t.getSubdominio(), t.getIdPropietario());
         return TiendaResponse.desde(t);
@@ -79,7 +83,8 @@ public class TiendaService {
     @Transactional
     public TiendaResponse actualizar(UsuarioAutenticado yo, Long idTienda, TiendaActualizarRequest r) {
         Tienda t = verificadorTienda.delDueno(yo, idTienda);
-        copiarDatos(t, r.nombre(), r.descripcion(), r.correoContacto(), r.logoUrl(), r.colorPrincipal(), r.permiteInvitados());
+        copiarDatos(t, r.nombre(), r.descripcion(), r.correoContacto(), r.logoUrl(), r.colorPrincipal(),
+                r.permiteInvitados());
         tiendaRepository.saveAndFlush(t);
         log.info("Tienda actualizada: idTienda={}", idTienda);
         return TiendaResponse.desde(t);
@@ -90,7 +95,7 @@ public class TiendaService {
     @Transactional(readOnly = true)
     public TiendaPublicaResponse publica(String subdominio) {
         Tienda t = tiendaRepository.findBySubdominio(subdominio.trim().toLowerCase(Locale.ROOT))
-                .filter(Tienda::estaActiva)   // una tienda suspendida no se muestra
+                .filter(Tienda::estaActiva) // una tienda suspendida no se muestra
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "La tienda no existe"));
         return TiendaPublicaResponse.desde(t);
     }
@@ -98,7 +103,7 @@ public class TiendaService {
     // ------------------------------------------------------------------ apoyo
 
     private static void copiarDatos(Tienda t, String nombre, String descripcion, String correo,
-                                    String logoUrl, String color, Boolean permiteInvitados) {
+            String logoUrl, String color, Boolean permiteInvitados) {
         t.setNombre(nombre.trim());
         t.setDescripcion(vacioANull(descripcion));
         t.setCorreoContacto(correo.trim().toLowerCase(Locale.ROOT));
