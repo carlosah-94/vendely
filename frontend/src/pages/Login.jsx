@@ -1,7 +1,10 @@
 import { useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
+import Campo from '../components/Campo';
+import LayoutAcceso from '../components/LayoutAcceso';
 import { useAuth } from '../context/AuthContext';
 import { mensajeDeError } from '../services/api';
+import { estiloInput } from '../utils/estilos';
 
 /**
  * Inicio de sesión del panel de Vendely (dueños de tienda y superadmin).
@@ -37,51 +40,54 @@ export default function Login() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-slate-100 px-4">
-      <form onSubmit={enviar} className="w-full max-w-sm bg-white rounded-xl shadow p-8 space-y-4">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-slate-800">Vendely</h1>
-          <p className="text-sm text-slate-500">Inicia sesión para administrar tu tienda</p>
-        </div>
+    <LayoutAcceso>
+      <div className="mb-6">
+        <h1 className="text-xl font-semibold text-slate-900">Iniciar sesión</h1>
+        <p className="text-sm text-slate-500">Accede al panel de tu tienda</p>
+      </div>
 
+      <form onSubmit={enviar} className="space-y-4">
         {error && (
-          <p className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
-            {error}
-          </p>
+          <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
         )}
 
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Correo</span>
+        <Campo etiqueta="Correo">
           <input
             type="email"
             required
             autoComplete="username"
             value={correo}
             onChange={(e) => setCorreo(e.target.value)}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500"
+            className={estiloInput()}
           />
-        </label>
+        </Campo>
 
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Contraseña</span>
+        <Campo etiqueta="Contraseña">
           <input
             type="password"
             required
             autoComplete="current-password"
             value={contrasena}
             onChange={(e) => setContrasena(e.target.value)}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500"
+            className={estiloInput()}
           />
-        </label>
+        </Campo>
 
         <button
           type="submit"
           disabled={enviando}
-          className="w-full rounded-md bg-violet-600 py-2 font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
+          className="w-full rounded-lg bg-slate-900 py-2.5 font-medium text-white hover:bg-slate-800 disabled:opacity-60"
         >
           {enviando ? 'Ingresando...' : 'Iniciar sesión'}
         </button>
       </form>
-    </main>
+
+      <p className="mt-6 border-t border-slate-200 pt-5 text-center text-sm text-slate-600">
+        ¿No tienes cuenta?{' '}
+        <Link to="/registro" className="font-medium text-violet-700 hover:underline">
+          Crear cuenta
+        </Link>
+      </p>
+    </LayoutAcceso>
   );
 }

@@ -9,6 +9,7 @@ import Inicio from './pages/Inicio';
 import Login from './pages/Login';
 import NuevaVenta from './pages/NuevaVenta';
 import Productos from './pages/Productos';
+import Registro from './pages/Registro';
 import Ventas from './pages/Ventas';
 
 export default function App() {
@@ -16,6 +17,7 @@ export default function App() {
     <Routes>
       {/* Públicas */}
       <Route path="/login" element={<Login />} />
+      <Route path="/registro" element={<Registro />} />
       <Route path="/acceso-denegado" element={<AccesoDenegado />} />
       <Route path="/" element={<Inicio />} />
 
