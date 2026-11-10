@@ -52,13 +52,21 @@ export function AuthProvider({ children }) {
     return data.usuario;
   }
 
+  /** Crea la cuenta de un dueño de tienda y deja la sesión iniciada con el token que devuelve el backend. */
+  async function registrarDueno(datos) {
+    const { data } = await api.post('/auth/registro/dueno', datos);
+    tokenStorage.set(data.token);
+    setUsuario(data.usuario);
+    return data.usuario;
+  }
+
   function cerrarSesion() {
     tokenStorage.clear();
     setUsuario(null);
   }
 
   return (
-    <AuthContext.Provider value={{ usuario, cargando, iniciarSesion, cerrarSesion }}>
+    <AuthContext.Provider value={{ usuario, cargando, iniciarSesion, registrarDueno, cerrarSesion }}>
       {children}
     </AuthContext.Provider>
   );
