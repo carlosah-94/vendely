@@ -29,16 +29,27 @@ api.interceptors.request.use((config) => {
 /** Nombre del aviso que se lanza cuando el backend rechaza el token. */
 export const EVENTO_SESION_EXPIRADA = "vendely:sesion-expirada";
 
-// Después de cada respuesta: si el backend responde 401 (token vencido o
-// inválido), se borra el token y se avisa a la app para que vuelva al login.
-// El login no cuenta: ahí un 401 solo significa contraseña incorrecta.
+/** Nombre del aviso que se lanza cuando el backend niega el permiso. */
+export const EVENTO_ACCESO_DENEGADO = "vendely:acceso-denegado";
+
+// Después de cada respuesta:
+// - 401 (token vencido o inválido): se borra el token y se avisa a la app
+//   para que vuelva al login.
+// - 403 (hay sesión, pero sin permiso para esa acción): se avisa a la app
+//   para que muestre la página "Acceso denegado".
+// Las rutas /auth no cuentan: ahí un 401 o 403 se muestra como mensaje en el
+// mismo formulario (por ejemplo, contraseña incorrecta).
 api.interceptors.response.use(
   (respuesta) => respuesta,
   (error) => {
-    const esLogin = error.config?.url === "/auth/login";
-    if (error.response?.status === 401 && !esLogin) {
+    const esAuth = error.config?.url?.startsWith("/auth/");
+    const estado = error.response?.status;
+    if (estado === 401 && !esAuth) {
       tokenStorage.clear();
       window.dispatchEvent(new Event(EVENTO_SESION_EXPIRADA));
+    }
+    if (estado === 403 && !esAuth) {
+      window.dispatchEvent(new Event(EVENTO_ACCESO_DENEGADO));
     }
     return Promise.reject(error);
   },

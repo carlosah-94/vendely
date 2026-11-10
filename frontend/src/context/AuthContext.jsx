@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { api, EVENTO_SESION_EXPIRADA, tokenStorage } from '../services/api';
+import { useNavigate } from 'react-router-dom';
+import { api, EVENTO_ACCESO_DENEGADO, EVENTO_SESION_EXPIRADA, tokenStorage } from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -8,6 +9,7 @@ const AuthContext = createContext(null);
  * Cualquier componente lo lee con useAuth().
  */
 export function AuthProvider({ children }) {
+  const navigate = useNavigate();
   const [usuario, setUsuario] = useState(null);
   // Solo hay algo que cargar si quedó un token guardado de una visita anterior.
   const [cargando, setCargando] = useState(() => tokenStorage.get() !== null);
@@ -23,13 +25,20 @@ export function AuthProvider({ children }) {
       .finally(() => setCargando(false));
   }, []);
 
-
   // Si el backend rechaza el token en cualquier pantalla, se cierra la sesión.
   useEffect(() => {
     const alExpirar = () => setUsuario(null);
     window.addEventListener(EVENTO_SESION_EXPIRADA, alExpirar);
     return () => window.removeEventListener(EVENTO_SESION_EXPIRADA, alExpirar);
   }, []);
+
+  // Si el backend responde 403 (sin permiso), se muestra la página de acceso denegado.
+  // La sesión sigue abierta: la cuenta es válida, solo que no puede hacer esa acción.
+  useEffect(() => {
+    const alDenegar = () => navigate('/acceso-denegado', { replace: true });
+    window.addEventListener(EVENTO_ACCESO_DENEGADO, alDenegar);
+    return () => window.removeEventListener(EVENTO_ACCESO_DENEGADO, alDenegar);
+  }, [navigate]);
 
   /** Sin subdominio inicia sesión en el panel; con subdominio, como cliente de esa tienda. */
   async function iniciarSesion({ correo, contrasena, subdominio }) {
