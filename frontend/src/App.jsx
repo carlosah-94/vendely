@@ -2,9 +2,12 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import LayoutPanel from './components/LayoutPanel';
 import RutaProtegida from './components/RutaProtegida';
 import AccesoDenegado from './pages/AccesoDenegado';
+import DetalleVenta from './pages/DetalleVenta';
 import EnConstruccion from './pages/EnConstruccion';
 import Inicio from './pages/Inicio';
 import Login from './pages/Login';
+import NuevaVenta from './pages/NuevaVenta';
+import Ventas from './pages/Ventas';
 
 export default function App() {
   return (
@@ -20,7 +23,9 @@ export default function App() {
           <Route path="/panel/tiendas" element={<EnConstruccion titulo="Mis tiendas" />} />
           <Route path="/panel/productos" element={<EnConstruccion titulo="Productos" />} />
           <Route path="/panel/clientes" element={<EnConstruccion titulo="Clientes" />} />
-          <Route path="/panel/ventas" element={<EnConstruccion titulo="Ventas" />} />
+          <Route path="/panel/ventas" element={<Ventas />} />
+          <Route path="/panel/ventas/nueva" element={<NuevaVenta />} />
+          <Route path="/panel/ventas/:idPedido" element={<DetalleVenta />} />
         </Route>
       </Route>
 
