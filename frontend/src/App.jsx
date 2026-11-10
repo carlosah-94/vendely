@@ -8,6 +8,7 @@ import EnConstruccion from './pages/EnConstruccion';
 import Inicio from './pages/Inicio';
 import Login from './pages/Login';
 import NuevaVenta from './pages/NuevaVenta';
+import Productos from './pages/Productos';
 import Ventas from './pages/Ventas';
 
 export default function App() {
@@ -22,7 +23,7 @@ export default function App() {
       <Route element={<RutaProtegida roles={['ADMIN_TIENDA']} />}>
         <Route element={<LayoutPanel />}>
           <Route path="/panel/tiendas" element={<EnConstruccion titulo="Mis tiendas" />} />
-          <Route path="/panel/productos" element={<EnConstruccion titulo="Productos" />} />
+          <Route path="/panel/productos" element={<Productos />} />
           <Route path="/panel/clientes" element={<Clientes />} />
           <Route path="/panel/ventas" element={<Ventas />} />
           <Route path="/panel/ventas/nueva" element={<NuevaVenta />} />
