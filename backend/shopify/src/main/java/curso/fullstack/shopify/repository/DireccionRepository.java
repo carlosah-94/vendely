@@ -18,6 +18,9 @@ public interface DireccionRepository extends JpaRepository<Direccion, Long> {
     // predeterminada, o la más nueva).
     Optional<Direccion> findFirstByIdLoginAndEstadoOrderByPredeterminadaDescIdDireccionDesc(Long idLogin, Short estado);
 
+    // Tienda pública: todas las direcciones activas del cliente (la predeterminada primero).
+    List<Direccion> findByIdLoginAndEstadoOrderByPredeterminadaDescIdDireccionDesc(Long idLogin, Short estado);
+
     /**
      * Issue #9: el distrito elegido existe, es del país de la tienda y es del
      * ÚLTIMO nivel
