@@ -17,6 +17,7 @@ const MENU = {
     { ruta: '/panel', texto: 'Inicio', icono: IconoInicio, exacta: true },
     { ruta: '/panel/ventas', texto: 'Pedidos', icono: IconoPedidos },
     { ruta: '/panel/productos', texto: 'Productos', icono: IconoProductos, exacta: true },
+    { ruta: '/panel/productos/inventario', texto: 'Inventario', sub: true },
     { ruta: '/panel/productos/categorias', texto: 'Categorías', sub: true },
     { ruta: '/panel/clientes', texto: 'Clientes', icono: IconoClientes },
     { ruta: '/panel/envios', texto: 'Envíos', icono: IconoEnvio },

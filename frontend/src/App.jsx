@@ -12,6 +12,7 @@ import Login from './pages/Login';
 import MisTiendas from './pages/MisTiendas';
 import Categorias from './pages/Categorias';
 import Envios from './pages/Envios';
+import Inventario from './pages/Inventario';
 import NuevaVenta from './pages/NuevaVenta';
 import PersonalizarTienda from './pages/PersonalizarTienda';
 import Portada from './pages/Portada';
@@ -59,6 +60,7 @@ export default function App() {
           <Route path="/panel/tiendas" element={<MisTiendas />} />
           <Route path="/panel/productos" element={<Productos />} />
           <Route path="/panel/productos/categorias" element={<Categorias />} />
+          <Route path="/panel/productos/inventario" element={<Inventario />} />
           <Route path="/panel/clientes" element={<Clientes />} />
           <Route path="/panel/envios" element={<Envios />} />
           <Route path="/panel/personalizar" element={<PersonalizarTienda />} />
