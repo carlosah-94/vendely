@@ -26,6 +26,7 @@ public interface ProductoRepository extends JpaRepository<Producto, Long> {
         Long getVariantes();
         BigDecimal getPrecio();
         Long getStock();
+        String getImagenUrl();
     }
 
     // Los alias van entre comillas para que PostgreSQL respete las mayúsculas (si no, la proyección da null).
@@ -33,7 +34,9 @@ public interface ProductoRepository extends JpaRepository<Producto, Long> {
             SELECT p.id_producto AS "idProducto", p.nombre AS "nombre", p.slug AS "slug",
                    p.descripcion AS "descripcion", p.marca AS "marca", p.estado AS "estado",
                    min(v.id_variante) AS "idVariante", count(v.id_variante) AS "variantes",
-                   min(pr.monto) AS "precio", coalesce(sum(i.cantidad_disponible), 0) AS "stock"
+                   min(pr.monto) AS "precio", coalesce(sum(i.cantidad_disponible), 0) AS "stock",
+                   (SELECT im.url FROM imagenes_producto im
+                     WHERE im.id_producto = p.id_producto ORDER BY im.posicion LIMIT 1) AS "imagenUrl"
               FROM productos p
               LEFT JOIN variantes v   ON v.id_producto = p.id_producto
               LEFT JOIN precios pr    ON pr.id_variante = v.id_variante
@@ -63,6 +66,13 @@ public interface ProductoRepository extends JpaRepository<Producto, Long> {
              ORDER BY p.nombre
             """, nativeQuery = true)
     List<Fila> filasPublicas(@Param("idTienda") Long idTienda);
+
+    // Detalle público: un producto ACTIVO de la tienda (borrador, archivado o de otra tienda → vacío → 404).
+    @Query(value = SELECT_FILA + """
+             WHERE p.id_tienda = :idTienda AND p.id_producto = :idProducto AND p.estado = 1
+             GROUP BY p.id_producto
+            """, nativeQuery = true)
+    Optional<Fila> filaPublica(@Param("idTienda") Long idTienda, @Param("idProducto") Long idProducto);
 
     // El producto solo si es de esa tienda: candado multi-tienda para editar y eliminar.
     Optional<Producto> findByIdProductoAndIdTienda(Long idProducto, Long idTienda);

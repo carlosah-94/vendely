@@ -194,6 +194,16 @@ public class ProductoService {
         return productoRepository.filasPublicas(t.getIdTienda()).stream().map(ProductoPublicoResponse::desde).toList();
     }
 
+    /** Detalle público de un producto: 404 si la tienda o el producto no existen o no están activos. */
+    @Transactional(readOnly = true)
+    public ProductoPublicoResponse productoPublico(String subdominio, Long idProducto) {
+        Tienda t = tiendaRepository.findBySubdominio(subdominio.trim().toLowerCase(Locale.ROOT))
+                .filter(Tienda::estaActiva)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "La tienda no existe"));
+        return productoRepository.filaPublica(t.getIdTienda(), idProducto).map(ProductoPublicoResponse::desde)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El producto no existe"));
+    }
+
     // ------------------------------------------------------------------ apoyo
 
     private Producto buscarEnTienda(Long idProducto, Long idTienda) {
