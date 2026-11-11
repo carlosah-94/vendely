@@ -36,3 +36,8 @@ app:
   cors:
     # Orígenes (frontend) que pueden llamar a la API desde el navegador, separados por coma
     origenes: ${CORS_ORIGENES:http://localhost:5173,http://localhost:5174}
+  mercadopago:
+    # Access Token de PRUEBA (TEST-...). Nunca se escribe aquí: viene de la variable de entorno.
+    access-token: ${MERCADOPAGO_ACCESS_TOKEN:}
+  # Dirección del frontend: a ella vuelve el cliente después de pagar en Mercado Pago
+  frontend-url: ${FRONTEND_URL:http://localhost:5173}

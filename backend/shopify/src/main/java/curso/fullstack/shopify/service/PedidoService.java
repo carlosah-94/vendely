@@ -2,6 +2,7 @@ package curso.fullstack.shopify.service;
 
 import curso.fullstack.shopify.dto.LineaVentaRequest;
 import curso.fullstack.shopify.dto.LineaVentaResponse;
+import curso.fullstack.shopify.dto.PedidoClienteRequest;
 import curso.fullstack.shopify.dto.PedidoResumenResponse;
 import curso.fullstack.shopify.dto.VentaRequest;
 import curso.fullstack.shopify.dto.VentaResponse;
@@ -33,6 +34,8 @@ public class PedidoService {
     private final InventarioRepository inventarioRepository;
     private final PedidoRepository pedidoRepository;
     private final DetallePedidoRepository detallePedidoRepository;
+    private final TiendaRepository tiendaRepository;
+    private final PagoRepository pagoRepository;
 
     @PersistenceContext
     private EntityManager em;
@@ -40,7 +43,10 @@ public class PedidoService {
     public PedidoService(VerificadorTienda verificadorTienda, LoginRepository loginRepository,
                          DireccionRepository direccionRepository, VarianteRepository varianteRepository,
                          PrecioRepository precioRepository, InventarioRepository inventarioRepository,
-                         PedidoRepository pedidoRepository, DetallePedidoRepository detallePedidoRepository) {
+                         PedidoRepository pedidoRepository, DetallePedidoRepository detallePedidoRepository,
+                         TiendaRepository tiendaRepository, PagoRepository pagoRepository) {
+        this.tiendaRepository = tiendaRepository;
+        this.pagoRepository = pagoRepository;
         this.verificadorTienda = verificadorTienda;
         this.loginRepository = loginRepository;
         this.direccionRepository = direccionRepository;
@@ -52,7 +58,8 @@ public class PedidoService {
     }
 
     /**
-     * Registra una venta. Todo o nada: si falta stock de un producto, se lanza ApiException
+     * Registra una venta desde el panel: el dueño elige el cliente.
+     * Todo o nada: si falta stock de un producto, se lanza ApiException
      * (RuntimeException) y @Transactional deshace también el stock ya descontado de los otros.
      */
     @Transactional
@@ -63,21 +70,49 @@ public class PedidoService {
             throw new ApiException(HttpStatus.CONFLICT, "La tienda está suspendida");
         }
 
-        // 2. El cliente es de ESTA tienda y la dirección es suya
+        // 2. El cliente es de ESTA tienda
         Login cliente = loginRepository.findById(r.idLogin())
                 .filter(l -> l.getRol() == RolUsuario.CLIENTE && idTienda.equals(l.getIdTienda()))
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El cliente no existe en esta tienda"));
-        if (!direccionRepository.existsByIdDireccionAndIdLoginAndEstado(r.idDireccionEnvio(), cliente.getIdLogin(), (short) 1)) {
+
+        return crearPedido(idTienda, cliente, r.idDireccionEnvio(), r.lineas());
+    }
+
+    /**
+     * Registra un pedido desde la tienda pública: el cliente es quien inició sesión
+     * (idLogin y tienda salen del token, nunca del JSON).
+     */
+    @Transactional
+    public VentaResponse registrarDesdeTienda(UsuarioAutenticado yo, PedidoClienteRequest r) {
+        Tienda tienda = tiendaRepository.findById(yo.idTienda())
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "La tienda no existe"));
+        if (!tienda.estaActiva()) {
+            throw new ApiException(HttpStatus.CONFLICT, "La tienda está suspendida");
+        }
+        Login cliente = loginRepository.findById(yo.idLogin())
+                .filter(l -> l.getRol() == RolUsuario.CLIENTE && yo.idTienda().equals(l.getIdTienda()))
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El cliente no existe en esta tienda"));
+
+        return crearPedido(yo.idTienda(), cliente, r.idDireccionEnvio(), r.lineas());
+    }
+
+    /**
+     * Lógica común de una venta (panel y tienda): valida la dirección, descuenta el stock,
+     * toma el precio vigente y guarda pedido + líneas. Debe llamarse dentro de una transacción.
+     */
+    private VentaResponse crearPedido(Long idTienda, Login cliente, Long idDireccion, List<LineaVentaRequest> lineasPedidas) {
+        // 1. La dirección es suya y está activa
+        if (!direccionRepository.existsByIdDireccionAndIdLoginAndEstado(idDireccion, cliente.getIdLogin(), (short) 1)) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "La dirección de envío no es de este cliente");
         }
 
-        // 3. Juntar líneas repetidas (la llave de detalle_pedido no permite la misma variante dos veces)
+        // 2. Juntar líneas repetidas (la llave de detalle_pedido no permite la misma variante dos veces)
         Map<Long, Integer> cantidades = new LinkedHashMap<>();
-        for (LineaVentaRequest l : r.lineas()) {
+        for (LineaVentaRequest l : lineasPedidas) {
             cantidades.merge(l.idVariante(), l.cantidad(), Integer::sum);
         }
 
-        // 4. Por cada producto: validar, descontar stock y tomar el precio vigente
+        // 3. Por cada producto: validar, descontar stock y tomar el precio vigente
         BigDecimal subtotal = BigDecimal.ZERO;
         List<DetallePedido> detalles = new ArrayList<>();
         List<LineaVentaResponse> lineas = new ArrayList<>();
@@ -120,17 +155,17 @@ public class PedidoService {
                     cantidad, precio.getMonto(), importe));
         }
 
-        // 5. Guardar el pedido: Java manda el subtotal; el trigger pone número, envío, total e IGV
+        // 4. Guardar el pedido: Java manda el subtotal; el trigger pone número, envío, total e IGV
         Pedido p = new Pedido();
         p.setIdTienda(idTienda);
         p.setIdLogin(cliente.getIdLogin());
-        p.setIdDireccionEnvio(r.idDireccionEnvio());
+        p.setIdDireccionEnvio(idDireccion);
         p.setCorreoContacto(cliente.getCorreo());
         p.setSubtotal(subtotal);
         pedidoRepository.saveAndFlush(p);
         em.refresh(p);                       // lee lo que completó el trigger
 
-        // 6. Guardar las líneas
+        // 5. Guardar las líneas
         for (DetallePedido d : detalles) {
             d.setIdPedido(p.getIdPedido());
         }
@@ -138,7 +173,7 @@ public class PedidoService {
 
         log.info("Venta registrada: tienda={}, pedido #{} (id={}), {} producto(s), total {} {}",
                 idTienda, p.getNumeroPedido(), p.getIdPedido(), detalles.size(), p.getTotal(), p.getMoneda());
-        return VentaResponse.desde(p, lineas);
+        return VentaResponse.desde(p, lineas, "SIN_PAGO");
     }
 
     // =====================================================================
@@ -235,12 +270,14 @@ public class PedidoService {
         Set<Long> ids = pedidos.stream().map(Pedido::getIdLogin).filter(Objects::nonNull).collect(Collectors.toSet());
         Map<Long, Login> clientes = loginRepository.findAllById(ids).stream()
                 .collect(Collectors.toMap(Login::getIdLogin, Function.identity()));
+        Map<Long, Short> pagos = estadosDePago(pedidos.stream().map(Pedido::getIdPedido).toList());
         return pedidos.stream().map(p -> {
             Login c = clientes.get(p.getIdLogin());
             // id_login NULL = compra como invitado: se muestra su correo de contacto.
             String nombre = (c == null) ? "Invitado (" + p.getCorreoContacto() + ")"
                                         : c.getNombres() + " " + c.getPrimerApellido();
-            return PedidoResumenResponse.desde(p, nombre);
+            return PedidoResumenResponse.desde(p, nombre,
+                    PedidoResumenResponse.nombreEstadoPago(pagos.get(p.getIdPedido())));
         }).toList();
     }
 
@@ -258,6 +295,16 @@ public class PedidoService {
             return new LineaVentaResponse(d.getIdVariante(), d.getNombreProducto(), d.getNombreVariante(),
                     d.getCantidad(), precio, precio.multiply(BigDecimal.valueOf(d.getCantidad())));
         }).toList();
-        return VentaResponse.desde(p, lineas);
+        Short estadoPago = estadosDePago(List.of(p.getIdPedido())).get(p.getIdPedido());
+        return VentaResponse.desde(p, lineas, PedidoResumenResponse.nombreEstadoPago(estadoPago));
+    }
+
+    /** Estado de pago de varios pedidos en UNA consulta (los que no tienen pagos no aparecen). */
+    private Map<Long, Short> estadosDePago(List<Long> idsPedidos) {
+        if (idsPedidos.isEmpty()) {
+            return Map.of();
+        }
+        return pagoRepository.estadosDe(idsPedidos).stream()
+                .collect(Collectors.toMap(PagoRepository.EstadoPedido::getIdPedido, PagoRepository.EstadoPedido::getEstado));
     }
 }

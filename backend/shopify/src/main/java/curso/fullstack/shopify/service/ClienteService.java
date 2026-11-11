@@ -4,6 +4,8 @@ import curso.fullstack.shopify.dto.ClienteActualizarRequest;
 import curso.fullstack.shopify.dto.ClienteCrearRequest;
 import curso.fullstack.shopify.dto.ClienteResponse;
 import curso.fullstack.shopify.dto.ClienteResponse.DireccionResponse;
+import curso.fullstack.shopify.dto.DireccionRequest;
+import curso.fullstack.shopify.repository.TiendaRepository;
 import curso.fullstack.shopify.entity.Direccion;
 import curso.fullstack.shopify.entity.Login;
 import curso.fullstack.shopify.entity.RolUsuario;
@@ -42,12 +44,15 @@ public class ClienteService {
     private final LoginRepository loginRepository;
     private final DireccionRepository direccionRepository;
     private final PedidoRepository pedidoRepository;
+    private final TiendaRepository tiendaRepository;
     private final PasswordEncoder passwordEncoder;
     private final EntityManager entityManager;
 
     public ClienteService(VerificadorTienda verificadorTienda, LoginRepository loginRepository,
                           DireccionRepository direccionRepository, PedidoRepository pedidoRepository,
+                          TiendaRepository tiendaRepository,
                           PasswordEncoder passwordEncoder, EntityManager entityManager) {
+        this.tiendaRepository = tiendaRepository;
         this.verificadorTienda = verificadorTienda;
         this.loginRepository = loginRepository;
         this.direccionRepository = direccionRepository;
@@ -189,6 +194,55 @@ public class ClienteService {
         loginRepository.flush();
 
         log.info("Cliente eliminado desde el panel: idLogin={}, tienda={}", idCliente, idTienda);
+    }
+
+    // ------------------------------------------------------------------ direcciones del propio cliente (tienda)
+
+    /** Mis direcciones activas. El idLogin sale del token, nunca de la URL ni del JSON. */
+    @Transactional(readOnly = true)
+    public List<DireccionResponse> misDirecciones(UsuarioAutenticado yo) {
+        return direccionRepository
+                .findByIdLoginAndEstadoOrderByPredeterminadaDescIdDireccionDesc(yo.idLogin(), ACTIVA)
+                .stream().map(this::aRespuesta).toList();
+    }
+
+    /** Crea una dirección para el cliente que inició sesión. El distrito debe ser del país de su tienda. */
+    @Transactional
+    public DireccionResponse crearMiDireccion(UsuarioAutenticado yo, DireccionRequest r) {
+        Login cliente = loginRepository.findByIdLoginAndIdTiendaAndIdRol(yo.idLogin(), yo.idTienda(), CLIENTE)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El cliente no existe en esta tienda"));
+        Tienda tienda = tiendaRepository.findById(yo.idTienda())
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "La tienda no existe"));
+
+        if (!direccionRepository.esDistritoValido(r.idDistrito(), tienda.getIdPais())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "El distrito no es válido: debe ser un distrito de la lista oficial del país de la tienda");
+        }
+        // El teléfono de la dirección es obligatorio en la base: el enviado, o si no el de la cuenta.
+        String telefono = vacioANull(r.telefono());
+        if (telefono == null) {
+            telefono = vacioANull(cliente.getTelefono());
+        }
+        if (telefono == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Indica un teléfono de contacto para el envío");
+        }
+
+        Direccion d = new Direccion();
+        d.setIdLogin(cliente.getIdLogin());
+        d.setIdPais(tienda.getIdPais());
+        d.setIdDivision(r.idDistrito());
+        d.setDestinatario(cliente.getNombres() + " " + cliente.getPrimerApellido());
+        d.setTelefono(telefono);
+        d.setDireccion(r.direccion().trim());
+        d.setReferencia(vacioANull(r.referencia()));
+        // Solo puede haber una predeterminada activa por cliente (índice único): la primera lo es.
+        d.setPredeterminada(direccionRepository
+                .findByIdLoginAndEstadoOrderByPredeterminadaDescIdDireccionDesc(cliente.getIdLogin(), ACTIVA).isEmpty());
+        direccionRepository.saveAndFlush(d);
+
+        log.info("Dirección creada por el cliente: idLogin={}, tienda={}, idDireccion={}",
+                cliente.getIdLogin(), yo.idTienda(), d.getIdDireccion());
+        return aRespuesta(d);
     }
 
     // ------------------------------------------------------------------ apoyo

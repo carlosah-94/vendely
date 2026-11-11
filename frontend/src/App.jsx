@@ -6,11 +6,22 @@ import Clientes from './pages/Clientes';
 import DetalleVenta from './pages/DetalleVenta';
 import EnConstruccion from './pages/EnConstruccion';
 import Inicio from './pages/Inicio';
+import InicioPanel from './pages/InicioPanel';
 import Login from './pages/Login';
+import MisTiendas from './pages/MisTiendas';
 import NuevaVenta from './pages/NuevaVenta';
 import Productos from './pages/Productos';
 import Registro from './pages/Registro';
 import Ventas from './pages/Ventas';
+import LayoutTienda from './components/tienda/LayoutTienda';
+import RequiereCliente from './components/tienda/RequiereCliente';
+import Carrito from './pages/tienda/Carrito';
+import Checkout from './pages/tienda/Checkout';
+import DetalleProducto from './pages/tienda/DetalleProducto';
+import IngresarCliente from './pages/tienda/IngresarCliente';
+import MisPedidos from './pages/tienda/MisPedidos';
+import ResultadoPago from './pages/tienda/ResultadoPago';
+import Vitrina from './pages/tienda/Vitrina';
 
 export default function App() {
   return (
@@ -21,10 +32,24 @@ export default function App() {
       <Route path="/acceso-denegado" element={<AccesoDenegado />} />
       <Route path="/" element={<Inicio />} />
 
+      {/* Tienda pública del cliente: el subdominio va en la ruta (/tienda/moda-lima) */}
+      <Route path="/tienda/:subdominio" element={<LayoutTienda />}>
+        <Route index element={<Vitrina />} />
+        <Route path="producto/:idProducto" element={<DetalleProducto />} />
+        <Route path="carrito" element={<Carrito />} />
+        <Route path="ingresar" element={<IngresarCliente />} />
+        <Route element={<RequiereCliente />}>
+          <Route path="checkout" element={<Checkout />} />
+          <Route path="pago/resultado" element={<ResultadoPago />} />
+          <Route path="mis-pedidos" element={<MisPedidos />} />
+        </Route>
+      </Route>
+
       {/* Panel del dueño de tienda */}
       <Route element={<RutaProtegida roles={['ADMIN_TIENDA']} />}>
         <Route element={<LayoutPanel />}>
-          <Route path="/panel/tiendas" element={<EnConstruccion titulo="Mis tiendas" />} />
+          <Route path="/panel" element={<InicioPanel />} />
+          <Route path="/panel/tiendas" element={<MisTiendas />} />
           <Route path="/panel/productos" element={<Productos />} />
           <Route path="/panel/clientes" element={<Clientes />} />
           <Route path="/panel/ventas" element={<Ventas />} />

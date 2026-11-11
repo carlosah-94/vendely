@@ -40,4 +40,10 @@ public class TiendaPublicaController {
     public List<ProductoPublicoResponse> catalogo(@PathVariable String subdominio) {
         return productoService.catalogo(subdominio);
     }
+
+    /** Detalle de un producto activo (404 si no existe, está inactivo o es de otra tienda). */
+    @GetMapping("/{subdominio}/productos/{idProducto}")
+    public ProductoPublicoResponse producto(@PathVariable String subdominio, @PathVariable Long idProducto) {
+        return productoService.productoPublico(subdominio, idProducto);
+    }
 }

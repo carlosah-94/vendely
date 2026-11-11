@@ -5,8 +5,8 @@ import java.math.BigDecimal;
 
 /**
  * Producto para el catálogo público (issue #10), lo que ve un visitante sin iniciar sesión.
- * Es un DTO aparte del panel porque no muestra datos internos (estado, cantidad exacta de stock):
- * solo si está disponible.
+ * Es un DTO aparte del panel porque no muestra datos internos (estado). El stock se envía para
+ * que la tienda limite la cantidad del carrito; el backend vuelve a validarlo al crear el pedido.
  */
 public record ProductoPublicoResponse(
         Long idProducto,
@@ -16,10 +16,13 @@ public record ProductoPublicoResponse(
         String marca,
         Long idVariante,
         BigDecimal precio,
-        boolean disponible   // true si hay stock
+        Long stock,
+        boolean disponible,   // true si hay stock
+        String imagenUrl      // primera imagen, o null si no tiene
 ) {
     public static ProductoPublicoResponse desde(ProductoRepository.Fila f) {
+        long stock = f.getStock() == null ? 0 : f.getStock();
         return new ProductoPublicoResponse(f.getIdProducto(), f.getNombre(), f.getSlug(), f.getDescripcion(),
-                f.getMarca(), f.getIdVariante(), f.getPrecio(), f.getStock() != null && f.getStock() > 0);
+                f.getMarca(), f.getIdVariante(), f.getPrecio(), stock, stock > 0, f.getImagenUrl());
     }
 }
