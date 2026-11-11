@@ -22,7 +22,7 @@ export default function Login() {
 
   // Si ya inició sesión, no tiene sentido mostrar el formulario.
   if (usuario) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/inicio" replace />;
   }
 
   async function enviar(evento) {
@@ -31,7 +31,7 @@ export default function Login() {
     setEnviando(true);
     try {
       await iniciarSesion({ correo, contrasena });
-      navigate('/', { replace: true });
+      navigate('/inicio', { replace: true });
     } catch (e) {
       setError(mensajeDeError(e));
     } finally {

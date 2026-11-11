@@ -86,7 +86,7 @@ export default function DetalleVenta() {
           <p className="text-sm text-slate-500">
             <Link to="/panel/ventas" className="hover:underline">Ventas</Link> / Pedido #{venta.numeroPedido}
           </p>
-          <h1 className="text-2xl font-bold text-slate-800">Pedido #{venta.numeroPedido}</h1>
+          <h1 className="text-xl font-bold text-[#101010]">Pedido #{venta.numeroPedido}</h1>
           <p className="flex items-center gap-2 text-sm text-slate-600">
             {formatoFecha(venta.fechaCreacion)} <EtiquetaPago estado={venta.estadoPago} />
           </p>

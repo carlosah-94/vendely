@@ -92,7 +92,7 @@ export default function Clientes() {
     <section className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold text-slate-800">Clientes</h1>
+          <h1 className="text-xl font-bold text-[#101010]">Clientes</h1>
           {tiendas.length > 0 && (
             <SelectorTienda tiendas={tiendas} idTienda={idTienda} onCambiar={cambiarTienda} />
           )}
@@ -112,7 +112,7 @@ export default function Clientes() {
       {datos.error && <Mensaje tipo="error" texto={datos.error} />}
 
       {tienda && (
-        <div className="overflow-x-auto rounded-xl bg-white shadow">
+        <div className="overflow-x-auto rounded-xl bg-white shadow-[0_1px_0_rgba(0,0,0,0.08),0_0_0_1px_rgba(0,0,0,0.05)]">
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50 text-left text-slate-600">
               <tr>

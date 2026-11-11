@@ -116,7 +116,7 @@ export default function Registro() {
 
   // Una persona que ya inició sesión no necesita crear otra cuenta.
   if (usuario && paso === 'cuenta') {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/inicio" replace />;
   }
 
   const tipoElegido = TODOS_LOS_TIPOS.find((t) => t.id === Number(cuenta.tipoDocumento));
@@ -324,7 +324,7 @@ export default function Registro() {
           </button>
 
           <p className="text-center text-sm text-slate-500">
-            <Link to="/" className="hover:underline">Hacerlo después</Link>
+            <Link to="/inicio" className="hover:underline">Hacerlo después</Link>
           </p>
         </form>
       )}

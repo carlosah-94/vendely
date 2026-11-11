@@ -10,6 +10,7 @@ import InicioPanel from './pages/InicioPanel';
 import Login from './pages/Login';
 import MisTiendas from './pages/MisTiendas';
 import NuevaVenta from './pages/NuevaVenta';
+import Portada from './pages/Portada';
 import Productos from './pages/Productos';
 import Registro from './pages/Registro';
 import Ventas from './pages/Ventas';
@@ -30,7 +31,9 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/registro" element={<Registro />} />
       <Route path="/acceso-denegado" element={<AccesoDenegado />} />
-      <Route path="/" element={<Inicio />} />
+      <Route path="/" element={<Portada />} />
+      {/* Después de iniciar sesión: lleva a cada cuenta a su panel según su rol */}
+      <Route path="/inicio" element={<Inicio />} />
 
       {/* Tienda pública del cliente: el subdominio va en la ruta (/tienda/moda-lima) */}
       <Route path="/tienda/:subdominio" element={<LayoutTienda />}>

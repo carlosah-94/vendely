@@ -160,7 +160,7 @@ export default function NuevaVenta() {
         <p className="text-sm text-slate-500">
           <Link to="/panel/ventas" className="hover:underline">Ventas</Link> / Registrar venta
         </p>
-        <h1 className="text-2xl font-bold text-slate-800">Registrar venta</h1>
+        <h1 className="text-xl font-bold text-[#101010]">Registrar venta</h1>
         <p className="text-sm text-slate-600">Tienda: <span className="font-medium">{tienda.nombre}</span></p>
       </div>
 
