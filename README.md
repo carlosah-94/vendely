@@ -204,11 +204,15 @@ Proyecto en [vercel.com](https://vercel.com) importado desde GitHub:
 
 `VITE_API_BASE_URL` se graba en el frontend al construirlo: si cambia, hay que volver a desplegar.
 
-> **Pendiente:** agregar `frontend/vercel.json` con una regla para que todas las rutas sirvan `index.html`. Sin ella, recargar una página como `/panel/clientes` en Vercel da 404, porque esas rutas las maneja React Router en el navegador.
->
-> ```json
-> { "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }] }
-> ```
+`frontend/vercel.json` hace que cualquier ruta sirva `index.html`:
+
+```json
+{ "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }] }
+```
+
+Las pantallas (`/login`, `/panel/clientes`, `/tienda/{subdominio}`…) las maneja React Router en el navegador; en Vercel solo existe `index.html`. Sin esta regla, abrir una de esas rutas directamente (recargar, un enlace, una pestaña nueva) da **404**. Los archivos que sí existen, como `/assets/...`, se siguen sirviendo normalmente.
+
+Para usar la aplicación, entra siempre por la dirección de producción (`https://shopity-7zya.vercel.app`). Cada despliegue tiene además su propia dirección larga (`shopity-7zya-xxxx-….vercel.app`), pero el backend no la acepta por CORS.
 
 ### Publicar una versión nueva
 
