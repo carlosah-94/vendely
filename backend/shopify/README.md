@@ -135,7 +135,6 @@ El esquema (30 tablas, restricciones y triggers) está en `db/init/01_esquema.sq
 
 - [ ] **Pago:** el último intento respondió 503 (`El pago en línea no está disponible por ahora`). Revisar `MERCADOPAGO_ACCESS_TOKEN` y probar el flujo completo, incluida la confirmación.
 - [ ] **Pruebas automatizadas:** no hay tests Java (JUnit y MockMvc para `AuthService`, `PedidoService`, `PagoService`).
-- [ ] **Limpieza:** `CategoryController`, `CategoryService`, `UserController` y `UserService` son clases vacías de plantilla; implementarlas o borrarlas (y revisar si `UserRepository`/`UserRequest`/`UserResponse` siguen en uso).
 - [ ] **Rol `SUPERADMIN`:** la ruta `/api/admin/**` existe pero no tiene endpoints.
 - [ ] **Categorías de productos:** la tabla `categorias` existe, pero la API aún no las expone.
 - [ ] **Tablas sin API todavía:** imágenes de producto, variantes y opciones, ofertas, carritos, tarifas de envío y tipos de cambio.
