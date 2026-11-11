@@ -25,8 +25,12 @@ public interface ProductoRepository extends JpaRepository<Producto, Long> {
         Long getIdVariante();
         Long getVariantes();
         BigDecimal getPrecio();
+        BigDecimal getPrecioComparacion();
+        String getSku();
         Long getStock();
         String getImagenUrl();
+        /** Todas las fotos en orden, separadas por espacios (los enlaces no llevan espacios). */
+        String getImagenes();
     }
 
     // Los alias van entre comillas para que PostgreSQL respete las mayúsculas (si no, la proyección da null).
@@ -34,9 +38,12 @@ public interface ProductoRepository extends JpaRepository<Producto, Long> {
             SELECT p.id_producto AS "idProducto", p.nombre AS "nombre", p.slug AS "slug",
                    p.descripcion AS "descripcion", p.marca AS "marca", p.estado AS "estado",
                    min(v.id_variante) AS "idVariante", count(v.id_variante) AS "variantes",
-                   min(pr.monto) AS "precio", coalesce(sum(i.cantidad_disponible), 0) AS "stock",
+                   min(pr.monto) AS "precio", min(pr.monto_comparacion) AS "precioComparacion",
+                   min(v.sku) AS "sku", coalesce(sum(i.cantidad_disponible), 0) AS "stock",
                    (SELECT im.url FROM imagenes_producto im
-                     WHERE im.id_producto = p.id_producto ORDER BY im.posicion LIMIT 1) AS "imagenUrl"
+                     WHERE im.id_producto = p.id_producto ORDER BY im.posicion LIMIT 1) AS "imagenUrl",
+                   (SELECT string_agg(im.url, ' ' ORDER BY im.posicion) FROM imagenes_producto im
+                     WHERE im.id_producto = p.id_producto) AS "imagenes"
               FROM productos p
               LEFT JOIN variantes v   ON v.id_producto = p.id_producto
               LEFT JOIN precios pr    ON pr.id_variante = v.id_variante

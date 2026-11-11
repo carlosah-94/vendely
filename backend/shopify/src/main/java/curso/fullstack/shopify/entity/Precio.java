@@ -30,6 +30,11 @@ public class Precio {
     @Column(name = "monto", nullable = false, precision = 12, scale = 2)
     private BigDecimal monto;
 
+    /** Precio "antes" que la tienda muestra tachado. null = sin oferta. Debe ser mayor que monto (CHECK). */
+    @Setter
+    @Column(name = "monto_comparacion", precision = 12, scale = 2)
+    private BigDecimal montoComparacion;
+
     /**
      * La pone la base (DEFAULT now() = hora de la transacción). No se envía desde Java para que
      * coincida exactamente con el cierre del precio anterior (fecha_fin = now()) y los periodos

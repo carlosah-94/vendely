@@ -3,12 +3,14 @@ package curso.fullstack.shopify.service;
 import curso.fullstack.shopify.dto.ProductoPublicoResponse;
 import curso.fullstack.shopify.dto.ProductoRequest;
 import curso.fullstack.shopify.dto.ProductoResponse;
+import curso.fullstack.shopify.entity.ImagenProducto;
 import curso.fullstack.shopify.entity.Inventario;
 import curso.fullstack.shopify.entity.Precio;
 import curso.fullstack.shopify.entity.Producto;
 import curso.fullstack.shopify.entity.Tienda;
 import curso.fullstack.shopify.entity.Variante;
 import curso.fullstack.shopify.exception.ApiException;
+import curso.fullstack.shopify.repository.ImagenProductoRepository;
 import curso.fullstack.shopify.repository.InventarioRepository;
 import curso.fullstack.shopify.repository.PrecioRepository;
 import curso.fullstack.shopify.repository.ProductoRepository;
@@ -20,6 +22,7 @@ import java.math.BigDecimal;
 import java.text.Normalizer;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -28,8 +31,9 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * CRUD de productos simples (issue #10 · RF2 · rúbrica 1.2) y catálogo público.
  *
- * Un producto simple ocupa CUATRO tablas: productos + variantes (una) + precios + inventario.
- * Por eso crear y editar van en una transacción: o se guardan las cuatro, o ninguna.
+ * Un producto simple ocupa CINCO tablas: productos + variantes (una, con su SKU) + precios (con el
+ * precio tachado opcional) + inventario + imagenes_producto.
+ * Por eso crear y editar van en una transacción: o se guarda todo, o nada.
  * Todas las operaciones del panel empiezan con verificadorTienda.delDueno(...): un dueño solo
  * gestiona los productos de SUS tiendas (403 si la tienda es de otro, 404 si no existe).
  */
@@ -46,16 +50,19 @@ public class ProductoService {
     private final VarianteRepository varianteRepository;
     private final PrecioRepository precioRepository;
     private final InventarioRepository inventarioRepository;
+    private final ImagenProductoRepository imagenProductoRepository;
 
     public ProductoService(VerificadorTienda verificadorTienda, TiendaRepository tiendaRepository,
                            ProductoRepository productoRepository, VarianteRepository varianteRepository,
-                           PrecioRepository precioRepository, InventarioRepository inventarioRepository) {
+                           PrecioRepository precioRepository, InventarioRepository inventarioRepository,
+                           ImagenProductoRepository imagenProductoRepository) {
         this.verificadorTienda = verificadorTienda;
         this.tiendaRepository = tiendaRepository;
         this.productoRepository = productoRepository;
         this.varianteRepository = varianteRepository;
         this.precioRepository = precioRepository;
         this.inventarioRepository = inventarioRepository;
+        this.imagenProductoRepository = imagenProductoRepository;
     }
 
     // ------------------------------------------------------------------ consultar (panel)
@@ -78,6 +85,7 @@ public class ProductoService {
     @Transactional
     public ProductoResponse crear(UsuarioAutenticado yo, Long idTienda, ProductoRequest r) {
         verificadorTienda.delDueno(yo, idTienda);
+        validarPrecioComparacion(r);
         String nombre = r.nombre().trim();
         String slug = slug(nombre);
 
@@ -95,14 +103,17 @@ public class ProductoService {
         // Producto simple: una sola variante, sin opciones (en ventas se muestra como "Única").
         Variante v = new Variante();
         v.setIdProducto(p.getIdProducto());
+        v.setSku(vacioANull(r.sku()));
         varianteRepository.saveAndFlush(v);       // flush: se necesita el id para precio e inventario
 
-        crearPrecio(v.getIdVariante(), r.precio());
+        crearPrecio(v.getIdVariante(), r.precio(), r.precioComparacion());
 
         Inventario i = new Inventario();
         i.setIdVariante(v.getIdVariante());
         i.setCantidadDisponible(r.stock());
         inventarioRepository.saveAndFlush(i);
+
+        guardarImagenes(p, r.imagenes());
 
         log.info("Producto creado: idProducto={}, tienda={}", p.getIdProducto(), idTienda);
         return fila(idTienda, p.getIdProducto());
@@ -114,6 +125,7 @@ public class ProductoService {
     public ProductoResponse actualizar(UsuarioAutenticado yo, Long idTienda, Long idProducto, ProductoRequest r) {
         verificadorTienda.delDueno(yo, idTienda);
         Producto p = buscarEnTienda(idProducto, idTienda);
+        validarPrecioComparacion(r);
         String nombre = r.nombre().trim();
         String slug = slug(nombre);
 
@@ -130,18 +142,26 @@ public class ProductoService {
             throw new ApiException(HttpStatus.CONFLICT,
                     "Este producto tiene varias variantes: su precio y stock se gestionan por variante");
         }
-        Long idVariante = variantes.get(0).getIdVariante();
+        Variante variante = variantes.get(0);
+        Long idVariante = variante.getIdVariante();
 
         copiarDatos(p, r, nombre, slug);
         productoRepository.saveAndFlush(p);
 
-        // Precio: la base no deja editar el monto (cada venta guarda el precio con que se hizo).
-        // Si cambió, se cierra el vigente y se crea uno nuevo. Si es igual, no se toca el historial.
-        BigDecimal actual = precioRepository.vigente(idVariante).map(Precio::getMonto).orElse(null);
-        if (actual == null || actual.compareTo(r.precio()) != 0) {
+        variante.setSku(vacioANull(r.sku()));
+        varianteRepository.saveAndFlush(variante);
+
+        // Precio: la base no deja editar el monto ni el precio tachado (cada venta guarda el precio
+        // con que se hizo). Si alguno cambió, se cierra el vigente y se crea uno nuevo.
+        // Si son iguales, no se toca el historial.
+        Precio actual = precioRepository.vigente(idVariante).orElse(null);
+        if (actual == null
+                || actual.getMonto().compareTo(r.precio()) != 0
+                || !mismoMonto(actual.getMontoComparacion(), r.precioComparacion())) {
             precioRepository.cerrarVigente(idVariante);
-            crearPrecio(idVariante, r.precio());
-            log.info("Precio cambiado: idProducto={}, {} -> {}", idProducto, actual, r.precio());
+            crearPrecio(idVariante, r.precio(), r.precioComparacion());
+            log.info("Precio cambiado: idProducto={}, {} -> {}", idProducto,
+                    actual == null ? null : actual.getMonto(), r.precio());
         }
 
         // Stock: valor absoluto. Si por algún motivo no tenía fila de inventario, se crea.
@@ -152,6 +172,8 @@ public class ProductoService {
         });
         i.setCantidadDisponible(r.stock());
         inventarioRepository.saveAndFlush(i);
+
+        guardarImagenes(p, r.imagenes());
 
         log.info("Producto actualizado: idProducto={}, tienda={}", idProducto, idTienda);
         return fila(idTienda, idProducto);
@@ -226,11 +248,55 @@ public class ProductoService {
         p.setEstado(Boolean.FALSE.equals(r.activo()) ? BORRADOR : ACTIVO);
     }
 
-    private void crearPrecio(Long idVariante, BigDecimal monto) {
+    private void crearPrecio(Long idVariante, BigDecimal monto, BigDecimal montoComparacion) {
         Precio precio = new Precio();
         precio.setIdVariante(idVariante);
         precio.setMonto(monto);
+        precio.setMontoComparacion(montoComparacion);
         precioRepository.saveAndFlush(precio);    // fecha_inicio la pone la base (now())
+    }
+
+    /**
+     * El precio tachado ("antes") tiene que ser mayor que el precio actual; si no, no es una rebaja.
+     * La base también lo exige (CHECK ck_precios_comparar), pero aquí se responde un 400 claro.
+     */
+    private static void validarPrecioComparacion(ProductoRequest r) {
+        if (r.precioComparacion() != null && r.precio() != null
+                && r.precioComparacion().compareTo(r.precio()) <= 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "El precio de comparación debe ser mayor que el precio");
+        }
+    }
+
+    /** Compara dos montos que pueden ser null (49.9 y 49.90 cuentan como iguales). */
+    private static boolean mismoMonto(BigDecimal a, BigDecimal b) {
+        if (a == null || b == null) {
+            return Objects.equals(a, b);
+        }
+        return a.compareTo(b) == 0;
+    }
+
+    /**
+     * Guarda las fotos en el orden recibido (posición 1, 2, 3...). Se borran las anteriores y se
+     * crean de nuevo: es lo más simple y evita choques con UNIQUE (id_producto, posicion).
+     * null = el cliente no envió fotos: se dejan como están.
+     */
+    private void guardarImagenes(Producto p, List<String> imagenes) {
+        if (imagenes == null) {
+            return;
+        }
+        imagenProductoRepository.borrarDeProducto(p.getIdProducto());
+        imagenProductoRepository.flush();
+        short posicion = 1;
+        for (String url : imagenes) {
+            ImagenProducto im = new ImagenProducto();
+            im.setIdProducto(p.getIdProducto());
+            im.setUrl(url.trim());
+            im.setTextoAlternativo(p.getNombre().length() > 200 ? p.getNombre().substring(0, 200) : p.getNombre());
+            im.setPosicion(posicion++);
+            imagenProductoRepository.save(im);
+        }
+        imagenProductoRepository.flush();
     }
 
     /**

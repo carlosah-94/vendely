@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import FormularioProducto from '../components/FormularioProducto';
 import { IconoBuscar, IconoProductos } from '../components/Iconos';
+import ImagenProducto from '../components/ImagenProducto';
 import Mensaje from '../components/Mensaje';
 import SelectorTienda from '../components/SelectorTienda';
 import { useTiendaActual } from '../hooks/useTiendaActual';
@@ -71,7 +72,7 @@ export default function Productos() {
   const visibles = datos.productos.filter(
     (p) =>
       (pestana === 'TODOS' || p.estado === pestana) &&
-      (!texto || p.nombre.toLowerCase().includes(texto) || (p.marca ?? '').toLowerCase().includes(texto)),
+      (!texto || p.nombre.toLowerCase().includes(texto) || (p.marca ?? '').toLowerCase().includes(texto) || (p.sku ?? '').toLowerCase().includes(texto)),
   );
 
   // El aviso de éxito se oculta solo a los 4 segundos; los errores se quedan hasta cerrarlos.
@@ -174,7 +175,7 @@ export default function Productos() {
               <input
                 value={busqueda}
                 onChange={(e) => cambiarBusqueda(e.target.value)}
-                placeholder="Buscar por nombre o marca"
+                placeholder="Buscar por nombre, marca o SKU"
                 aria-label="Buscar productos"
                 className="w-full bg-transparent text-[13px] text-[#303030] outline-none"
               />
@@ -201,11 +202,23 @@ export default function Productos() {
               {!cargando && visibles.map((p) => (
                 <tr key={p.idProducto} className="hover:bg-[#f7f7f7]">
                   <td className="px-4 py-3">
-                    <p className="font-medium text-slate-800">{p.nombre}</p>
-                    {p.marca && <p className="text-xs text-slate-500">{p.marca}</p>}
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 shrink-0 overflow-hidden rounded-lg border border-[#e3e3e3] [&_span]:text-xs [&_svg]:hidden">
+                        <ImagenProducto url={p.imagenUrl} nombre={p.nombre} />
+                      </div>
+                      <div>
+                        <p className="font-medium text-[#101010]">{p.nombre}</p>
+                        <p className="text-xs text-[#616161]">{[p.marca, p.sku && `SKU ${p.sku}`].filter(Boolean).join(' · ')}</p>
+                      </div>
+                    </div>
                   </td>
                   {/* Soles (por ahora solo Perú está habilitado para crear tiendas). */}
-                  <td className="whitespace-nowrap px-4 py-3 text-right text-slate-700">{formatoMoneda(p.precio)}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-right text-[#303030]">
+                    {formatoMoneda(p.precio)}
+                    {p.precioComparacion && (
+                      <span className="block text-xs text-[#8a8a8a] line-through">{formatoMoneda(p.precioComparacion)}</span>
+                    )}
+                  </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">
                     {/* Sin stock: se resalta en rojo para que el dueño lo note. */}
                     {p.stock > 0 ? (

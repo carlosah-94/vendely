@@ -5,8 +5,10 @@ import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * Crear o editar un producto simple (issue #10, validaciones RF2.1.1).
@@ -37,5 +39,24 @@ public record ProductoRequest(
         Integer stock,
 
         // Opcional. null o true = activo (visible en el catálogo y vendible); false = borrador (oculto).
-        Boolean activo
+        Boolean activo,
+
+        // Opcional. Precio "antes", que la tienda muestra tachado (precios.monto_comparacion).
+        // Que sea mayor que el precio lo revisa el service (CHECK ck_precios_comparar en la base).
+        @DecimalMin(value = "0.01", message = "El precio de comparación debe ser mayor que 0")
+        @Digits(integer = 10, fraction = 2, message = "El precio de comparación admite hasta 2 decimales")
+        BigDecimal precioComparacion,
+
+        // Opcional. Código interno del vendedor (variantes.sku, VARCHAR(60)).
+        @Size(max = 60, message = "El SKU puede tener hasta 60 caracteres")
+        String sku,
+
+        // Opcional. Enlaces de las fotos, en orden (la primera es la principal). Tabla imagenes_producto.
+        // null = no se tocan las imágenes (así sigue funcionando quien no envía este campo);
+        // lista vacía = se quitan todas.
+        @Size(max = 5, message = "Puedes agregar hasta 5 imágenes")
+        List<@NotBlank(message = "El enlace de la imagen no puede estar vacío")
+             @Size(max = 500, message = "El enlace de la imagen puede tener hasta 500 caracteres")
+             @Pattern(regexp = "^https?://\\S+$", message = "La imagen debe ser un enlace que empiece con http:// o https://")
+             String> imagenes
 ) {}
