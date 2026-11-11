@@ -1,1 +1,29 @@
 @import "tailwindcss";
+
+/*
+ * Colores y letra de Vendely, al estilo del panel de Shopify.
+ * Se reemplaza la escala "violet" por grises oscuros y azul: así todos los botones
+ * y enlaces que ya usaban bg-violet-600 o text-violet-700 toman el nuevo estilo
+ * sin tener que editar cada pantalla.
+ */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --color-violet-50: #f1f1f1;   /* fondo al pasar el mouse */
+  --color-violet-100: #e3e3e3;
+  --color-violet-200: #c9d7f8;  /* anillo de foco de los inputs */
+  --color-violet-300: #b5b5b5;
+  --color-violet-400: #8a8a8a;
+  --color-violet-500: #1650d0;  /* borde del input con foco */
+  --color-violet-600: #303030;  /* botón principal */
+  --color-violet-700: #1a1a1a;  /* botón principal al pasar el mouse, enlaces */
+  --color-violet-800: #101010;
+  --color-violet-900: #0a0a0a;
+}
+
+body {
+  font-size: 14px;
+  color: #303030;
+  background: #f1f1f1;
+  -webkit-font-smoothing: antialiased;
+}

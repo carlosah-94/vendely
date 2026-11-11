@@ -71,7 +71,7 @@ export default function Ventas() {
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Ventas</h1>
+          <h1 className="text-xl font-bold text-[#101010]">Pedidos</h1>
           {tiendas.length > 0 && (
             <SelectorTienda tiendas={tiendas} idTienda={idTienda} onCambiar={cambiarTienda} />
           )}

@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import ImagenProducto from '../../components/ImagenProducto';
 import Mensaje from '../../components/Mensaje';
+import PrecioTienda from '../../components/tienda/PrecioTienda';
 import { useCarrito } from '../../context/CarritoContext';
 import { mensajeDeError } from '../../services/api';
 import { listarProductos } from '../../services/tienda';
-import { formatoMoneda } from '../../utils/formato';
+import { enOferta } from '../../utils/formato';
 
 /** Portada de la tienda: hero con su color y la grilla de productos activos. */
 export default function Vitrina() {
@@ -56,14 +57,18 @@ export default function Vitrina() {
                       nombre={p.nombre}
                       className="transition-transform duration-300 group-hover:scale-105"
                     />
-                    {!p.disponible && (
+                    {!p.disponible ? (
                       <span className="absolute left-2 top-2 rounded-full bg-white px-2.5 py-0.5 text-xs font-medium text-[#303030] shadow-sm">
                         Agotado
+                      </span>
+                    ) : enOferta(p) && (
+                      <span className="absolute left-2 top-2 rounded-full bg-[#303030] px-2.5 py-0.5 text-xs font-medium text-white">
+                        Oferta
                       </span>
                     )}
                   </div>
                   <h3 className="mt-3 text-sm text-[#303030] group-hover:underline">{p.nombre}</h3>
-                  <p className="text-sm text-[#616161]">{formatoMoneda(p.precio)}</p>
+                  <PrecioTienda producto={p} />
                 </Link>
                 <button
                   type="button"

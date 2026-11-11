@@ -1,9 +1,11 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { useState } from 'react';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { ToastProvider } from '../context/ToastContext';
 import { useTiendaActual } from '../hooks/useTiendaActual';
 import {
-  IconoBuscar, IconoClientes, IconoEnlaceExterno, IconoInicio, IconoPedidos, IconoProductos, IconoTienda,
+  IconoBuscar, IconoClientes, IconoEnlaceExterno, IconoInicio, IconoMenu, IconoPedidos, IconoProductos,
+  IconoSalir, IconoTienda,
 } from './Iconos';
 
 /** Opciones del menú según el rol de la cuenta. */
@@ -27,74 +29,125 @@ const NOMBRE_ROL = {
 };
 
 /**
- * Marco común del panel, al estilo de un panel de comercio: barra superior blanca,
- * menú lateral claro con íconos y la página elegida a la derecha.
+ * Marco del panel al estilo del admin de Shopify: un marco oscuro con el menú a la
+ * izquierda y la página elegida dentro de una tarjeta clara con bordes redondeados.
+ * En el celular el menú se esconde y se abre con el botón de tres rayas.
  */
 export default function LayoutPanel() {
   const { usuario, cerrarSesion } = useAuth();
+  const navigate = useNavigate();
+  const [menuAbierto, setMenuAbierto] = useState(false);
+  const [busqueda, setBusqueda] = useState('');
+
   const opciones = MENU[usuario.rol] ?? [];
+  const esDueno = usuario.rol === 'ADMIN_TIENDA';
   const inicial = (usuario.nombres ?? '?').trim().charAt(0).toUpperCase();
+
+  // La búsqueda de arriba lleva a Productos con el texto escrito (como en Shopify).
+  function buscar(evento) {
+    evento.preventDefault();
+    const texto = busqueda.trim();
+    navigate(texto ? `/panel/productos?buscar=${encodeURIComponent(texto)}` : '/panel/productos');
+  }
+
+  const menu = (
+    <nav className="flex h-full flex-col gap-0.5 text-[13px]">
+      {opciones.map(({ ruta, texto, icono: Icono, exacta }) => (
+        <NavLink
+          key={ruta}
+          to={ruta}
+          end={exacta}
+          onClick={() => setMenuAbierto(false)}
+          className={({ isActive }) =>
+            `flex h-[30px] items-center gap-2.5 rounded-xl px-2.5 ${
+              isActive ? 'bg-[#2b2b2b] font-semibold text-[#fcfcfc]' : 'text-[#dcdcdc] hover:bg-[#1f1f1f]'
+            }`
+          }
+        >
+          <Icono tamano={17} />
+          {texto}
+        </NavLink>
+      ))}
+
+      {esDueno && (
+        <>
+          <p className="mt-5 mb-1 px-2.5 text-[12px] font-medium text-[#8a8a8a]">Canales de venta</p>
+          <VerTienda />
+        </>
+      )}
+
+      <button
+        onClick={cerrarSesion}
+        className="mt-auto flex h-[30px] items-center gap-2.5 rounded-xl px-2.5 text-left text-[#dcdcdc] hover:bg-[#1f1f1f]"
+      >
+        <IconoSalir tamano={17} />
+        Cerrar sesión
+      </button>
+    </nav>
+  );
 
   return (
     <ToastProvider>
-      <div className="flex min-h-screen flex-col bg-[#f1f2f4] text-[#303030]" style={{ fontSize: 14 }}>
-        {/* Barra superior */}
-        <header className="flex h-14 items-center gap-4 border-b border-[#e3e3e3] bg-white px-4">
-          <span className="w-44 text-lg font-bold tracking-tight">Vendely</span>
-          <div className="mx-auto flex w-full max-w-md items-center gap-2 rounded-lg border border-[#e3e3e3] bg-[#f7f7f7] px-3 py-1.5 text-[#616161]">
-            <IconoBuscar tamano={16} />
-            <input
-              placeholder="Buscar"
-              aria-label="Buscar"
-              className="w-full bg-transparent text-sm outline-none placeholder:text-[#8a8a8a]"
-            />
-          </div>
-          <div className="flex w-56 items-center justify-end gap-3">
-            <div className="text-right leading-tight">
-              <p className="text-sm font-medium">{usuario.nombres} {usuario.primerApellido}</p>
-              <p className="text-xs text-[#616161]">{NOMBRE_ROL[usuario.rol] ?? usuario.rol}</p>
+      <div className="flex min-h-screen flex-col bg-[#0a0a0a] text-[#303030]">
+        {/* Barra superior oscura */}
+        <header className="flex h-14 shrink-0 items-center gap-3 px-3 md:px-4">
+          <button
+            onClick={() => setMenuAbierto((v) => !v)}
+            className="rounded-lg p-1.5 text-[#dcdcdc] hover:bg-[#1f1f1f] md:hidden"
+            aria-label="Abrir menú"
+          >
+            <IconoMenu tamano={20} />
+          </button>
+          <span className="text-[17px] font-semibold tracking-tight text-white md:w-52">Vendely</span>
+
+          {esDueno ? (
+            <form onSubmit={buscar} className="mx-auto hidden w-full max-w-lg sm:block">
+              <label className="flex items-center gap-2 rounded-xl border border-[#333] bg-[#1f1f1f] px-3 py-1.5 text-[#b5b5b5] focus-within:border-[#5c5c5c]">
+                <IconoBuscar tamano={16} />
+                <input
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  placeholder="Buscar productos"
+                  aria-label="Buscar productos"
+                  className="w-full bg-transparent text-[13px] text-white outline-none placeholder:text-[#8a8a8a]"
+                />
+              </label>
+            </form>
+          ) : (
+            <div className="mx-auto" />
+          )}
+
+          <div className="ml-auto flex items-center gap-2.5 sm:ml-0 md:w-52 md:justify-end">
+            <div className="hidden text-right leading-tight lg:block">
+              <p className="text-[13px] font-medium text-white">{usuario.nombres} {usuario.primerApellido}</p>
+              <p className="text-[12px] text-[#8a8a8a]">{NOMBRE_ROL[usuario.rol] ?? usuario.rol}</p>
             </div>
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#303030] text-sm font-medium text-white">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1650d0] text-[13px] font-semibold text-white">
               {inicial}
             </span>
           </div>
         </header>
 
         <div className="flex min-h-0 flex-1">
-          {/* Menú lateral claro */}
-          <aside className="flex w-56 shrink-0 flex-col bg-[#ebebeb] px-3 py-4">
-            <nav className="flex-1 space-y-1">
-              {opciones.map(({ ruta, texto, icono: Icono, exacta }) => (
-                <NavLink
-                  key={ruta}
-                  to={ruta}
-                  end={exacta}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 rounded-lg px-3 py-2 ${
-                      isActive ? 'bg-white font-semibold shadow-sm' : 'text-[#303030] hover:bg-[#e0e0e0]'
-                    }`
-                  }
-                >
-                  <Icono tamano={18} />
-                  {texto}
-                </NavLink>
-              ))}
-            </nav>
-            <div className="space-y-1 border-t border-[#d6d6d6] pt-3">
-              {usuario.rol === 'ADMIN_TIENDA' && <VerTienda />}
-              <button
-                onClick={cerrarSesion}
-                className="w-full rounded-lg px-3 py-2 text-left text-[#616161] hover:bg-[#e0e0e0]"
-              >
-                Cerrar sesión
-              </button>
-            </div>
-          </aside>
+          {/* Menú lateral (escritorio) */}
+          <aside className="hidden w-60 shrink-0 px-3 pb-4 pt-1 md:block">{menu}</aside>
 
-          {/* min-w-0: sin esto, una tabla ancha estira toda la página hacia la derecha
-              en lugar de desplazarse dentro de su propio contenedor. */}
-          <main className="min-w-0 flex-1 p-8">
-            <Outlet />
+          {/* Menú lateral (celular): se abre encima del contenido */}
+          {menuAbierto && (
+            <div className="fixed inset-0 z-30 md:hidden">
+              <button className="absolute inset-0 bg-black/50" onClick={() => setMenuAbierto(false)} aria-label="Cerrar menú" />
+              <aside className="relative h-full w-64 bg-[#0a0a0a] px-3 py-4">{menu}</aside>
+            </div>
+          )}
+
+          {/* La página va dentro de una tarjeta clara con esquinas redondeadas.
+              min-w-0: sin esto, una tabla ancha estira toda la página hacia la derecha. */}
+          <main className="min-w-0 flex-1 pb-2 pr-2 md:pl-0 pl-2">
+            <div className="min-h-full rounded-2xl bg-[#f1f1f1] px-4 py-6 md:px-8 md:py-7">
+              <div className="mx-auto max-w-6xl">
+                <Outlet />
+              </div>
+            </div>
           </main>
         </div>
       </div>
@@ -102,7 +155,7 @@ export default function LayoutPanel() {
   );
 }
 
-/** "Ver tienda": abre la tienda pública de la tienda elegida en otra pestaña. */
+/** "Tienda online": abre la tienda pública de la tienda elegida en otra pestaña. */
 function VerTienda() {
   const { tienda } = useTiendaActual();
   if (!tienda) {
@@ -113,10 +166,11 @@ function VerTienda() {
       href={`${window.location.origin}/tienda/${tienda.subdominio}`}
       target="_blank"
       rel="noreferrer"
-      className="flex items-center gap-3 rounded-lg px-3 py-2 text-[#303030] hover:bg-[#e0e0e0]"
+      className="flex h-[30px] items-center gap-2.5 rounded-xl px-2.5 text-[#dcdcdc] hover:bg-[#1f1f1f]"
     >
-      <IconoEnlaceExterno tamano={18} />
-      Ver tienda
+      <IconoTienda tamano={17} />
+      <span className="flex-1">Tienda online</span>
+      <IconoEnlaceExterno tamano={14} />
     </a>
   );
 }

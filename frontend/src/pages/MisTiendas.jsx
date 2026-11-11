@@ -27,7 +27,7 @@ export default function MisTiendas() {
 
   return (
     <section className="max-w-3xl space-y-4">
-      <h1 className="text-2xl font-bold">Mis tiendas</h1>
+      <h1 className="text-xl font-bold text-[#101010]">Mis tiendas</h1>
 
       {cargando ? (
         <p className="text-[#616161]">Cargando tiendas...</p>

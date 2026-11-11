@@ -57,3 +57,9 @@ export const IconoTienda = (p) => (
 export const IconoCopiar = (p) => (
   <Icono {...p}><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V6a2 2 0 0 1 2-2h9" /></Icono>
 );
+export const IconoMenu = (p) => (
+  <Icono {...p}><path d="M4 7h16M4 12h16M4 17h16" /></Icono>
+);
+export const IconoSalir = (p) => (
+  <Icono {...p}><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" /><path d="M10 16l-4-4 4-4M6 12h10" /></Icono>
+);

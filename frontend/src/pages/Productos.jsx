@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import FormularioProducto from '../components/FormularioProducto';
+import { IconoBuscar, IconoProductos } from '../components/Iconos';
+import ImagenProducto from '../components/ImagenProducto';
 import Mensaje from '../components/Mensaje';
 import SelectorTienda from '../components/SelectorTienda';
 import { useTiendaActual } from '../hooks/useTiendaActual';
@@ -8,10 +11,18 @@ import { eliminarProducto, listarProductos } from '../services/productos';
 import { formatoMoneda } from '../utils/formato';
 
 const ESTADO = {
-  ACTIVO: { texto: 'Activo', estilo: 'bg-emerald-100 text-emerald-700' },
-  BORRADOR: { texto: 'Borrador', estilo: 'bg-amber-100 text-amber-700' },
-  ARCHIVADO: { texto: 'Archivado', estilo: 'bg-slate-200 text-slate-600' },
+  ACTIVO: { texto: 'Activo', estilo: 'bg-[#e8fcd9] text-[#0c5132]' },
+  BORRADOR: { texto: 'Borrador', estilo: 'bg-[#eaf4ff] text-[#00527c]' },
+  ARCHIVADO: { texto: 'Archivado', estilo: 'bg-[#e3e3e3] text-[#4a4a4a]' },
 };
+
+/** Pestañas sobre la tabla, como en Shopify: filtran por estado sin volver a llamar al backend. */
+const PESTANAS = [
+  { valor: 'TODOS', texto: 'Todos' },
+  { valor: 'ACTIVO', texto: 'Activos' },
+  { valor: 'BORRADOR', texto: 'Borrador' },
+  { valor: 'ARCHIVADO', texto: 'Archivados' },
+];
 
 /**
  * Pantalla de productos del panel del dueño (tarea #18).
@@ -29,6 +40,14 @@ export default function Productos() {
   const [errorAccion, setErrorAccion] = useState('');
   const [formulario, setFormulario] = useState(null);   // null · 'nuevo' · producto a editar
   const [porEliminar, setPorEliminar] = useState(null);
+  const [pestana, setPestana] = useState('TODOS');
+  // El texto puede venir de la búsqueda de la barra superior (?buscar=polo).
+  const [parametros, setParametros] = useSearchParams();
+  const busqueda = parametros.get('buscar') ?? '';
+
+  function cambiarBusqueda(texto) {
+    setParametros(texto ? { buscar: texto } : {}, { replace: true });
+  }
 
   useEffect(() => {
     if (!idTienda) {
@@ -48,6 +67,13 @@ export default function Productos() {
   }, [idTienda, version]);
 
   const cargando = cargandoTiendas || (idTienda !== null && datos.idTienda !== idTienda);
+
+  const texto = busqueda.trim().toLowerCase();
+  const visibles = datos.productos.filter(
+    (p) =>
+      (pestana === 'TODOS' || p.estado === pestana) &&
+      (!texto || p.nombre.toLowerCase().includes(texto) || (p.marca ?? '').toLowerCase().includes(texto) || (p.sku ?? '').toLowerCase().includes(texto)),
+  );
 
   // El aviso de éxito se oculta solo a los 4 segundos; los errores se quedan hasta cerrarlos.
   useEffect(() => {
@@ -91,7 +117,7 @@ export default function Productos() {
     <section className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold text-slate-800">Productos</h1>
+          <h1 className="text-xl font-bold text-[#101010]">Productos</h1>
           {tiendas.length > 0 && (
             <SelectorTienda tiendas={tiendas} idTienda={idTienda} onCambiar={cambiarTienda} />
           )}
@@ -99,9 +125,9 @@ export default function Productos() {
         {tienda && (
           <button
             onClick={() => setFormulario('nuevo')}
-            className="rounded-md bg-violet-600 px-4 py-2 font-semibold text-white hover:bg-violet-700"
+            className="rounded-lg bg-[#303030] px-3 py-1.5 font-semibold text-white shadow-[inset_0_-1px_0_rgba(0,0,0,0.6)] hover:bg-[#1a1a1a]"
           >
-            + Nuevo producto
+            Agregar producto
           </button>
         )}
       </div>
@@ -110,33 +136,89 @@ export default function Productos() {
       {errorAccion && <Mensaje tipo="error" texto={errorAccion} onCerrar={() => setErrorAccion('')} />}
       {datos.error && <Mensaje tipo="error" texto={datos.error} />}
 
-      {tienda && (
-        <div className="overflow-x-auto rounded-xl bg-white shadow">
-          <table className="min-w-full text-sm">
-            <thead className="bg-slate-50 text-left text-slate-600">
+      {tienda && !cargando && datos.productos.length === 0 && !datos.error && (
+        <div className="flex flex-col items-center rounded-xl bg-white px-6 py-14 text-center shadow-[0_1px_0_rgba(0,0,0,0.08),0_0_0_1px_rgba(0,0,0,0.05)]">
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#f1f1f1] text-[#616161]">
+            <IconoProductos tamano={28} />
+          </span>
+          <h2 className="mt-4 text-base font-semibold text-[#101010]">Agrega tus productos</h2>
+          <p className="mt-1 max-w-sm text-[#616161]">
+            Empieza a armar tu catálogo. Los productos activos se muestran en tu tienda online.
+          </p>
+          <button
+            onClick={() => setFormulario('nuevo')}
+            className="mt-5 rounded-lg bg-[#303030] px-3 py-1.5 font-semibold text-white hover:bg-[#1a1a1a]"
+          >
+            Agregar producto
+          </button>
+        </div>
+      )}
+
+      {tienda && (cargando || datos.productos.length > 0) && (
+        <div className="overflow-hidden rounded-xl bg-white shadow-[0_1px_0_rgba(0,0,0,0.08),0_0_0_1px_rgba(0,0,0,0.05)]">
+          <div className="flex flex-wrap items-center gap-2 border-b border-[#ebebeb] px-2 py-2">
+            <div className="flex gap-1">
+              {PESTANAS.map((t) => (
+                <button
+                  key={t.valor}
+                  onClick={() => setPestana(t.valor)}
+                  className={`rounded-lg px-3 py-1 text-[13px] ${
+                    pestana === t.valor ? 'bg-[#ebebeb] font-semibold text-[#101010]' : 'text-[#616161] hover:bg-[#f1f1f1]'
+                  }`}
+                >
+                  {t.texto}
+                </button>
+              ))}
+            </div>
+            <label className="ml-auto flex w-full items-center gap-2 rounded-lg border border-[#ddd] px-2.5 py-1 text-[#8a8a8a] focus-within:border-[#1650d0] sm:w-64">
+              <IconoBuscar tamano={15} />
+              <input
+                value={busqueda}
+                onChange={(e) => cambiarBusqueda(e.target.value)}
+                placeholder="Buscar por nombre, marca o SKU"
+                aria-label="Buscar productos"
+                className="w-full bg-transparent text-[13px] text-[#303030] outline-none"
+              />
+            </label>
+          </div>
+          <div className="overflow-x-auto">
+          <table className="min-w-full text-[13px]">
+            <thead className="bg-[#f7f7f7] text-left text-[#616161]">
               <tr>
-                <th className="px-4 py-3 font-semibold">Nombre</th>
-                <th className="px-4 py-3 text-right font-semibold">Precio</th>
-                <th className="px-4 py-3 text-right font-semibold">Stock</th>
-                <th className="px-4 py-3 font-semibold">Estado</th>
-                <th className="px-4 py-3 text-right font-semibold">Acciones</th>
+                <th className="px-4 py-3 font-medium">Nombre</th>
+                <th className="px-4 py-3 text-right font-medium">Precio</th>
+                <th className="px-4 py-3 text-right font-medium">Stock</th>
+                <th className="px-4 py-3 font-medium">Estado</th>
+                <th className="px-4 py-3 text-right font-medium">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-[#ebebeb]">
               {cargando && (
                 <tr><td colSpan={5} className="px-4 py-6 text-center text-slate-500">Cargando productos...</td></tr>
               )}
-              {!cargando && datos.productos.length === 0 && (
-                <tr><td colSpan={5} className="px-4 py-6 text-center text-slate-500">Esta tienda todavía no tiene productos.</td></tr>
+              {!cargando && visibles.length === 0 && (
+                <tr><td colSpan={5} className="px-4 py-8 text-center text-[#616161]">Ningún producto coincide con el filtro.</td></tr>
               )}
-              {!cargando && datos.productos.map((p) => (
-                <tr key={p.idProducto} className="hover:bg-slate-50">
+              {!cargando && visibles.map((p) => (
+                <tr key={p.idProducto} className="hover:bg-[#f7f7f7]">
                   <td className="px-4 py-3">
-                    <p className="font-medium text-slate-800">{p.nombre}</p>
-                    {p.marca && <p className="text-xs text-slate-500">{p.marca}</p>}
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 shrink-0 overflow-hidden rounded-lg border border-[#e3e3e3] [&_span]:text-xs [&_svg]:hidden">
+                        <ImagenProducto url={p.imagenUrl} nombre={p.nombre} />
+                      </div>
+                      <div>
+                        <p className="font-medium text-[#101010]">{p.nombre}</p>
+                        <p className="text-xs text-[#616161]">{[p.marca, p.sku && `SKU ${p.sku}`].filter(Boolean).join(' · ')}</p>
+                      </div>
+                    </div>
                   </td>
                   {/* Soles (por ahora solo Perú está habilitado para crear tiendas). */}
-                  <td className="whitespace-nowrap px-4 py-3 text-right text-slate-700">{formatoMoneda(p.precio)}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-right text-[#303030]">
+                    {formatoMoneda(p.precio)}
+                    {p.precioComparacion && (
+                      <span className="block text-xs text-[#8a8a8a] line-through">{formatoMoneda(p.precioComparacion)}</span>
+                    )}
+                  </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">
                     {/* Sin stock: se resalta en rojo para que el dueño lo note. */}
                     {p.stock > 0 ? (
@@ -162,6 +244,12 @@ export default function Productos() {
               ))}
             </tbody>
           </table>
+          </div>
+          {!cargando && (
+            <p className="border-t border-[#ebebeb] px-4 py-2.5 text-[12px] text-[#616161]">
+              Mostrando {visibles.length} de {datos.productos.length} productos
+            </p>
+          )}
         </div>
       )}
 

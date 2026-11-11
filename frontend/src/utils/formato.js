@@ -13,3 +13,8 @@ export function formatoFecha(fecha) {
   }
   return new Date(fecha).toLocaleString('es-PE', { dateStyle: 'medium', timeStyle: 'short' });
 }
+
+/** true si el producto tiene un precio "antes" mayor que el actual (está en oferta). */
+export function enOferta(producto) {
+  return producto.precioComparacion != null && Number(producto.precioComparacion) > Number(producto.precio);
+}

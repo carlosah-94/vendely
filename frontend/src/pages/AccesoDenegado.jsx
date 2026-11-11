@@ -16,20 +16,17 @@ export default function AccesoDenegado() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-slate-100 px-4">
-      <div className="max-w-md text-center space-y-3">
-        <p className="text-5xl font-bold text-violet-600">403</p>
-        <h1 className="text-2xl font-bold text-slate-800">Acceso denegado</h1>
-        <p className="text-slate-600">Tu cuenta no tiene permiso para ver esta página.</p>
-        <div className="flex justify-center gap-3">
-          <Link to="/" className="inline-block rounded-md bg-slate-800 px-4 py-2 text-white hover:bg-slate-700">
-            Volver al inicio
+    <main className="flex min-h-screen items-center justify-center bg-[#0a1314] px-4">
+      <div className="w-full max-w-md space-y-3 rounded-2xl bg-white p-8 text-center">
+        <p className="text-sm font-semibold text-[#8e1f0b]">Error 403</p>
+        <h1 className="text-2xl font-semibold text-[#101010]">Acceso denegado</h1>
+        <p className="text-[#4a4a4a]">Tu cuenta no tiene permiso para ver esta página.</p>
+        <div className="flex justify-center gap-3 pt-2">
+          <Link to="/inicio" className="rounded-lg bg-[#303030] px-4 py-2 font-medium text-white hover:bg-[#1a1a1a]">
+            Ir a mi inicio
           </Link>
           {usuario && (
-            <button
-              onClick={salir}
-              className="rounded-md border border-slate-300 px-4 py-2 text-slate-700 hover:bg-slate-200"
-            >
+            <button onClick={salir} className="rounded-lg border border-[#ddd] px-4 py-2 font-medium text-[#303030] hover:bg-[#f7f7f7]">
               Cerrar sesión
             </button>
           )}
