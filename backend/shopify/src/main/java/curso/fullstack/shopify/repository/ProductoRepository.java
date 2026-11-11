@@ -31,6 +31,8 @@ public interface ProductoRepository extends JpaRepository<Producto, Long> {
         String getImagenUrl();
         /** Todas las fotos en orden, separadas por espacios (los enlaces no llevan espacios). */
         String getImagenes();
+        /** Ids de sus categorías separados por espacios ("3 7"). */
+        String getCategorias();
     }
 
     // Los alias van entre comillas para que PostgreSQL respete las mayúsculas (si no, la proyección da null).
@@ -43,7 +45,9 @@ public interface ProductoRepository extends JpaRepository<Producto, Long> {
                    (SELECT im.url FROM imagenes_producto im
                      WHERE im.id_producto = p.id_producto ORDER BY im.posicion LIMIT 1) AS "imagenUrl",
                    (SELECT string_agg(im.url, ' ' ORDER BY im.posicion) FROM imagenes_producto im
-                     WHERE im.id_producto = p.id_producto) AS "imagenes"
+                     WHERE im.id_producto = p.id_producto) AS "imagenes",
+                   (SELECT string_agg(CAST(pc.id_categoria AS text), ' ' ORDER BY pc.id_categoria)
+                      FROM producto_categorias pc WHERE pc.id_producto = p.id_producto) AS "categorias"
               FROM productos p
               LEFT JOIN variantes v   ON v.id_producto = p.id_producto
               LEFT JOIN precios pr    ON pr.id_variante = v.id_variante

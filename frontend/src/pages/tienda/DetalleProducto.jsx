@@ -8,7 +8,18 @@ import { mensajeDeError } from '../../services/api';
 import { enOferta } from '../../utils/formato';
 import { obtenerProducto } from '../../services/tienda';
 
-/** Página de un producto: imagen a la izquierda; nombre, precio, cantidad y botones a la derecha. */
+/** Valores iniciales: los de la primera variante con stock (o la primera, si todas están agotadas). */
+function valoresIniciales(p) {
+  const v = p.variantes?.find((x) => x.stock > 0) ?? p.variantes?.[0];
+  return v ? v.valores : [];
+}
+
+const mismos = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+
+/**
+ * Página de un producto: imagen a la izquierda; nombre, precio, opciones (talla, color),
+ * cantidad y botones a la derecha. Cada combinación es una variante con su precio y su stock.
+ */
 export default function DetalleProducto() {
   const { subdominio } = useOutletContext();
   const { idProducto } = useParams();
@@ -19,6 +30,8 @@ export default function DetalleProducto() {
   const [estado, setEstado] = useState({ clave: null, producto: null, error: '' });
   const [cantidad, setCantidad] = useState(1);
   const [fotoElegida, setFotoElegida] = useState(0);
+  // Valores elegidos de cada opción, del producto de esta página: { clave, valores }.
+  const [eleccion, setEleccion] = useState({ clave: null, valores: [] });
 
   useEffect(() => {
     let vigente = true;
@@ -43,7 +56,35 @@ export default function DetalleProducto() {
   }
 
   const p = estado.producto;
-  const tope = Math.max(p.stock, 1);
+  const opciones = p.opciones ?? [];
+  const valores = eleccion.clave === clave ? eleccion.valores : valoresIniciales(p);
+  const variante = p.variantes?.find((v) => mismos(v.valores, valores)) ?? null;
+  // Lo que se muestra y se agrega al carrito es la variante elegida (precio y stock propios).
+  const elegido = variante
+    ? {
+      ...p,
+      idVariante: variante.idVariante,
+      precio: variante.precio,
+      precioComparacion: variante.precioComparacion,
+      stock: variante.stock,
+      disponible: variante.stock > 0,
+      nombre: opciones.length ? `${p.nombre} - ${variante.nombre}` : p.nombre,
+    }
+    : { ...p, disponible: false, stock: 0 };
+  const tope = Math.max(elegido.stock, 1);
+
+  function elegir(indice, valor) {
+    const nuevos = valores.map((v, i) => (i === indice ? valor : v));
+    setEleccion({ clave, valores: nuevos });
+    setCantidad(1);
+  }
+
+  /** ¿Hay una variante con este valor (y las demás opciones como están) y con stock? */
+  function estadoValor(indice, valor) {
+    const combo = valores.map((v, i) => (i === indice ? valor : v));
+    const v = p.variantes?.find((x) => mismos(x.valores, combo));
+    return !v ? 'no-existe' : v.stock > 0 ? 'disponible' : 'agotado';
+  }
   const fotos = p.imagenes?.length ? p.imagenes : [p.imagenUrl];
   const foto = fotos[Math.min(fotoElegida, fotos.length - 1)];
 
@@ -76,17 +117,46 @@ export default function DetalleProducto() {
         <h1 className="text-3xl font-semibold tracking-tight">{p.nombre}</h1>
         <div>
           <div className="flex items-center gap-3">
-            <PrecioTienda producto={p} grande />
-            {enOferta(p) && (
-              <span className="rounded-full bg-[#303030] px-2.5 py-0.5 text-xs font-medium text-white">Oferta</span>
+            <PrecioTienda producto={elegido} grande />
+            {enOferta(elegido) && (
+              <span className="rounded-full bg-[var(--tienda)] px-2.5 py-0.5 text-xs font-medium text-[var(--tienda-texto)]">Oferta</span>
             )}
           </div>
           <p className="text-sm text-[#616161]">Impuestos incluidos.</p>
         </div>
 
-        {p.disponible ? (
+        {/* Opciones: un botón por valor; tachado si esa combinación está agotada */}
+        {opciones.map((o, i) => (
+          <div key={o.nombre}>
+            <p className="mb-2 text-sm">
+              {o.nombre}: <span className="font-medium">{valores[i]}</span>
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {o.valores.map((valor) => {
+                const estadoV = estadoValor(i, valor);
+                const activo = valores[i] === valor;
+                return (
+                  <button
+                    key={valor}
+                    type="button"
+                    onClick={() => elegir(i, valor)}
+                    disabled={estadoV === 'no-existe'}
+                    aria-pressed={activo}
+                    className={`min-w-12 rounded-full border px-4 py-2 text-sm ${
+                      activo ? 'border-[var(--tienda)] bg-[var(--tienda)] text-[var(--tienda-texto)]' : 'border-[#c9c9c9] hover:border-[#303030]'
+                    } ${estadoV !== 'disponible' ? 'line-through opacity-50' : ''} disabled:cursor-not-allowed`}
+                  >
+                    {valor}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+
+        {elegido.disponible ? (
           <>
-            <p className="text-sm text-[#616161]">{p.stock} disponibles</p>
+            <p className="text-sm text-[#616161]">{elegido.stock} disponibles</p>
             <div>
               <p className="mb-1 text-sm">Cantidad</p>
               <div className="inline-flex items-center rounded-md border border-[#c9c9c9]">
@@ -113,7 +183,7 @@ export default function DetalleProducto() {
               <button
                 type="button"
                 onClick={() => {
-                  agregar(p, cantidad);
+                  agregar(elegido, cantidad);
                   abrir();
                 }}
                 className="w-full rounded-md border border-[#303030] py-3 font-medium hover:bg-[#f3f3f3]"
@@ -123,10 +193,10 @@ export default function DetalleProducto() {
               <button
                 type="button"
                 onClick={() => {
-                  agregar(p, cantidad);
+                  agregar(elegido, cantidad);
                   navigate(`/tienda/${subdominio}/checkout`);
                 }}
-                className="w-full rounded-md bg-[#303030] py-3 font-medium text-white hover:bg-black"
+                className="w-full rounded-md bg-[var(--tienda)] py-3 font-medium text-[var(--tienda-texto)] hover:brightness-90"
               >
                 Comprar ahora
               </button>
@@ -134,7 +204,7 @@ export default function DetalleProducto() {
           </>
         ) : (
           <button type="button" disabled className="w-full cursor-not-allowed rounded-md bg-[#e3e3e3] py-3 font-medium text-[#8a8a8a]">
-            Agotado
+            {variante ? 'Agotado' : 'Combinación no disponible'}
           </button>
         )}
 

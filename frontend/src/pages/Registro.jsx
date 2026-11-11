@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate } from 'react-router-dom';
 import Campo from '../components/Campo';
 import LayoutAcceso from '../components/LayoutAcceso';
 import { useAuth } from '../context/AuthContext';
+import { NOMBRE_MONEDA, usePaisesHabilitados } from '../hooks/usePaisesHabilitados';
 import { api, mensajeDeError } from '../services/api';
 import { estiloInput } from '../utils/estilos';
 
@@ -11,12 +12,12 @@ import { estiloInput } from '../utils/estilos';
  * con el mismo formato que exige la base. Las "empresas" piden razón social.
  */
 const TIPOS_DOCUMENTO = [
-  { pais: 'Perú', tipos: [
+  { pais: 'Perú', idPais: 'PE', tipos: [
     { id: 1, codigo: 'DNI', patron: /^[0-9]{8}$/, ejemplo: '12345678' },
     { id: 2, codigo: 'RUC', patron: /^(10|15|17|20)[0-9]{9}$/, ejemplo: '20601234567', empresa: true },
     { id: 3, codigo: 'Carné de extranjería', patron: /^[0-9]{9}$/, ejemplo: '123456789' },
   ] },
-  { pais: 'Chile', tipos: [{ id: 4, codigo: 'RUT', patron: /^[0-9]{7,8}-[0-9K]$/, ejemplo: '12345678-K', empresa: true }] },
+  { pais: 'Chile', idPais: 'CL', tipos: [{ id: 4, codigo: 'RUT', patron: /^[0-9]{7,8}-[0-9K]$/, ejemplo: '12345678-K', empresa: true }] },
   { pais: 'México', tipos: [
     { id: 5, codigo: 'RFC', patron: /^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/, ejemplo: 'ABC010203XYZ', empresa: true },
     { id: 6, codigo: 'CURP', patron: /^[A-Z]{4}[0-9]{6}[HMX][A-Z]{5}[A-Z0-9][0-9]$/, ejemplo: 'ABCD010203HDFRRN09' },
@@ -107,7 +108,8 @@ export default function Registro() {
     nombres: '', primerApellido: '', segundoApellido: '', correo: '', usuario: '',
     contrasena: '', telefono: '', tipoDocumento: '1', numeroDocumento: '', razonSocial: '',
   });
-  const [tienda, setTienda] = useState({ nombre: '', subdominio: '', correoContacto: '' });
+  const [tienda, setTienda] = useState({ nombre: '', subdominio: '', correoContacto: '', idPais: 'PE' });
+  const paises = usePaisesHabilitados();
   // Mientras el dueño no escriba el subdominio a mano, se arma solo con el nombre de la tienda.
   const [subdominioEditado, setSubdominioEditado] = useState(false);
   const [errores, setErrores] = useState({});
@@ -165,7 +167,13 @@ export default function Registro() {
         numeroDocumento: cuenta.numeroDocumento.trim().toUpperCase(),
         razonSocial: tipoElegido?.empresa ? cuenta.razonSocial.trim() || null : null,
       });
-      setTienda((t) => ({ ...t, correoContacto: nuevo.correo }));
+      // La tienda se propone en el país del documento (RUT → Chile), si ahí se pueden crear tiendas.
+      const paisDocumento = TIPOS_DOCUMENTO.find((g) => g.tipos.some((t) => t.id === Number(cuenta.tipoDocumento)))?.idPais;
+      setTienda((t) => ({
+        ...t,
+        correoContacto: nuevo.correo,
+        idPais: paises.some((p) => p.idPais === paisDocumento) ? paisDocumento : t.idPais,
+      }));
       setErrores({});
       setPaso('tienda');
     } catch (e) {
@@ -192,6 +200,7 @@ export default function Registro() {
         subdominio: tienda.subdominio,
         correoContacto: tienda.correoContacto.trim(),
         permiteInvitados: true,
+        idPais: tienda.idPais,
       });
       // Lo primero que hace un dueño con su tienda nueva es subir productos.
       navigate('/panel/productos', { replace: true });
@@ -309,6 +318,19 @@ export default function Registro() {
               />
               <span className="flex items-center border-l border-slate-200 bg-slate-50 px-3 text-sm text-slate-500">.vendely.pe</span>
             </div>
+          </Campo>
+
+          <Campo
+            etiqueta="País de la tienda"
+            error={errores.idPais}
+            ayuda={(() => {
+              const p = paises.find((x) => x.idPais === tienda.idPais);
+              return p ? `Cobrarás en ${NOMBRE_MONEDA[p.moneda] ?? p.moneda} (${p.moneda}). No se puede cambiar después.` : undefined;
+            })()}
+          >
+            <select value={tienda.idPais} onChange={cambiarTienda('idPais')} className={estiloInput(errores.idPais)}>
+              {paises.map((p) => <option key={p.idPais} value={p.idPais}>{p.nombre}</option>)}
+            </select>
           </Campo>
 
           <Campo etiqueta="Correo de contacto" error={errores.correoContacto} >

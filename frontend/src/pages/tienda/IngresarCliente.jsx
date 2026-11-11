@@ -20,7 +20,8 @@ export default function IngresarCliente() {
   const destino = location.state?.volver ?? `/tienda/${subdominio}`;
 
   const [modo, setModo] = useState('ingresar'); // 'ingresar' | 'registro'
-  const [datos, setDatos] = useState(VACIO);
+  // El teléfono empieza con el prefijo del país de la tienda (+51 Perú, +56 Chile).
+  const [datos, setDatos] = useState({ ...VACIO, telefono: tienda.idPais === 'CL' ? '+56' : '+51' });
   const [errores, setErrores] = useState({});
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -120,7 +121,7 @@ export default function IngresarCliente() {
         <button
           type="submit"
           disabled={enviando}
-          className="w-full rounded-md bg-[#303030] py-3 font-medium text-white hover:bg-black disabled:opacity-60"
+          className="w-full rounded-md bg-[var(--tienda)] py-3 font-medium text-[var(--tienda-texto)] hover:brightness-90 disabled:opacity-60"
         >
           {enviando ? 'Un momento...' : registro ? 'Crear cuenta' : 'Iniciar sesión'}
         </button>

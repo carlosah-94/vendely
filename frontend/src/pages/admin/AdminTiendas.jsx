@@ -70,7 +70,8 @@ export default function AdminTiendas() {
     ['Dueños', r?.duenos],
     ['Clientes', r?.clientes],
     ['Pedidos', r?.pedidos],
-    ['Ventas pagadas', r ? formatoMoneda(r.ventasPagadas) : undefined],
+    // Por moneda: cada tienda cobra en la de su país y no se suman soles con pesos.
+    ['Ventas pagadas', r ? (r.ventasPagadas.length ? r.ventasPagadas.map((v) => formatoMoneda(v.monto, v.moneda)).join(' · ') : formatoMoneda(0, 'PEN')) : undefined],
   ];
 
   return (
@@ -159,7 +160,7 @@ export default function AdminTiendas() {
                   </td>
                   <td className="px-4 py-3 text-right">{t.productos}</td>
                   <td className="px-4 py-3 text-right">{t.pedidos}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right">{formatoMoneda(t.ventasPagadas)}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-right">{formatoMoneda(t.ventasPagadas, t.moneda)}</td>
                   <td className="whitespace-nowrap px-4 py-3 text-[#616161]">{formatoFecha(t.fechaCreacion)}</td>
                   <td className="px-4 py-3">
                     <span

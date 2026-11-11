@@ -40,8 +40,19 @@ export default function NuevaVenta() {
       .then(([c, p]) => setCatalogo({
         idTienda,
         clientes: c.data.filter((x) => x.estado === 'ACTIVO'),
-        // Solo se venden productos activos que tengan precio.
-        productos: p.data.filter((x) => x.estado === 'ACTIVO' && x.precio !== null),
+        // Solo se venden productos activos que tengan precio. Cada variante (talla, color) es una
+        // opción de la lista, porque se vende y descuenta stock por variante.
+        productos: p.data
+          .filter((x) => x.estado === 'ACTIVO' && x.precio !== null)
+          .flatMap((x) => ((x.variantes ?? []).length > 0 ? x.variantes : [{ idVariante: x.idVariante, nombre: 'Única', precio: x.precio, stock: x.stock }])
+            .filter((v) => v.precio !== null)
+            .map((v) => ({
+              ...x,
+              idVariante: v.idVariante,
+              nombre: (x.opciones ?? []).length ? `${x.nombre} - ${v.nombre}` : x.nombre,
+              precio: v.precio,
+              stock: v.stock,
+            }))),
         error: '',
       }))
       .catch((e) => setCatalogo({ idTienda, clientes: [], productos: [], error: mensajeDeError(e) }));
@@ -148,8 +159,8 @@ export default function NuevaVenta() {
     return <Mensaje tipo="info" texto="Todavía no tienes tiendas. Crea una para registrar ventas." />;
   }
 
-  // La vista previa usa soles; el monto final, con su moneda, lo devuelve el backend al guardar.
-  const moneda = 'PEN';
+  // La vista previa va en la moneda de la tienda (soles, pesos chilenos); el monto final lo calcula la base al guardar.
+  const moneda = tienda.moneda ?? 'PEN';
 
   // Un producto ya elegido en otra fila no se ofrece de nuevo: para más unidades se sube la cantidad.
   const elegidos = lineas.map((l) => Number(l.idVariante));
@@ -197,7 +208,7 @@ export default function NuevaVenta() {
           {direccion.estado === 'lista' && direccion.valor && (
             <div className="rounded-md bg-slate-50 p-3 text-sm text-slate-700">
               <p className="font-medium text-slate-800">Dirección de envío</p>
-              <p>{direccion.valor.direccion}, {direccion.valor.distrito}</p>
+              <p>{direccion.valor.direccion}, {direccion.valor.distrito ?? [direccion.valor.ciudad, direccion.valor.pais].filter(Boolean).join(", ")}</p>
               {direccion.valor.referencia && <p className="text-slate-500">Ref.: {direccion.valor.referencia}</p>}
             </div>
           )}

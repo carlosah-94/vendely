@@ -7,6 +7,7 @@ import Mensaje from '../components/Mensaje';
 import SelectorTienda from '../components/SelectorTienda';
 import { useTiendaActual } from '../hooks/useTiendaActual';
 import { mensajeDeError } from '../services/api';
+import { listarCategorias } from '../services/categorias';
 import { eliminarProducto, listarProductos } from '../services/productos';
 import { formatoMoneda } from '../utils/formato';
 
@@ -41,6 +42,8 @@ export default function Productos() {
   const [formulario, setFormulario] = useState(null);   // null · 'nuevo' · producto a editar
   const [porEliminar, setPorEliminar] = useState(null);
   const [pestana, setPestana] = useState('TODOS');
+  const [categoria, setCategoria] = useState('');      // '' = todas
+  const [categorias, setCategorias] = useState({ idTienda: null, lista: [] });
   // El texto puede venir de la búsqueda de la barra superior (?buscar=polo).
   const [parametros, setParametros] = useSearchParams();
   const busqueda = parametros.get('buscar') ?? '';
@@ -66,12 +69,26 @@ export default function Productos() {
     };
   }, [idTienda, version]);
 
+  // Categorías de la tienda, para el filtro.
+  useEffect(() => {
+    if (!idTienda) return undefined;
+    let vigente = true;
+    listarCategorias(idTienda)
+      .then((lista) => vigente && setCategorias({ idTienda, lista }))
+      .catch(() => vigente && setCategorias({ idTienda, lista: [] }));
+    return () => {
+      vigente = false;
+    };
+  }, [idTienda, version]);
+  const listaCategorias = categorias.idTienda === idTienda ? categorias.lista : [];
+
   const cargando = cargandoTiendas || (idTienda !== null && datos.idTienda !== idTienda);
 
   const texto = busqueda.trim().toLowerCase();
   const visibles = datos.productos.filter(
     (p) =>
       (pestana === 'TODOS' || p.estado === pestana) &&
+      (!categoria || (p.categorias ?? []).includes(Number(categoria))) &&
       (!texto || p.nombre.toLowerCase().includes(texto) || (p.marca ?? '').toLowerCase().includes(texto) || (p.sku ?? '').toLowerCase().includes(texto)),
   );
 
@@ -170,7 +187,20 @@ export default function Productos() {
                 </button>
               ))}
             </div>
-            <label className="ml-auto flex w-full items-center gap-2 rounded-lg border border-[#ddd] px-2.5 py-1 text-[#8a8a8a] focus-within:border-[#1650d0] sm:w-64">
+            {listaCategorias.length > 0 && (
+              <select
+                value={categoria}
+                onChange={(e) => setCategoria(e.target.value)}
+                aria-label="Filtrar por categoría"
+                className="ml-auto rounded-lg border border-[#ddd] bg-white px-2 py-1 text-[13px] text-[#303030]"
+              >
+                <option value="">Todas las categorías</option>
+                {listaCategorias.map((c) => (
+                  <option key={c.idCategoria} value={c.idCategoria}>{c.nombre}</option>
+                ))}
+              </select>
+            )}
+            <label className={`${listaCategorias.length > 0 ? '' : 'ml-auto '}flex w-full items-center gap-2 rounded-lg border border-[#ddd] px-2.5 py-1 text-[#8a8a8a] focus-within:border-[#1650d0] sm:w-64`}>
               <IconoBuscar tamano={15} />
               <input
                 value={busqueda}
@@ -208,11 +238,16 @@ export default function Productos() {
                       </div>
                       <div>
                         <p className="font-medium text-[#101010]">{p.nombre}</p>
-                        <p className="text-xs text-[#616161]">{[p.marca, p.sku && `SKU ${p.sku}`].filter(Boolean).join(' · ')}</p>
+                        <p className="text-xs text-[#616161]">
+                          {[
+                            p.marca,
+                            (p.variantes?.length ?? 0) > 1 ? `${p.variantes.length} variantes` : p.sku && `SKU ${p.sku}`,
+                          ].filter(Boolean).join(' · ')}
+                        </p>
                       </div>
                     </div>
                   </td>
-                  {/* Soles (por ahora solo Perú está habilitado para crear tiendas). */}
+                  {/* En la moneda de la tienda: soles en Perú, pesos en Chile. */}
                   <td className="whitespace-nowrap px-4 py-3 text-right text-[#303030]">
                     {formatoMoneda(p.precio)}
                     {p.precioComparacion && (
@@ -276,6 +311,7 @@ export default function Productos() {
       {formulario && tienda && (
         <FormularioProducto
           idTienda={idTienda}
+          impuesto={tienda?.impuesto}
           producto={formulario === 'nuevo' ? null : formulario}
           onGuardado={alGuardar}
           onCerrar={cerrarFormulario}

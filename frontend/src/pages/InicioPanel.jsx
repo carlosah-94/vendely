@@ -11,7 +11,7 @@ import { formatoFecha, formatoMoneda } from '../utils/formato';
 /** Inicio del panel: cuatro números y los últimos 5 pedidos, con las listas que ya existen. */
 export default function InicioPanel() {
   const { tiendas, tienda, idTienda, cambiarTienda, cargando: cargandoTiendas, error: errorTiendas } = useTiendaActual();
-  const [datos, setDatos] = useState({ idTienda: null, pedidos: [], productos: [], clientes: [], error: '' });
+  const [datos, setDatos] = useState({ idTienda: null, pedidos: [], productos: [], clientes: [], inventario: [], error: '' });
 
   useEffect(() => {
     if (!idTienda) {
@@ -19,12 +19,19 @@ export default function InicioPanel() {
     }
     let vigente = true;
     const base = `/panel/tiendas/${idTienda}`;
-    Promise.all([api.get(`${base}/pedidos`), api.get(`${base}/productos`), api.get(`${base}/clientes`)])
-      .then(([pedidos, productos, clientes]) => {
-        if (vigente) setDatos({ idTienda, pedidos: pedidos.data, productos: productos.data, clientes: clientes.data, error: '' });
+    Promise.all([
+      api.get(`${base}/pedidos`), api.get(`${base}/productos`), api.get(`${base}/clientes`), api.get(`${base}/inventario`),
+    ])
+      .then(([pedidos, productos, clientes, inventario]) => {
+        if (vigente) {
+          setDatos({
+            idTienda, pedidos: pedidos.data, productos: productos.data, clientes: clientes.data,
+            inventario: inventario.data, error: '',
+          });
+        }
       })
       .catch((e) => {
-        if (vigente) setDatos({ idTienda, pedidos: [], productos: [], clientes: [], error: mensajeDeError(e) });
+        if (vigente) setDatos({ idTienda, pedidos: [], productos: [], clientes: [], inventario: [], error: mensajeDeError(e) });
       });
     return () => {
       vigente = false;
@@ -44,6 +51,8 @@ export default function InicioPanel() {
     .filter((p) => new Date(p.fechaCreacion).toDateString() === hoy && p.estadoPago === 'APROBADO')
     .reduce((suma, p) => suma + Number(p.total), 0);
   const activos = datos.productos.filter((p) => p.estado === 'ACTIVO').length;
+  // Variantes de productos activos que se están acabando (Inventario → Stock bajo / Agotados).
+  const porReponer = datos.inventario.filter((f) => f.productoActivo && f.estado !== 'OK');
 
   // Guía de primeros pasos (como "Configuración" en Shopify): cada paso se marca solo,
   // según lo que ya existe en la base de datos.
@@ -109,6 +118,19 @@ export default function InicioPanel() {
             ))}
           </ul>
         </div>
+      )}
+
+      {!cargando && porReponer.length > 0 && (
+        <Link
+          to="/panel/productos/inventario"
+          className="flex items-center justify-between gap-3 rounded-xl border border-[#ffd79d] bg-[#fff5c5] px-4 py-3 text-[13px] text-[#4f4700] hover:brightness-[0.98]"
+        >
+          <span>
+            <b>{porReponer.length} {porReponer.length === 1 ? 'producto necesita' : 'productos necesitan'} reposición</b>
+            {' · '}{porReponer.slice(0, 3).map((f) => f.producto).join(', ')}{porReponer.length > 3 ? '...' : ''}
+          </span>
+          <span className="shrink-0 font-medium underline">Ver inventario</span>
+        </Link>
       )}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

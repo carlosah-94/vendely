@@ -63,3 +63,18 @@ export const IconoMenu = (p) => (
 export const IconoSalir = (p) => (
   <Icono {...p}><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" /><path d="M10 16l-4-4 4-4M6 12h10" /></Icono>
 );
+export const IconoEnvio = (p) => (
+  <Icono {...p}><path d="M3 6h11v10H3zM14 9h4l3 3v4h-7" /><circle cx="7" cy="17.5" r="1.8" /><circle cx="17" cy="17.5" r="1.8" /></Icono>
+);
+export const IconoCategoria = (p) => (
+  <Icono {...p}><path d="M3 12V4h8l9 9-8 8-9-9z" /><circle cx="7.5" cy="8.5" r="1.3" /></Icono>
+);
+export const IconoInventario = (p) => (
+  <Icono {...p}><path d="M4 8l8-4 8 4v8l-8 4-8-4z" /><path d="M4 8l8 4 8-4M12 12v8" /></Icono>
+);
+export const IconoPincel = (p) => (
+  <Icono {...p}><path d="M14 4l6 6-8 8H6v-6z" /><path d="M11 7l6 6" /></Icono>
+);
+export const IconoMas = (p) => (
+  <Icono {...p}><path d="M12 5v14M5 12h14" /></Icono>
+);

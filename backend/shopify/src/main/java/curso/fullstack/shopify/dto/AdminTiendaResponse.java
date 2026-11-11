@@ -16,11 +16,12 @@ public record AdminTiendaResponse(
         String correoDueno,
         long productos,
         long pedidos,
-        BigDecimal ventasPagadas
+        BigDecimal ventasPagadas,
+        String moneda               // la de la tienda: "PEN", "CLP"
 ) {
     public static AdminTiendaResponse desde(AdminRepository.FilaTienda f) {
         return new AdminTiendaResponse(f.getIdTienda(), f.getNombre(), f.getSubdominio(), f.getPais(),
                 f.getEstado() != null && f.getEstado() == 1 ? "ACTIVA" : "SUSPENDIDA", Instant.ofEpochSecond(f.getFechaCreacion()).toString(),
-                f.getDueno(), f.getCorreoDueno(), f.getProductos(), f.getPedidos(), f.getVentasPagadas());
+                f.getDueno(), f.getCorreoDueno(), f.getProductos(), f.getPedidos(), f.getVentasPagadas(), f.getMoneda());
     }
 }

@@ -19,8 +19,14 @@ public record ClienteResponse(
         OffsetDateTime fechaCreacion,
         DireccionResponse direccion  // null en la lista (para que sea liviana) o si no tiene
 ) {
+    /**
+     * idPais y pais siempre vienen. En el país de la tienda se llena distrito; en otro país,
+     * ciudad, region y codigoPostal.
+     */
     public record DireccionResponse(Long idDireccion, Long idDistrito, String distrito,
-                                    String direccion, String referencia) {}
+                                    String direccion, String referencia,
+                                    String idPais, String pais, String ciudad, String region,
+                                    String codigoPostal) {}
 
     public static ClienteResponse desde(Login l, DireccionResponse direccion) {
         return new ClienteResponse(l.getIdLogin(), l.getUsuario(), l.getNombres(), l.getPrimerApellido(),

@@ -7,7 +7,7 @@ import { actualizarCliente, buscarDistritos, crearCliente } from '../services/cl
 const RE_CORREO = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const RE_TELEFONO = /^\+[1-9][0-9]{6,14}$/;
 
-function validar(datos, esNuevo) {
+function validar(datos, esNuevo, nivel) {
   const e = {};
   const largo = (v) => v.trim().length;
   if (largo(datos.nombres) < 3 || largo(datos.nombres) > 80) e.nombres = 'Debe tener entre 3 y 80 caracteres';
@@ -20,7 +20,7 @@ function validar(datos, esNuevo) {
     if (datos.contrasena.length < 6 || datos.contrasena.length > 72) e.contrasena = 'Debe tener entre 6 y 72 caracteres';
   }
   if (esNuevo) {
-    if (!datos.idDistrito) e['direccion.idDistrito'] = 'Elige un distrito de la lista';
+    if (!datos.idDistrito) e['direccion.idDistrito'] = `Elige tu ${nivel.toLowerCase()} de la lista`;
     if (!datos.direccion.trim()) e['direccion.direccion'] = 'La dirección es obligatoria';
   }
   return e;
@@ -41,7 +41,7 @@ export default function FormularioCliente({ tienda, cliente, onGuardado, onCerra
     primerApellido: cliente?.primerApellido ?? '',
     segundoApellido: cliente?.segundoApellido ?? '',
     correo: cliente?.correo ?? '',
-    telefono: cliente?.telefono ?? '+51',
+    telefono: cliente?.telefono ?? (tienda.idPais === 'CL' ? '+56' : '+51'),
     contrasena: '',
     idDistrito: null,
     direccion: '',
@@ -67,7 +67,7 @@ export default function FormularioCliente({ tienda, cliente, onGuardado, onCerra
   async function enviar(evento) {
     evento.preventDefault();
     setErrorGeneral('');
-    const encontrados = validar(datos, esNuevo);
+    const encontrados = validar(datos, esNuevo, tienda.nivelFinal ?? 'Distrito');
     setErrores(encontrados);
     if (Object.keys(encontrados).length > 0) {
       return;
@@ -183,6 +183,7 @@ export default function FormularioCliente({ tienda, cliente, onGuardado, onCerra
               <legend className="px-1 text-sm font-semibold text-slate-700">Dirección</legend>
               <BuscadorDistrito
                 idPais={tienda.idPais}
+                etiqueta={tienda.nivelFinal ?? 'Distrito'}
                 error={errores['direccion.idDistrito']}
                 onEscribir={() => setErrores((e) => ({ ...e, 'direccion.idDistrito': undefined }))}
                 onElegir={(id) => {
@@ -247,11 +248,11 @@ function estiloInput(error) {
 }
 
 /**
- * Elegir el distrito escribiendo su nombre ("mira" → Miraflores). Se usa la lista
- * oficial (ubigeo en Perú) porque el backend exige un distrito de esa lista.
+ * Elegir el distrito (Perú) o la comuna (Chile) escribiendo su nombre ("mira" → Miraflores).
+ * Se usa la lista oficial del país de la tienda porque el backend exige una división de esa lista.
  * Espera 300 ms después de la última tecla para no llamar al servidor en cada letra.
  */
-function BuscadorDistrito({ idPais, error, onElegir, onEscribir }) {
+function BuscadorDistrito({ idPais, etiqueta, error, onElegir, onEscribir }) {
   const [texto, setTexto] = useState('');
   const [resultados, setResultados] = useState([]);
   const [elegido, setElegido] = useState(null);
@@ -277,7 +278,7 @@ function BuscadorDistrito({ idPais, error, onElegir, onEscribir }) {
 
   return (
     <div className="relative">
-      <Campo etiqueta="Distrito" error={error} ayuda="Escribe al menos 2 letras y elige de la lista">
+      <Campo etiqueta={etiqueta} error={error} ayuda="Escribe al menos 2 letras y elige de la lista">
         <input
           value={texto}
           onChange={(e) => {
@@ -292,7 +293,7 @@ function BuscadorDistrito({ idPais, error, onElegir, onEscribir }) {
               onElegir(null);
             }
           }}
-          placeholder="Miraflores"
+          placeholder={idPais === 'CL' ? 'Providencia' : 'Miraflores'}
           autoComplete="off"
           className={estiloInput(error)}
         />

@@ -4,17 +4,23 @@ import { useAuth } from '../context/AuthContext';
 import { ToastProvider } from '../context/ToastContext';
 import { useTiendaActual } from '../hooks/useTiendaActual';
 import {
-  IconoBuscar, IconoClientes, IconoEnlaceExterno, IconoInicio, IconoMenu, IconoPedidos, IconoProductos,
+  IconoBuscar, IconoClientes, IconoEnlaceExterno, IconoEnvio, IconoInicio, IconoMenu, IconoPedidos, IconoProductos,
   IconoSalir, IconoTienda,
 } from './Iconos';
 
-/** Opciones del menú según el rol de la cuenta. */
+/**
+ * Opciones del menú según el rol de la cuenta.
+ * sub = opción que cuelga de la anterior (como Inventario bajo Productos en Shopify).
+ */
 const MENU = {
   ADMIN_TIENDA: [
     { ruta: '/panel', texto: 'Inicio', icono: IconoInicio, exacta: true },
     { ruta: '/panel/ventas', texto: 'Pedidos', icono: IconoPedidos },
-    { ruta: '/panel/productos', texto: 'Productos', icono: IconoProductos },
+    { ruta: '/panel/productos', texto: 'Productos', icono: IconoProductos, exacta: true },
+    { ruta: '/panel/productos/inventario', texto: 'Inventario', sub: true },
+    { ruta: '/panel/productos/categorias', texto: 'Categorías', sub: true },
     { ruta: '/panel/clientes', texto: 'Clientes', icono: IconoClientes },
+    { ruta: '/panel/envios', texto: 'Envíos', icono: IconoEnvio },
     { ruta: '/panel/tiendas', texto: 'Mis tiendas', icono: IconoTienda },
   ],
   SUPERADMIN: [
@@ -52,19 +58,19 @@ export default function LayoutPanel() {
 
   const menu = (
     <nav className="flex h-full flex-col gap-0.5 text-[13px]">
-      {opciones.map(({ ruta, texto, icono: Icono, exacta }) => (
+      {opciones.map(({ ruta, texto, icono: Icono, exacta, sub }) => (
         <NavLink
           key={ruta}
           to={ruta}
           end={exacta}
           onClick={() => setMenuAbierto(false)}
           className={({ isActive }) =>
-            `flex h-[30px] items-center gap-2.5 rounded-xl px-2.5 ${
+            `flex h-[30px] items-center gap-2.5 rounded-xl ${sub ? 'pl-[37px] pr-2.5' : 'px-2.5'} ${
               isActive ? 'bg-[#2b2b2b] font-semibold text-[#fcfcfc]' : 'text-[#dcdcdc] hover:bg-[#1f1f1f]'
             }`
           }
         >
-          <Icono tamano={17} />
+          {Icono && <Icono tamano={17} />}
           {texto}
         </NavLink>
       ))}
@@ -73,6 +79,17 @@ export default function LayoutPanel() {
         <>
           <p className="mt-5 mb-1 px-2.5 text-[12px] font-medium text-[#8a8a8a]">Canales de venta</p>
           <VerTienda />
+          <NavLink
+            to="/panel/personalizar"
+            onClick={() => setMenuAbierto(false)}
+            className={({ isActive }) =>
+              `flex h-[30px] items-center rounded-xl pl-[37px] pr-2.5 ${
+                isActive ? 'bg-[#2b2b2b] font-semibold text-[#fcfcfc]' : 'text-[#dcdcdc] hover:bg-[#1f1f1f]'
+              }`
+            }
+          >
+            Personalizar
+          </NavLink>
         </>
       )}
 

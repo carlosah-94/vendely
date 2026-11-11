@@ -45,11 +45,13 @@ public class PagoService {
     private final MercadoPagoClient mercadoPago;
     private final PayPalClient payPal;
     private final BigDecimal tipoCambioPenUsd;
+    private final BigDecimal tipoCambioClpUsd;
     private final String frontendUrl;
 
     public PagoService(PedidoRepository pedidoRepository, PagoRepository pagoRepository,
                        TiendaRepository tiendaRepository, MercadoPagoClient mercadoPago, PayPalClient payPal,
                        @Value("${app.paypal.tipo-cambio-pen-usd:3.75}") BigDecimal tipoCambioPenUsd,
+                       @Value("${app.paypal.tipo-cambio-clp-usd:950}") BigDecimal tipoCambioClpUsd,
                        @Value("${app.frontend-url:http://localhost:5173}") String frontendUrl) {
         this.pedidoRepository = pedidoRepository;
         this.pagoRepository = pagoRepository;
@@ -57,6 +59,7 @@ public class PagoService {
         this.mercadoPago = mercadoPago;
         this.payPal = payPal;
         this.tipoCambioPenUsd = tipoCambioPenUsd;
+        this.tipoCambioClpUsd = tipoCambioClpUsd;
         this.frontendUrl = frontendUrl.endsWith("/") ? frontendUrl.substring(0, frontendUrl.length() - 1) : frontendUrl;
     }
 
@@ -271,7 +274,7 @@ public class PagoService {
     /**
      * Crea la orden en PayPal y guarda el intento (pendiente) con el id de la orden como referencia.
      * Así, al volver, solo se acepta una orden que se creó para ESTE pedido.
-     * PayPal no cobra en soles: si el pedido está en PEN, se convierte a USD con un tipo de cambio fijo.
+     * PayPal no cobra en soles ni en pesos chilenos: el monto se convierte a USD (ver montoPayPal).
      */
     private PagoIniciadoResponse iniciarPayPal(Pedido p, Tienda tienda) {
         BigDecimal montoUsd = montoPayPal(p);
@@ -399,7 +402,11 @@ public class PagoService {
         return resultado(p, Pago.RECHAZADO);
     }
 
-    /** Monto a cobrar en PayPal (USD): el total si el pedido ya está en USD; si está en PEN, convertido. */
+    /**
+     * Monto a cobrar en PayPal (USD): el total si el pedido ya está en USD; si está en soles (PEN)
+     * o pesos chilenos (CLP), convertido con un tipo de cambio fijo de la configuración.
+     * PayPal no acepta esas monedas; el pedido se guarda siempre en la moneda de la tienda.
+     */
     private BigDecimal montoPayPal(Pedido p) {
         String moneda = p.getMoneda() == null ? "PEN" : p.getMoneda().trim();
         if ("USD".equals(moneda)) {
@@ -408,7 +415,10 @@ public class PagoService {
         if ("PEN".equals(moneda)) {
             return p.getTotal().divide(tipoCambioPenUsd, 2, RoundingMode.HALF_UP);
         }
-        throw new ApiException(HttpStatus.BAD_REQUEST, "El pago con PayPal solo está disponible para pedidos en soles o dólares");
+        if ("CLP".equals(moneda)) {
+            return p.getTotal().divide(tipoCambioClpUsd, 2, RoundingMode.HALF_UP);
+        }
+        throw new ApiException(HttpStatus.BAD_REQUEST, "El pago con PayPal no está disponible para pedidos en " + moneda);
     }
 
     private Map<String, Object> consultarOrdenPayPal(String idOrden) {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, mensajeDeError } from '../services/api';
+import { usarMoneda } from '../utils/formato';
 
 const CLAVE_TIENDA = 'vendely_tienda';
 
@@ -23,6 +24,7 @@ export function useTiendaActual() {
   const [idTienda, setIdTienda] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
+  const [version, setVersion] = useState(0);   // sube al crear una tienda: se vuelve a cargar la lista
 
   useEffect(() => {
     api.get('/panel/tiendas')
@@ -35,7 +37,7 @@ export function useTiendaActual() {
       })
       .catch((e) => setError(mensajeDeError(e)))
       .finally(() => setCargando(false));
-  }, []);
+  }, [version]);
 
   function cambiarTienda(id) {
     try {
@@ -47,5 +49,8 @@ export function useTiendaActual() {
   }
 
   const tienda = tiendas.find((t) => t.idTienda === idTienda) ?? null;
-  return { tiendas, tienda, idTienda, cambiarTienda, cargando, error };
+  // Los montos de la pantalla (precios, envíos, ventas) se muestran en la moneda de esta tienda.
+  usarMoneda(tienda?.moneda);
+  const recargar = () => setVersion((v) => v + 1);
+  return { tiendas, tienda, idTienda, cambiarTienda, recargar, cargando, error };
 }
