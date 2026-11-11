@@ -21,12 +21,14 @@ public record ProductoPublicoResponse(
         boolean disponible,            // true si hay stock
         String imagenUrl,              // primera imagen, o null si no tiene
         BigDecimal precioComparacion,  // precio "antes" (tachado), o null
-        List<String> imagenes          // todas las fotos en orden
+        List<String> imagenes,         // todas las fotos en orden
+        List<Long> categorias          // ids de sus categorías (la tienda filtra por ellas)
 ) {
     public static ProductoPublicoResponse desde(ProductoRepository.Fila f) {
         long stock = f.getStock() == null ? 0 : f.getStock();
         return new ProductoPublicoResponse(f.getIdProducto(), f.getNombre(), f.getSlug(), f.getDescripcion(),
                 f.getMarca(), f.getIdVariante(), f.getPrecio(), stock, stock > 0, f.getImagenUrl(),
-                f.getPrecioComparacion(), ProductoResponse.separarImagenes(f.getImagenes()));
+                f.getPrecioComparacion(), ProductoResponse.separarImagenes(f.getImagenes()),
+                ProductoResponse.separarIds(f.getCategorias()));
     }
 }

@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Link, useOutletContext } from 'react-router-dom';
+import { Link, useOutletContext, useSearchParams } from 'react-router-dom';
 import ImagenProducto from '../../components/ImagenProducto';
 import Mensaje from '../../components/Mensaje';
 import PrecioTienda from '../../components/tienda/PrecioTienda';
 import { useCarrito } from '../../context/CarritoContext';
 import { mensajeDeError } from '../../services/api';
+import { categoriasPublicas } from '../../services/categorias';
 import { listarProductos } from '../../services/tienda';
 import { enOferta } from '../../utils/formato';
 
@@ -13,6 +14,20 @@ export default function Vitrina() {
   const { tienda, subdominio } = useOutletContext();
   const { agregar, abrir } = useCarrito();
   const [estado, setEstado] = useState({ subdominio: null, productos: [], error: '' });
+  const [categorias, setCategorias] = useState([]);
+  // La categoría elegida va en la URL (?categoria=polos) para poder compartir el enlace.
+  const [parametros, setParametros] = useSearchParams();
+  const slugCategoria = parametros.get('categoria') ?? '';
+
+  useEffect(() => {
+    let vigente = true;
+    categoriasPublicas(subdominio)
+      .then((lista) => vigente && setCategorias(lista))
+      .catch(() => vigente && setCategorias([]));
+    return () => {
+      vigente = false;
+    };
+  }, [subdominio]);
 
   useEffect(() => {
     let vigente = true;
@@ -25,6 +40,8 @@ export default function Vitrina() {
   }, [subdominio]);
 
   const cargando = estado.subdominio !== subdominio;
+  const elegida = categorias.find((c) => c.slug === slugCategoria);
+  const productos = elegida ? estado.productos.filter((p) => (p.categorias ?? []).includes(elegida.idCategoria)) : estado.productos;
 
   return (
     <>
@@ -44,15 +61,35 @@ export default function Vitrina() {
       </section>
 
       <section id="catalogo" className="mx-auto max-w-6xl scroll-mt-20 px-4 pt-12">
-        <h2 className="mb-6 text-2xl font-semibold">Catálogo</h2>
+        <h2 className="mb-4 text-2xl font-semibold">{elegida ? elegida.nombre : 'Catálogo'}</h2>
+        {categorias.length > 0 && (
+          <div className="mb-6 flex flex-wrap gap-2">
+            {[{ slug: '', nombre: 'Todos' }, ...categorias].map((c) => (
+              <button
+                key={c.slug || 'todos'}
+                type="button"
+                onClick={() => setParametros(c.slug ? { categoria: c.slug } : {}, { replace: true })}
+                className={`rounded-full border px-4 py-1.5 text-sm ${
+                  (elegida?.slug ?? '') === c.slug
+                    ? 'border-[var(--tienda)] bg-[var(--tienda)] text-[var(--tienda-texto)]'
+                    : 'border-[#d9d9d9] hover:border-[#303030]'
+                }`}
+              >
+                {c.nombre}
+              </button>
+            ))}
+          </div>
+        )}
         {estado.error && <Mensaje tipo="error" texto={estado.error} />}
         {cargando ? (
           <p className="text-[#616161]">Cargando productos...</p>
-        ) : estado.productos.length === 0 && !estado.error ? (
-          <p className="text-[#616161]">Esta tienda todavía no tiene productos.</p>
+        ) : productos.length === 0 && !estado.error ? (
+          <p className="text-[#616161]">
+            {elegida ? 'No hay productos en esta categoría.' : 'Esta tienda todavía no tiene productos.'}
+          </p>
         ) : (
           <div className="grid grid-cols-2 gap-x-4 gap-y-8 lg:grid-cols-4">
-            {estado.productos.map((p) => (
+            {productos.map((p) => (
               <article key={p.idProducto} className="group flex flex-col">
                 <Link to={`/tienda/${subdominio}/producto/${p.idProducto}`} className="block">
                   <div className="relative overflow-hidden rounded-md">

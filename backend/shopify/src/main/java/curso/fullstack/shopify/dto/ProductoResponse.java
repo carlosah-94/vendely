@@ -21,12 +21,14 @@ public record ProductoResponse(
         BigDecimal precioComparacion,   // precio "antes" (tachado), o null
         String sku,                     // código interno, o null
         String imagenUrl,               // foto principal, o null
-        List<String> imagenes           // todas las fotos en orden (lista vacía si no tiene)
+        List<String> imagenes,          // todas las fotos en orden (lista vacía si no tiene)
+        List<Long> categorias           // ids de sus categorías
 ) {
     public static ProductoResponse desde(ProductoRepository.Fila f) {
         return new ProductoResponse(f.getIdProducto(), f.getNombre(), f.getSlug(), f.getDescripcion(),
                 f.getMarca(), nombreEstado(f.getEstado()), f.getIdVariante(), f.getPrecio(), f.getStock(),
-                f.getPrecioComparacion(), f.getSku(), f.getImagenUrl(), separarImagenes(f.getImagenes()));
+                f.getPrecioComparacion(), f.getSku(), f.getImagenUrl(), separarImagenes(f.getImagenes()),
+                separarIds(f.getCategorias()));
     }
 
     // La base guarda el estado como número (CHECK 0..2); al frontend se le envía un texto legible.
@@ -45,5 +47,10 @@ public record ProductoResponse(
             return List.of();
         }
         return List.of(texto.trim().split("\\s+"));
+    }
+
+    /** "3 7" → [3, 7]. */
+    static List<Long> separarIds(String texto) {
+        return separarImagenes(texto).stream().map(Long::valueOf).toList();
     }
 }

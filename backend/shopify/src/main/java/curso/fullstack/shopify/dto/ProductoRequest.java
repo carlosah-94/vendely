@@ -58,5 +58,9 @@ public record ProductoRequest(
         List<@NotBlank(message = "El enlace de la imagen no puede estar vacío")
              @Size(max = 500, message = "El enlace de la imagen puede tener hasta 500 caracteres")
              @Pattern(regexp = "^https?://\\S+$", message = "La imagen debe ser un enlace que empiece con http:// o https://")
-             String> imagenes
+             String> imagenes,
+
+        // Opcional. Categorías del producto (ids de la misma tienda). null = no se tocan; [] = ninguna.
+        @Size(max = 20, message = "Un producto puede estar en hasta 20 categorías")
+        List<Long> categorias
 ) {}

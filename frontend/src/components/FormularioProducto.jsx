@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { mensajeDeError } from '../services/api';
+import { listarCategorias } from '../services/categorias';
 import { actualizarProducto, crearProducto } from '../services/productos';
 import { IconoCerrar } from './Iconos';
 import ImagenProducto from './ImagenProducto';
@@ -61,6 +62,8 @@ export default function FormularioProducto({ idTienda, producto, onGuardado, onC
     activo: producto ? producto.estado === 'ACTIVO' : true,
   });
   const [imagenes, setImagenes] = useState(producto?.imagenes ?? []);
+  const [categorias, setCategorias] = useState(producto?.categorias ?? []);
+  const [todasCategorias, setTodasCategorias] = useState(null);   // null = cargando
   const [nuevaImagen, setNuevaImagen] = useState('');
   const [errores, setErrores] = useState({});
   const [errorGeneral, setErrorGeneral] = useState('');
@@ -71,6 +74,21 @@ export default function FormularioProducto({ idTienda, producto, onGuardado, onC
     setDatos((d) => ({ ...d, [campo]: valor }));
     setErrores((e) => ({ ...e, [campo]: undefined }));   // al corregir un campo se quita su error
   };
+
+  // Categorías de la tienda, para marcar a cuáles pertenece el producto.
+  useEffect(() => {
+    let vigente = true;
+    listarCategorias(idTienda)
+      .then((lista) => vigente && setTodasCategorias(lista))
+      .catch(() => vigente && setTodasCategorias([]));
+    return () => {
+      vigente = false;
+    };
+  }, [idTienda]);
+
+  function alternarCategoria(id) {
+    setCategorias((lista) => (lista.includes(id) ? lista.filter((c) => c !== id) : [...lista, id]));
+  }
 
   // Cerrar con la tecla Escape, como cualquier ventana.
   useEffect(() => {
@@ -126,6 +144,7 @@ export default function FormularioProducto({ idTienda, producto, onGuardado, onC
       stock: Number(datos.stock.trim()),
       activo: datos.activo,
       imagenes,
+      categorias,
     };
 
     setEnviando(true);
@@ -332,6 +351,29 @@ export default function FormularioProducto({ idTienda, producto, onGuardado, onC
               <Campo etiqueta="Marca" error={errores.marca}>
                 <input value={datos.marca} onChange={cambiar('marca')} className={estiloInput(errores.marca)} />
               </Campo>
+              <div>
+                <p className="text-[13px] text-[#303030]">Categorías</p>
+                {todasCategorias === null ? (
+                  <p className="mt-1 text-[12px] text-[#616161]">Cargando...</p>
+                ) : todasCategorias.length === 0 ? (
+                  <p className="mt-1 text-[12px] text-[#616161]">Crea categorías en Productos → Categorías.</p>
+                ) : (
+                  <ul className="mt-1 max-h-40 space-y-1 overflow-y-auto">
+                    {todasCategorias.map((c) => (
+                      <li key={c.idCategoria}>
+                        <label className="flex items-center gap-2 text-[13px]">
+                          <input
+                            type="checkbox"
+                            checked={categorias.includes(c.idCategoria)}
+                            onChange={() => alternarCategoria(c.idCategoria)}
+                          />
+                          {c.nombre}
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </Tarjeta>
           </div>
         </div>

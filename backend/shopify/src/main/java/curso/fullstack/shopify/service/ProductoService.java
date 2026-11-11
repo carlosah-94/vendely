@@ -51,11 +51,12 @@ public class ProductoService {
     private final PrecioRepository precioRepository;
     private final InventarioRepository inventarioRepository;
     private final ImagenProductoRepository imagenProductoRepository;
+    private final CategoriaService categoriaService;
 
     public ProductoService(VerificadorTienda verificadorTienda, TiendaRepository tiendaRepository,
                            ProductoRepository productoRepository, VarianteRepository varianteRepository,
                            PrecioRepository precioRepository, InventarioRepository inventarioRepository,
-                           ImagenProductoRepository imagenProductoRepository) {
+                           ImagenProductoRepository imagenProductoRepository, CategoriaService categoriaService) {
         this.verificadorTienda = verificadorTienda;
         this.tiendaRepository = tiendaRepository;
         this.productoRepository = productoRepository;
@@ -63,6 +64,7 @@ public class ProductoService {
         this.precioRepository = precioRepository;
         this.inventarioRepository = inventarioRepository;
         this.imagenProductoRepository = imagenProductoRepository;
+        this.categoriaService = categoriaService;
     }
 
     // ------------------------------------------------------------------ consultar (panel)
@@ -114,6 +116,7 @@ public class ProductoService {
         inventarioRepository.saveAndFlush(i);
 
         guardarImagenes(p, r.imagenes());
+        categoriaService.asignar(idTienda, p.getIdProducto(), r.categorias());
 
         log.info("Producto creado: idProducto={}, tienda={}", p.getIdProducto(), idTienda);
         return fila(idTienda, p.getIdProducto());
@@ -174,6 +177,7 @@ public class ProductoService {
         inventarioRepository.saveAndFlush(i);
 
         guardarImagenes(p, r.imagenes());
+        categoriaService.asignar(idTienda, idProducto, r.categorias());
 
         log.info("Producto actualizado: idProducto={}, tienda={}", idProducto, idTienda);
         return fila(idTienda, idProducto);
