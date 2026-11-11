@@ -52,6 +52,40 @@ public interface DireccionRepository extends JpaRepository<Direccion, Long> {
     @Query(value = "DELETE FROM direcciones WHERE id_login = :idLogin", nativeQuery = true)
     int borrarDeCliente(@Param("idLogin") Long idLogin);
 
+    /** Datos de un país que se usan para validar una dirección y para el selector de países. */
+    interface PaisInfo {
+        String getIdPais();
+        String getNombre();
+        Short getEstado();                  // 1 = Vendely tiene su lista oficial (Perú)
+        Boolean getRequiereCodigoPostal();
+        String getPrefijoTelefono();        // "+34"
+        String getIdMoneda();
+    }
+
+    String COLUMNAS_PAIS = """
+            CAST(id_pais AS text) AS "idPais", nombre AS "nombre", estado AS "estado",
+            requiere_codigo_postal AS "requiereCodigoPostal", prefijo_telefono AS "prefijoTelefono",
+            CAST(id_moneda AS text) AS "idMoneda"
+            """;
+
+    @Query(value = "SELECT " + COLUMNAS_PAIS + " FROM paises WHERE id_pais = :idPais", nativeQuery = true)
+    Optional<PaisInfo> pais(@Param("idPais") String idPais);
+
+    /** Todos los países, por nombre (para el selector de la dirección y de las tarifas). */
+    @Query(value = "SELECT " + COLUMNAS_PAIS + " FROM paises ORDER BY nombre", nativeQuery = true)
+    List<PaisInfo> paises();
+
+    /**
+     * ¿El código postal tiene el formato del país? El formato está en paises.patron_codigo_postal
+     * (expresión regular). Se pregunta a la base para usar exactamente la misma regla que el trigger T12.
+     * Vacío si el país no tiene formato definido.
+     */
+    @Query(value = """
+            SELECT CAST(:codigo AS text) ~ patron_codigo_postal
+              FROM paises WHERE id_pais = :idPais AND patron_codigo_postal IS NOT NULL
+            """, nativeQuery = true)
+    Optional<Boolean> codigoPostalValido(@Param("idPais") String idPais, @Param("codigo") String codigo);
+
     /** Una fila del buscador de distritos. */
     interface DistritoFila {
         Long getIdDistrito();

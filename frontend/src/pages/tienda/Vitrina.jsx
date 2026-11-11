@@ -29,11 +29,15 @@ export default function Vitrina() {
   return (
     <>
       {/* Portada */}
-      <section className="px-4 py-16 text-center text-white sm:py-24" style={{ background: tienda.colorPrincipal || '#303030' }}>
+      {/* Portada con el color de la tienda (Personalizar tienda en el panel) */}
+      <section className="bg-[var(--tienda)] px-4 py-16 text-center text-[var(--tienda-texto)] sm:py-24">
         <div className="mx-auto max-w-2xl space-y-4">
+          {tienda.logoUrl && (
+            <img src={tienda.logoUrl} alt="" className="mx-auto h-16 w-16 rounded-full bg-white object-contain p-1" />
+          )}
           <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">{tienda.nombre}</h1>
-          {tienda.descripcion && <p className="text-lg text-white/85">{tienda.descripcion}</p>}
-          <a href="#catalogo" className="inline-block rounded-md bg-white px-6 py-3 font-medium text-[#303030] hover:bg-white/90">
+          {tienda.descripcion && <p className="text-lg opacity-85">{tienda.descripcion}</p>}
+          <a href="#catalogo" className="inline-block rounded-md bg-[var(--tienda-texto)] px-6 py-3 font-medium text-[var(--tienda)] hover:opacity-90">
             Ver productos
           </a>
         </div>
@@ -62,7 +66,7 @@ export default function Vitrina() {
                         Agotado
                       </span>
                     ) : enOferta(p) && (
-                      <span className="absolute left-2 top-2 rounded-full bg-[#303030] px-2.5 py-0.5 text-xs font-medium text-white">
+                      <span className="absolute left-2 top-2 rounded-full bg-[var(--tienda)] px-2.5 py-0.5 text-xs font-medium text-[var(--tienda-texto)]">
                         Oferta
                       </span>
                     )}
@@ -77,7 +81,7 @@ export default function Vitrina() {
                     agregar(p, 1);
                     abrir();
                   }}
-                  className="mt-3 rounded-md border border-[#303030] py-2 text-sm font-medium hover:bg-[#303030] hover:text-white disabled:cursor-not-allowed disabled:border-[#c9c9c9] disabled:text-[#9a9a9a] disabled:hover:bg-transparent disabled:hover:text-[#9a9a9a]"
+                  className="mt-3 rounded-md border border-[var(--tienda)] py-2 text-sm font-medium hover:bg-[var(--tienda)] hover:text-[var(--tienda-texto)] disabled:cursor-not-allowed disabled:border-[#c9c9c9] disabled:text-[#9a9a9a] disabled:hover:bg-transparent disabled:hover:text-[#9a9a9a]"
                 >
                   {p.disponible ? 'Agregar al carrito' : 'Agotado'}
                 </button>

@@ -75,7 +75,7 @@ export default function ResultadoPago() {
         <p className="text-lg font-medium text-green-700">Pago aprobado</p>
         <p className="text-[#616161]">Tu pedido #{estado.numero} fue confirmado. Te enviaremos tu compra a la dirección indicada.</p>
         <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:justify-center">
-          <Link to={`${base}/mis-pedidos`} className="rounded-md bg-[#303030] px-6 py-3 font-medium text-white hover:bg-black">
+          <Link to={`${base}/mis-pedidos`} className="rounded-md bg-[var(--tienda)] px-6 py-3 font-medium text-[var(--tienda-texto)] hover:brightness-90">
             Ver mis pedidos
           </Link>
           <Link to={base} className="rounded-md border border-[#303030] px-6 py-3 font-medium">
@@ -91,7 +91,7 @@ export default function ResultadoPago() {
       <div className="mx-auto max-w-md space-y-4 px-4 py-16 text-center">
         <h1 className="text-3xl font-semibold tracking-tight">Tu pago está pendiente</h1>
         <p className="text-[#616161]">La pasarela aún no confirma el pago del pedido #{estado.numero}. Revisa más tarde en Mis pedidos.</p>
-        <Link to={`${base}/mis-pedidos`} className="inline-block rounded-md bg-[#303030] px-6 py-3 font-medium text-white">
+        <Link to={`${base}/mis-pedidos`} className="inline-block rounded-md bg-[var(--tienda)] px-6 py-3 font-medium text-[var(--tienda-texto)]">
           Ver mis pedidos
         </Link>
       </div>
@@ -114,7 +114,7 @@ export default function ResultadoPago() {
             type="button"
             onClick={reintentar}
             disabled={reintentando}
-            className="rounded-md bg-[#303030] px-6 py-3 font-medium text-white hover:bg-black disabled:opacity-60"
+            className="rounded-md bg-[var(--tienda)] px-6 py-3 font-medium text-[var(--tienda-texto)] hover:brightness-90 disabled:opacity-60"
           >
             {reintentando ? 'Un momento...' : 'Reintentar pago'}
           </button>

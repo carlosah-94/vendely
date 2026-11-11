@@ -63,7 +63,7 @@ export default function CarritoDrawer({ subdominio }) {
                   cerrar();
                   navigate(`/tienda/${subdominio}/checkout`);
                 }}
-                className="w-full rounded-md bg-[#303030] py-3 font-medium text-white hover:bg-black"
+                className="w-full rounded-md bg-[var(--tienda)] py-3 font-medium text-[var(--tienda-texto)] hover:brightness-90"
               >
                 Finalizar compra
               </button>

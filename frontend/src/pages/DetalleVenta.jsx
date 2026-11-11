@@ -130,7 +130,7 @@ export default function DetalleVenta() {
             <p className="text-slate-800">{cliente.nombres} {cliente.primerApellido} {cliente.segundoApellido ?? ''}</p>
             <p className="text-slate-600">{cliente.correo}</p>
             {cliente.direccion && (
-              <p className="text-slate-600">{cliente.direccion.direccion}, {cliente.direccion.distrito}</p>
+              <p className="text-slate-600">{cliente.direccion.direccion}, {cliente.direccion.distrito ?? [cliente.direccion.ciudad, cliente.direccion.pais].filter(Boolean).join(", ")}</p>
             )}
           </>
         ) : (

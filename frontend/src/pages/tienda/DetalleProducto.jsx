@@ -78,7 +78,7 @@ export default function DetalleProducto() {
           <div className="flex items-center gap-3">
             <PrecioTienda producto={p} grande />
             {enOferta(p) && (
-              <span className="rounded-full bg-[#303030] px-2.5 py-0.5 text-xs font-medium text-white">Oferta</span>
+              <span className="rounded-full bg-[var(--tienda)] px-2.5 py-0.5 text-xs font-medium text-[var(--tienda-texto)]">Oferta</span>
             )}
           </div>
           <p className="text-sm text-[#616161]">Impuestos incluidos.</p>
@@ -126,7 +126,7 @@ export default function DetalleProducto() {
                   agregar(p, cantidad);
                   navigate(`/tienda/${subdominio}/checkout`);
                 }}
-                className="w-full rounded-md bg-[#303030] py-3 font-medium text-white hover:bg-black"
+                className="w-full rounded-md bg-[var(--tienda)] py-3 font-medium text-[var(--tienda-texto)] hover:brightness-90"
               >
                 Comprar ahora
               </button>

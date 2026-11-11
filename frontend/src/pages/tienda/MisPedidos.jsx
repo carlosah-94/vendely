@@ -68,7 +68,7 @@ export default function MisPedidos() {
       ) : estado.pedidos.length === 0 && !estado.error ? (
         <div className="space-y-3 py-10 text-center">
           <p className="text-[#616161]">Todavía no tienes pedidos.</p>
-          <Link to={`/tienda/${subdominio}`} className="inline-block rounded-md bg-[#303030] px-6 py-3 font-medium text-white">
+          <Link to={`/tienda/${subdominio}`} className="inline-block rounded-md bg-[var(--tienda)] px-6 py-3 font-medium text-[var(--tienda-texto)]">
             Ir a la tienda
           </Link>
         </div>
@@ -125,7 +125,7 @@ export default function MisPedidos() {
                       <button
                         type="button"
                         onClick={() => pagar(p.idPedido)}
-                        className="rounded-md bg-[#303030] px-5 py-2 text-sm font-medium text-white hover:bg-black"
+                        className="rounded-md bg-[var(--tienda)] px-5 py-2 text-sm font-medium text-[var(--tienda-texto)] hover:brightness-90"
                       >
                         Pagar con Mercado Pago
                       </button>

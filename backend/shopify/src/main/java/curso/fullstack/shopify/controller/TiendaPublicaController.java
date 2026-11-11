@@ -1,7 +1,9 @@
 package curso.fullstack.shopify.controller;
 
+import curso.fullstack.shopify.dto.PaisEnvioResponse;
 import curso.fullstack.shopify.dto.ProductoPublicoResponse;
 import curso.fullstack.shopify.dto.TiendaPublicaResponse;
+import curso.fullstack.shopify.service.EnvioService;
 import curso.fullstack.shopify.service.ProductoService;
 import curso.fullstack.shopify.service.TiendaService;
 import java.util.List;
@@ -24,10 +26,19 @@ public class TiendaPublicaController {
 
     private final TiendaService tiendaService;
     private final ProductoService productoService;
+    private final EnvioService envioService;
 
-    public TiendaPublicaController(TiendaService tiendaService, ProductoService productoService) {
+    public TiendaPublicaController(TiendaService tiendaService, ProductoService productoService,
+                                   EnvioService envioService) {
         this.tiendaService = tiendaService;
         this.productoService = productoService;
+        this.envioService = envioService;
+    }
+
+    /** Países a los que vende la tienda (el suyo y los que tienen tarifa internacional activa). */
+    @GetMapping("/{subdominio}/envios")
+    public List<PaisEnvioResponse> envios(@PathVariable String subdominio) {
+        return envioService.paisesDeEnvio(subdominio);
     }
 
     @GetMapping("/{subdominio}")

@@ -7,6 +7,7 @@ import Mensaje from '../../components/Mensaje';
 import { useAuth } from '../../context/AuthContext';
 import { useCarrito } from '../../context/CarritoContext';
 import { mensajeDeError } from '../../services/api';
+import { cotizarEnvio, listarPaises } from '../../services/envios';
 import { crearDireccion, crearPedido, iniciarPago, listarDirecciones } from '../../services/tienda';
 import { estiloInput } from '../../utils/estilos';
 import { formatoMoneda } from '../../utils/formato';
@@ -28,6 +29,25 @@ export default function Checkout() {
   const [enviando, setEnviando] = useState(false);
   // Si el pedido ya se creó pero el pago no pudo iniciarse, al reintentar NO se crea otro pedido.
   const [pedidoCreado, setPedidoCreado] = useState(null);
+  // Envío a la dirección elegida: { idDireccion, subtotal, datos } (datos null = calculando).
+  const [envio, setEnvio] = useState(null);
+
+  // Cada vez que cambia la dirección (o el subtotal, por el envío gratis) se pide el costo del envío.
+  useEffect(() => {
+    if (!idDireccion || nueva) return undefined;
+    let vigente = true;
+    cotizarEnvio(idDireccion, subtotal)
+      .then((datos) => vigente && setEnvio({ idDireccion, subtotal, datos, error: '' }))
+      .catch((e) => vigente && setEnvio({ idDireccion, subtotal, datos: null, error: mensajeDeError(e) }));
+    return () => {
+      vigente = false;
+    };
+  }, [idDireccion, nueva, subtotal]);
+
+  // Solo vale la cotización de la dirección y el subtotal actuales.
+  const cotizacion = envio && envio.idDireccion === idDireccion && envio.subtotal === subtotal && !nueva ? envio : null;
+  const costoEnvio = cotizacion?.datos?.disponible ? Number(cotizacion.datos.costo) : null;
+  const noEnvia = cotizacion?.datos && !cotizacion.datos.disponible;
 
   useEffect(() => {
     let vigente = true;
@@ -69,7 +89,7 @@ export default function Checkout() {
     return (
       <div className="mx-auto max-w-md space-y-4 px-4 py-20 text-center">
         <h1 className="text-2xl font-semibold">Tu carrito está vacío</h1>
-        <Link to={`/tienda/${subdominio}`} className="inline-block rounded-md bg-[#303030] px-6 py-3 font-medium text-white">
+        <Link to={`/tienda/${subdominio}`} className="inline-block rounded-md bg-[var(--tienda)] px-6 py-3 font-medium text-[var(--tienda-texto)]">
           Volver a la tienda
         </Link>
       </div>
@@ -99,18 +119,26 @@ export default function Checkout() {
           <dt>Subtotal</dt>
           <dd>{formatoMoneda(subtotal)}</dd>
         </div>
-        <div className="flex justify-between text-[#616161]">
+        <div className="flex justify-between">
           <dt>Envío</dt>
-          <dd>Se calcula según tu dirección</dd>
+          <dd className={costoEnvio == null ? 'text-[#616161]' : ''}>
+            {costoEnvio != null
+              ? (costoEnvio === 0 ? 'Gratis' : formatoMoneda(costoEnvio))
+              : noEnvia ? 'No disponible' : cotizacion ? '-' : 'Se calcula según tu dirección'}
+          </dd>
         </div>
         <div className="flex items-baseline justify-between pt-2 text-xl font-semibold">
           <dt>Total</dt>
           <dd>
             <span className="mr-2 text-xs font-normal text-[#616161]">PEN</span>
-            {formatoMoneda(subtotal)}
+            {formatoMoneda(subtotal + (costoEnvio ?? 0))}
           </dd>
         </div>
-        <p className="text-xs text-[#616161]">Más el costo de envío. Impuestos incluidos.</p>
+        <p className="text-xs text-[#616161]">
+          {cotizacion?.datos?.internacional
+            ? 'Venta al extranjero: sin IGV. Los impuestos de importación los pagas al recibir.'
+            : costoEnvio != null ? 'Impuestos incluidos.' : 'Más el costo de envío. Impuestos incluidos.'}
+        </p>
       </dl>
     </div>
   );
@@ -165,7 +193,7 @@ export default function Checkout() {
                       <span>
                         {d.direccion}
                         <span className="block text-[#616161]">
-                          {d.distrito}
+                          {textoUbicacion(d, tienda.idPais)}
                           {d.referencia ? ` · ${d.referencia}` : ''}
                         </span>
                       </span>
@@ -180,6 +208,27 @@ export default function Checkout() {
                 Usar otra dirección
               </button>
             )}
+
+            {/* Costo y plazo del envío a la dirección elegida */}
+            {cotizacion?.datos?.disponible && (
+              <div className="rounded-md border border-[#d9d9d9] bg-[#f5f5f5] px-3 py-2.5 text-sm">
+                <p className="flex justify-between font-medium">
+                  <span>{cotizacion.datos.internacional ? `Envío internacional a ${cotizacion.datos.pais}` : 'Envío estándar'}</span>
+                  <span>{costoEnvio === 0 ? 'Gratis' : formatoMoneda(costoEnvio)}</span>
+                </p>
+                {cotizacion.datos.diasEntregaMax != null && (
+                  <p className="text-[#616161]">
+                    Llega en {cotizacion.datos.diasEntregaMin ?? 1} a {cotizacion.datos.diasEntregaMax} días hábiles
+                  </p>
+                )}
+                {cotizacion.datos.envioGratisDesde != null && costoEnvio > 0 && (
+                  <p className="text-[#616161]">Gratis en compras desde {formatoMoneda(cotizacion.datos.envioGratisDesde)}</p>
+                )}
+                {cotizacion.datos.mensaje && <p className="mt-1 text-xs text-[#616161]">{cotizacion.datos.mensaje}</p>}
+              </div>
+            )}
+            {noEnvia && <Mensaje tipo="error" texto={cotizacion.datos.mensaje} />}
+            {cotizacion?.error && <Mensaje tipo="error" texto={cotizacion.error} />}
 
             {nueva && direcciones && (
               <FormularioDireccion
@@ -208,8 +257,8 @@ export default function Checkout() {
           <button
             type="button"
             onClick={pagar}
-            disabled={enviando || !idDireccion || nueva}
-            className="w-full rounded-md bg-[#303030] py-4 text-lg font-medium text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={enviando || !idDireccion || nueva || !cotizacion?.datos?.disponible}
+            className="w-full rounded-md bg-[var(--tienda)] py-4 text-lg font-medium text-[var(--tienda-texto)] hover:brightness-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {enviando ? 'Procesando...' : 'Pagar ahora'}
           </button>
@@ -226,16 +275,51 @@ export default function Checkout() {
   );
 }
 
-/** Formulario de una dirección nueva, con el buscador de distritos del país de la tienda. */
+/** Ubicación de una dirección: el distrito si es del país de la tienda; si no, ciudad, región, CP y país. */
+function textoUbicacion(d, idPaisTienda) {
+  if (d.idPais && d.idPais !== idPaisTienda) {
+    return [d.ciudad, d.region, d.codigoPostal, d.pais].filter(Boolean).join(', ');
+  }
+  return d.distrito;
+}
+
+/**
+ * Formulario de una dirección nueva. En el país de la tienda se busca el distrito de la lista
+ * oficial; en otro país se escriben la ciudad, la región y el código postal (como en Shopify).
+ */
 function FormularioDireccion({ idPais, puedeCancelar, onCancelar, onGuardada }) {
-  const [datos, setDatos] = useState({ idDistrito: null, direccion: '', referencia: '', telefono: '+51' });
+  const [paises, setPaises] = useState([]);
+  const [datos, setDatos] = useState({
+    idPais, idDistrito: null, ciudad: '', region: '', codigoPostal: '', direccion: '', referencia: '', telefono: '+51',
+  });
   const [errores, setErrores] = useState({});
   const [error, setError] = useState('');
   const [guardando, setGuardando] = useState(false);
 
+  useEffect(() => {
+    listarPaises().then(setPaises).catch(() => setPaises([]));
+  }, []);
+
+  const local = datos.idPais === idPais;
+  const pais = paises.find((p) => p.idPais === datos.idPais);
+
+  function cambiarPais(nuevo) {
+    const prefijo = paises.find((p) => p.idPais === nuevo)?.prefijoTelefono ?? '+';
+    setDatos((d) => ({
+      ...d,
+      idPais: nuevo,
+      idDistrito: null,
+      // Si el teléfono solo tenía el prefijo del país anterior, se cambia por el nuevo.
+      telefono: /^\+\d{0,4}$/.test(d.telefono.trim()) ? prefijo : d.telefono,
+    }));
+    setErrores({});
+  }
+
   async function guardar() {
     const e = {};
-    if (!datos.idDistrito) e.idDistrito = 'Elige un distrito de la lista';
+    if (local && !datos.idDistrito) e.idDistrito = 'Elige un distrito de la lista';
+    if (!local && !datos.ciudad.trim()) e.ciudad = 'Escribe la ciudad';
+    if (!local && pais?.requiereCodigoPostal && !datos.codigoPostal.trim()) e.codigoPostal = 'El código postal es obligatorio en este país';
     if (!datos.direccion.trim()) e.direccion = 'La dirección es obligatoria';
     if (!/^\+[1-9][0-9]{6,14}$/.test(datos.telefono.trim())) e.telefono = 'Formato internacional, por ejemplo +51987654321';
     setErrores(e);
@@ -245,7 +329,11 @@ function FormularioDireccion({ idPais, puedeCancelar, onCancelar, onGuardada }) 
     setError('');
     try {
       const creada = await crearDireccion({
-        idDistrito: datos.idDistrito,
+        idPais: datos.idPais,
+        idDistrito: local ? datos.idDistrito : null,
+        ciudad: local ? null : datos.ciudad.trim(),
+        region: local ? null : datos.region.trim() || null,
+        codigoPostal: datos.codigoPostal.trim() || null,
         direccion: datos.direccion.trim(),
         referencia: datos.referencia.trim() || null,
         telefono: datos.telefono.trim(),
@@ -265,14 +353,50 @@ function FormularioDireccion({ idPais, puedeCancelar, onCancelar, onGuardada }) 
   return (
     <div className="space-y-4 rounded-md border border-[#d9d9d9] p-4">
       {error && <Mensaje tipo="error" texto={error} />}
-      <BuscadorDistrito
-        idPais={idPais}
-        error={errores.idDistrito}
-        onElegir={(id) => {
-          setDatos((d) => ({ ...d, idDistrito: id }));
-          setErrores((er) => ({ ...er, idDistrito: undefined }));
-        }}
-      />
+      <Campo etiqueta="País o región">
+        <select value={datos.idPais} onChange={(e) => cambiarPais(e.target.value)} className={estiloInput()}>
+          {paises.length === 0 && <option value={idPais}>{idPais}</option>}
+          {paises.map((p) => (
+            <option key={p.idPais} value={p.idPais}>{p.nombre}</option>
+          ))}
+        </select>
+      </Campo>
+      {local ? (
+        <BuscadorDistrito
+          idPais={idPais}
+          error={errores.idDistrito}
+          onElegir={(id) => {
+            setDatos((d) => ({ ...d, idDistrito: id }));
+            setErrores((er) => ({ ...er, idDistrito: undefined }));
+          }}
+        />
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Campo etiqueta="Ciudad" error={errores.ciudad}>
+            <input
+              value={datos.ciudad}
+              onChange={(e) => setDatos((d) => ({ ...d, ciudad: e.target.value }))}
+              placeholder="Madrid"
+              className={estiloInput(errores.ciudad)}
+            />
+          </Campo>
+          <Campo etiqueta="Provincia o estado" error={errores.region}>
+            <input
+              value={datos.region}
+              onChange={(e) => setDatos((d) => ({ ...d, region: e.target.value }))}
+              className={estiloInput(errores.region)}
+            />
+          </Campo>
+          <Campo etiqueta={pais?.requiereCodigoPostal ? 'Código postal' : 'Código postal (opcional)'} error={errores.codigoPostal}>
+            <input
+              value={datos.codigoPostal}
+              onChange={(e) => setDatos((d) => ({ ...d, codigoPostal: e.target.value }))}
+              placeholder="28001"
+              className={estiloInput(errores.codigoPostal)}
+            />
+          </Campo>
+        </div>
+      )}
       <Campo etiqueta="Dirección" error={errores.direccion}>
         <input
           value={datos.direccion}
@@ -289,7 +413,7 @@ function FormularioDireccion({ idPais, puedeCancelar, onCancelar, onGuardada }) 
           className={estiloInput()}
         />
       </Campo>
-      <Campo etiqueta="Teléfono de contacto" error={errores.telefono} ayuda="Con código de país: +51987654321">
+      <Campo etiqueta="Teléfono de contacto" error={errores.telefono} ayuda={`Con código de país: ${pais?.prefijoTelefono ?? '+51'}...`}>
         <input
           type="tel"
           value={datos.telefono}
@@ -302,7 +426,7 @@ function FormularioDireccion({ idPais, puedeCancelar, onCancelar, onGuardada }) 
           type="button"
           onClick={guardar}
           disabled={guardando}
-          className="rounded-md bg-[#303030] px-5 py-2.5 text-sm font-medium text-white hover:bg-black disabled:opacity-60"
+          className="rounded-md bg-[var(--tienda)] px-5 py-2.5 text-sm font-medium text-[var(--tienda-texto)] hover:brightness-90 disabled:opacity-60"
         >
           {guardando ? 'Guardando...' : 'Guardar dirección'}
         </button>

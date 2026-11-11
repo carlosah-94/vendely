@@ -12,7 +12,7 @@ export default function Carrito() {
     return (
       <div className="mx-auto max-w-md space-y-4 px-4 py-20 text-center">
         <h1 className="text-2xl font-semibold">Tu carrito está vacío</h1>
-        <Link to={`/tienda/${subdominio}`} className="inline-block rounded-md bg-[#303030] px-6 py-3 font-medium text-white">
+        <Link to={`/tienda/${subdominio}`} className="inline-block rounded-md bg-[var(--tienda)] px-6 py-3 font-medium text-[var(--tienda-texto)]">
           Seguir comprando
         </Link>
       </div>
@@ -31,7 +31,7 @@ export default function Carrito() {
         <p className="text-xs text-[#616161]">Impuestos incluidos. El envío se calcula al finalizar la compra.</p>
         <Link
           to={`/tienda/${subdominio}/checkout`}
-          className="block rounded-md bg-[#303030] py-3 text-center font-medium text-white hover:bg-black"
+          className="block rounded-md bg-[var(--tienda)] py-3 text-center font-medium text-[var(--tienda-texto)] hover:brightness-90"
         >
           Continuar compra
         </Link>

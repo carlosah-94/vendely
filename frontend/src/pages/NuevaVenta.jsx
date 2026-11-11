@@ -197,7 +197,7 @@ export default function NuevaVenta() {
           {direccion.estado === 'lista' && direccion.valor && (
             <div className="rounded-md bg-slate-50 p-3 text-sm text-slate-700">
               <p className="font-medium text-slate-800">Dirección de envío</p>
-              <p>{direccion.valor.direccion}, {direccion.valor.distrito}</p>
+              <p>{direccion.valor.direccion}, {direccion.valor.distrito ?? [direccion.valor.ciudad, direccion.valor.pais].filter(Boolean).join(", ")}</p>
               {direccion.valor.referencia && <p className="text-slate-500">Ref.: {direccion.valor.referencia}</p>}
             </div>
           )}

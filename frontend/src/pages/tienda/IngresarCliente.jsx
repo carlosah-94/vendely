@@ -120,7 +120,7 @@ export default function IngresarCliente() {
         <button
           type="submit"
           disabled={enviando}
-          className="w-full rounded-md bg-[#303030] py-3 font-medium text-white hover:bg-black disabled:opacity-60"
+          className="w-full rounded-md bg-[var(--tienda)] py-3 font-medium text-[var(--tienda-texto)] hover:brightness-90 disabled:opacity-60"
         >
           {enviando ? 'Un momento...' : registro ? 'Crear cuenta' : 'Iniciar sesión'}
         </button>

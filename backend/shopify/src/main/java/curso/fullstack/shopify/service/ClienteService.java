@@ -96,11 +96,9 @@ public class ClienteService {
         if (loginRepository.existsByCorreoAndIdTienda(correo, idTienda)) {
             throw new ApiException(HttpStatus.CONFLICT, "Ya hay un cliente con ese correo en esta tienda");
         }
-        // Se valida el distrito ANTES de crear nada, para responder 400 claro (la base también lo revisa).
-        if (!direccionRepository.esDistritoValido(r.direccion().idDistrito(), tienda.getIdPais())) {
-            throw new ApiException(HttpStatus.BAD_REQUEST,
-                    "El distrito no es válido: debe ser un distrito de la lista oficial del país de la tienda");
-        }
+        // Se valida la ubicación ANTES de crear nada, para responder 400 claro (la base también lo revisa).
+        Direccion d = new Direccion();
+        ubicar(d, r.direccion(), tienda.getIdPais());
 
         String usuario = elegirUsuario(r.usuario(), correo, idTienda);
 
@@ -121,10 +119,7 @@ public class ClienteService {
         // refresh: lee lo que puso la base (fecha_creacion = DEFAULT now()); si no, saldría null.
         entityManager.refresh(l);
 
-        Direccion d = new Direccion();
         d.setIdLogin(l.getIdLogin());
-        d.setIdPais(tienda.getIdPais());          // la tienda vende dentro de su país
-        d.setIdDivision(r.direccion().idDistrito());
         // Destinatario y teléfono se toman del cliente para no pedirlos dos veces en el formulario.
         d.setDestinatario(l.getNombres() + " " + l.getPrimerApellido());
         d.setTelefono(l.getTelefono());
@@ -206,7 +201,11 @@ public class ClienteService {
                 .stream().map(this::aRespuesta).toList();
     }
 
-    /** Crea una dirección para el cliente que inició sesión. El distrito debe ser del país de su tienda. */
+    /**
+     * Crea una dirección para el cliente que inició sesión: en el país de la tienda (distrito de la
+     * lista oficial) o en otro país (ciudad escrita). Que la tienda envíe a ese país se revisa
+     * al cotizar el envío y al crear el pedido, no aquí: el cliente puede guardar su dirección igual.
+     */
     @Transactional
     public DireccionResponse crearMiDireccion(UsuarioAutenticado yo, DireccionRequest r) {
         Login cliente = loginRepository.findByIdLoginAndIdTiendaAndIdRol(yo.idLogin(), yo.idTienda(), CLIENTE)
@@ -214,10 +213,8 @@ public class ClienteService {
         Tienda tienda = tiendaRepository.findById(yo.idTienda())
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "La tienda no existe"));
 
-        if (!direccionRepository.esDistritoValido(r.idDistrito(), tienda.getIdPais())) {
-            throw new ApiException(HttpStatus.BAD_REQUEST,
-                    "El distrito no es válido: debe ser un distrito de la lista oficial del país de la tienda");
-        }
+        Direccion d = new Direccion();
+        ubicar(d, r, tienda.getIdPais());
         // El teléfono de la dirección es obligatorio en la base: el enviado, o si no el de la cuenta.
         String telefono = vacioANull(r.telefono());
         if (telefono == null) {
@@ -227,10 +224,7 @@ public class ClienteService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Indica un teléfono de contacto para el envío");
         }
 
-        Direccion d = new Direccion();
         d.setIdLogin(cliente.getIdLogin());
-        d.setIdPais(tienda.getIdPais());
-        d.setIdDivision(r.idDistrito());
         d.setDestinatario(cliente.getNombres() + " " + cliente.getPrimerApellido());
         d.setTelefono(telefono);
         d.setDireccion(r.direccion().trim());
@@ -261,7 +255,59 @@ public class ClienteService {
 
     private DireccionResponse aRespuesta(Direccion d) {
         String distrito = d.getIdDivision() == null ? null : direccionRepository.nombreDivision(d.getIdDivision());
-        return new DireccionResponse(d.getIdDireccion(), d.getIdDivision(), distrito, d.getDireccion(), d.getReferencia());
+        String pais = direccionRepository.pais(d.getIdPais()).map(DireccionRepository.PaisInfo::getNombre).orElse(d.getIdPais());
+        return new DireccionResponse(d.getIdDireccion(), d.getIdDivision(), distrito, d.getDireccion(), d.getReferencia(),
+                d.getIdPais(), pais, d.getCiudad(), d.getRegion(), d.getCodigoPostal());
+    }
+
+    /**
+     * Completa el país y la ubicación de una dirección, con las mismas reglas que la base (T12):
+     * - País de la tienda: distrito de la lista oficial, del último nivel. Sin ciudad ni región escritas.
+     * - Otro país: ciudad obligatoria, región opcional y código postal si el país lo exige,
+     *   con el formato del país. Sin distrito.
+     * Se valida aquí para responder 400 con un mensaje claro en vez del error del trigger.
+     */
+    private void ubicar(Direccion d, DireccionRequest r, String paisTienda) {
+        String idPais = (r.idPais() == null || r.idPais().isBlank()) ? paisTienda : r.idPais().trim();
+        DireccionRepository.PaisInfo pais = direccionRepository.pais(idPais)
+                .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "El país no existe"));
+        String codigoPostal = vacioANull(r.codigoPostal());
+        if (codigoPostal != null) {
+            codigoPostal = codigoPostal.toUpperCase(Locale.ROOT);
+        }
+
+        d.setIdPais(idPais);
+        if (idPais.equals(paisTienda)) {
+            if (r.idDistrito() == null || !direccionRepository.esDistritoValido(r.idDistrito(), idPais)) {
+                throw new ApiException(HttpStatus.BAD_REQUEST,
+                        "Elige el distrito de la lista oficial de " + pais.getNombre());
+            }
+            d.setIdDivision(r.idDistrito());
+            d.setCiudad(null);
+            d.setRegion(null);
+        } else {
+            if (pais.getEstado() != null && pais.getEstado() == 1) {
+                // Un país con lista oficial exige elegir la división (T12); hoy solo Perú la tiene.
+                throw new ApiException(HttpStatus.BAD_REQUEST,
+                        "Por ahora no se pueden registrar direcciones en " + pais.getNombre() + " desde esta tienda");
+            }
+            String ciudad = vacioANull(r.ciudad());
+            if (ciudad == null) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "Escribe la ciudad");
+            }
+            d.setIdDivision(null);
+            d.setCiudad(ciudad);
+            d.setRegion(vacioANull(r.region()));
+        }
+
+        if (codigoPostal == null && Boolean.TRUE.equals(pais.getRequiereCodigoPostal())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "En " + pais.getNombre() + " el código postal es obligatorio");
+        }
+        if (codigoPostal != null && !direccionRepository.codigoPostalValido(idPais, codigoPostal).orElse(true)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "El código postal " + codigoPostal + " no tiene el formato de " + pais.getNombre());
+        }
+        d.setCodigoPostal(codigoPostal);
     }
 
     /**
