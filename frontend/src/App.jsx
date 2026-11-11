@@ -2,9 +2,10 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import LayoutPanel from './components/LayoutPanel';
 import RutaProtegida from './components/RutaProtegida';
 import AccesoDenegado from './pages/AccesoDenegado';
+import AdminCuentas from './pages/admin/AdminCuentas';
+import AdminTiendas from './pages/admin/AdminTiendas';
 import Clientes from './pages/Clientes';
 import DetalleVenta from './pages/DetalleVenta';
-import EnConstruccion from './pages/EnConstruccion';
 import Inicio from './pages/Inicio';
 import InicioPanel from './pages/InicioPanel';
 import Login from './pages/Login';
@@ -64,8 +65,8 @@ export default function App() {
       {/* Administración de Vendely */}
       <Route element={<RutaProtegida roles={['SUPERADMIN']} />}>
         <Route element={<LayoutPanel />}>
-          <Route path="/admin/tiendas" element={<EnConstruccion titulo="Tiendas de Vendely" />} />
-          <Route path="/admin/cuentas" element={<EnConstruccion titulo="Cuentas" />} />
+          <Route path="/admin/tiendas" element={<AdminTiendas />} />
+          <Route path="/admin/cuentas" element={<AdminCuentas />} />
         </Route>
       </Route>
 
