@@ -40,8 +40,19 @@ export default function NuevaVenta() {
       .then(([c, p]) => setCatalogo({
         idTienda,
         clientes: c.data.filter((x) => x.estado === 'ACTIVO'),
-        // Solo se venden productos activos que tengan precio.
-        productos: p.data.filter((x) => x.estado === 'ACTIVO' && x.precio !== null),
+        // Solo se venden productos activos que tengan precio. Cada variante (talla, color) es una
+        // opción de la lista, porque se vende y descuenta stock por variante.
+        productos: p.data
+          .filter((x) => x.estado === 'ACTIVO' && x.precio !== null)
+          .flatMap((x) => ((x.variantes ?? []).length > 0 ? x.variantes : [{ idVariante: x.idVariante, nombre: 'Única', precio: x.precio, stock: x.stock }])
+            .filter((v) => v.precio !== null)
+            .map((v) => ({
+              ...x,
+              idVariante: v.idVariante,
+              nombre: (x.opciones ?? []).length ? `${x.nombre} - ${v.nombre}` : x.nombre,
+              precio: v.precio,
+              stock: v.stock,
+            }))),
         error: '',
       }))
       .catch((e) => setCatalogo({ idTienda, clientes: [], productos: [], error: mensajeDeError(e) }));

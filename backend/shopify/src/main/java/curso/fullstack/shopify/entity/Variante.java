@@ -5,9 +5,10 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * Tabla "variantes". Antes solo se leía (ventas, issue #7); con el CRUD de productos (issue #10)
- * también se crea: un producto simple tiene UNA variante, sin opciones (talla, color…).
- * posicion y estado no se mapean: los pone la base por DEFAULT.
+ * Tabla "variantes": cada combinación que se vende ("M / Negro"), con su SKU. Su precio está en
+ * precios, su stock en inventario y sus valores en variante_valores.
+ * Un producto simple tiene UNA variante sin valores; uno con opciones (talla, color) tiene una
+ * por combinación. estado no se mapea: lo pone la base por DEFAULT (1 = activa).
  */
 @Entity
 @Table(name = "variantes")
@@ -26,4 +27,9 @@ public class Variante {
     @Setter
     @Column(name = "sku", length = 60)
     private String sku;
+
+    /** Orden en la ficha del producto (1, 2, 3...). CHECK posicion >= 1. */
+    @Setter
+    @Column(name = "posicion", nullable = false)
+    private Short posicion = 1;
 }

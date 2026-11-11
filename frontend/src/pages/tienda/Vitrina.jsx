@@ -109,8 +109,20 @@ export default function Vitrina() {
                     )}
                   </div>
                   <h3 className="mt-3 text-sm text-[#303030] group-hover:underline">{p.nombre}</h3>
-                  <PrecioTienda producto={p} />
+                  <PrecioTienda
+                    producto={p}
+                    desde={new Set((p.variantes ?? []).map((v) => Number(v.precio))).size > 1}
+                  />
                 </Link>
+                {(p.variantes?.length ?? 0) > 1 ? (
+                  // Con talla o color hay que elegir la combinación: se va a la página del producto.
+                  <Link
+                    to={`/tienda/${subdominio}/producto/${p.idProducto}`}
+                    className="mt-3 rounded-md border border-[var(--tienda)] py-2 text-center text-sm font-medium hover:bg-[var(--tienda)] hover:text-[var(--tienda-texto)]"
+                  >
+                    {p.disponible ? 'Elegir opciones' : 'Agotado'}
+                  </Link>
+                ) : (
                 <button
                   type="button"
                   disabled={!p.disponible}
@@ -122,6 +134,7 @@ export default function Vitrina() {
                 >
                   {p.disponible ? 'Agregar al carrito' : 'Agotado'}
                 </button>
+                )}
               </article>
             ))}
           </div>

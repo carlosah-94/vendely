@@ -1,5 +1,6 @@
 package curso.fullstack.shopify.dto;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Min;
@@ -11,7 +12,11 @@ import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * Crear o editar un producto simple (issue #10, validaciones RF2.1.1).
+ * Crear o editar un producto (issue #10, validaciones RF2.1.1).
+ * - Producto simple (sin "opciones"): precio, stock y SKU son los de su única variante.
+ * - Producto con variantes (con "opciones", por ejemplo Talla y Color): cada combinación va en
+ *   "variantes" con su precio, stock y SKU; el precio y el stock generales se usan como valor
+ *   por defecto para las variantes que no los traen.
  * Se usa el mismo DTO para POST y PUT porque los campos y sus reglas son iguales:
  * al editar se envía el producto completo.
  */
@@ -62,5 +67,13 @@ public record ProductoRequest(
 
         // Opcional. Categorías del producto (ids de la misma tienda). null = no se tocan; [] = ninguna.
         @Size(max = 20, message = "Un producto puede estar en hasta 20 categorías")
-        List<Long> categorias
+        List<Long> categorias,
+
+        // Opcional. Hasta 3 opciones (como en Shopify): Talla, Color, Material. null o [] = producto simple.
+        @Size(max = 3, message = "Un producto puede tener hasta 3 opciones")
+        List<@Valid OpcionRequest> opciones,
+
+        // Obligatorio si hay opciones: las combinaciones que se venden.
+        @Size(max = 100, message = "Un producto puede tener hasta 100 variantes")
+        List<@Valid VarianteRequest> variantes
 ) {}

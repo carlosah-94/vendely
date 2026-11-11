@@ -238,7 +238,12 @@ export default function Productos() {
                       </div>
                       <div>
                         <p className="font-medium text-[#101010]">{p.nombre}</p>
-                        <p className="text-xs text-[#616161]">{[p.marca, p.sku && `SKU ${p.sku}`].filter(Boolean).join(' · ')}</p>
+                        <p className="text-xs text-[#616161]">
+                          {[
+                            p.marca,
+                            (p.variantes?.length ?? 0) > 1 ? `${p.variantes.length} variantes` : p.sku && `SKU ${p.sku}`,
+                          ].filter(Boolean).join(' · ')}
+                        </p>
                       </div>
                     </div>
                   </td>

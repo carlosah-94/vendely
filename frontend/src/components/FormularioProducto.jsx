@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { mensajeDeError } from '../services/api';
 import { listarCategorias } from '../services/categorias';
 import { actualizarProducto, crearProducto } from '../services/productos';
+import { claveVariante, combinaciones, MAX_VARIANTES } from '../utils/variantes';
+import EditorVariantes from './EditorVariantes';
 import { IconoCerrar } from './Iconos';
 import ImagenProducto from './ImagenProducto';
 
@@ -14,6 +16,51 @@ const aNumero = (texto) => Number(texto.trim().replace(',', '.'));
 
 // Mismas reglas que el backend (ProductoRequest): el error se ve al instante,
 // sin esperar al servidor. El backend vuelve a validar igual.
+/** Filas iniciales de las variantes de un producto que ya existe, por combinación. */
+function filasIniciales(producto) {
+  const filas = {};
+  if (!producto?.opciones?.length) return filas;
+  for (const v of producto.variantes ?? []) {
+    filas[claveVariante(v.valores)] = {
+      idVariante: v.idVariante,
+      precio: v.precio != null ? String(v.precio) : '',
+      precioComparacion: v.precioComparacion != null ? String(v.precioComparacion) : '',
+      stock: String(v.stock ?? 0),
+      sku: v.sku ?? '',
+    };
+  }
+  return filas;
+}
+
+/** Reglas de las opciones y variantes (las mismas que revisa el backend). */
+function validarVariantes(opciones, filas, precioBase) {
+  const e = {};
+  const nombres = new Set();
+  opciones.forEach((o, i) => {
+    const nombre = o.nombre.trim().toLowerCase();
+    if (!nombre) e[`opcion${i}`] = 'Escribe el nombre de la opción';
+    else if (nombres.has(nombre)) e[`opcion${i}`] = 'Esta opción está repetida';
+    else if (o.valores.length === 0) e[`opcion${i}`] = 'Agrega al menos un valor';
+    nombres.add(nombre);
+  });
+  const combos = combinaciones(opciones);
+  if (combos.length > MAX_VARIANTES) e.variantes = `Máximo ${MAX_VARIANTES} variantes`;
+  for (const valores of combos) {
+    const clave = claveVariante(valores);
+    const f = filas[clave] ?? {};
+    const precio = (f.precio ?? '').trim() || precioBase.trim();
+    const comparacion = (f.precioComparacion ?? '').trim();
+    let error = '';
+    if (!PATRON_MONTO.test(precio.replace(',', '.')) || Number(precio.replace(',', '.')) <= 0) error = 'Precio no válido';
+    else if (comparacion && (!PATRON_MONTO.test(comparacion.replace(',', '.'))
+      || Number(comparacion.replace(',', '.')) <= Number(precio.replace(',', '.')))) error = 'El precio "antes" debe ser mayor';
+    else if ((f.stock ?? '').trim() && !/^\d+$/.test(f.stock.trim())) error = 'Stock no válido';
+    else if ((f.sku ?? '').trim().length > 60) error = 'SKU muy largo';
+    if (error) e[`fila:${clave}`] = error;
+  }
+  return e;
+}
+
 function validar(datos) {
   const e = {};
   const nombre = datos.nombre.trim();
@@ -28,15 +75,15 @@ function validar(datos) {
 
   // Precio de comparación: opcional; si se escribe, debe ser mayor que el precio (si no, no es rebaja).
   const comparacion = datos.precioComparacion.trim().replace(',', '.');
-  if (comparacion) {
+  if (comparacion && !datos.conVariantes) {
     if (!PATRON_MONTO.test(comparacion)) e.precioComparacion = 'Escribe un precio válido, con hasta 2 decimales';
     else if (!e.precio && Number(comparacion) <= Number(precio)) e.precioComparacion = 'Debe ser mayor que el precio';
   }
 
   if (datos.sku.trim().length > 60) e.sku = 'El SKU puede tener hasta 60 caracteres';
 
-  // Stock: entero mayor o igual a 0.
-  if (!/^\d+$/.test(datos.stock.trim())) e.stock = 'El stock debe ser un número entero mayor o igual a 0';
+  // Stock: entero mayor o igual a 0 (con variantes, el stock va en cada una).
+  if (!datos.conVariantes && !/^\d+$/.test(datos.stock.trim())) e.stock = 'El stock debe ser un número entero mayor o igual a 0';
   return e;
 }
 
@@ -63,6 +110,9 @@ export default function FormularioProducto({ idTienda, producto, onGuardado, onC
   });
   const [imagenes, setImagenes] = useState(producto?.imagenes ?? []);
   const [categorias, setCategorias] = useState(producto?.categorias ?? []);
+  const [opciones, setOpciones] = useState(producto?.opciones ?? []);
+  const [filas, setFilas] = useState(() => filasIniciales(producto));
+  const conVariantes = opciones.length > 0;
   const [todasCategorias, setTodasCategorias] = useState(null);   // null = cargando
   const [nuevaImagen, setNuevaImagen] = useState('');
   const [errores, setErrores] = useState({});
@@ -128,7 +178,10 @@ export default function FormularioProducto({ idTienda, producto, onGuardado, onC
   async function enviar(evento) {
     evento.preventDefault();
     setErrorGeneral('');
-    const encontrados = validar(datos);
+    const encontrados = {
+      ...validar({ ...datos, conVariantes }),
+      ...(conVariantes ? validarVariantes(opciones, filas, datos.precio) : {}),
+    };
     setErrores(encontrados);
     if (Object.keys(encontrados).length > 0) {
       return;
@@ -139,12 +192,31 @@ export default function FormularioProducto({ idTienda, producto, onGuardado, onC
       descripcion: datos.descripcion.trim() || null,
       marca: datos.marca.trim() || null,
       precio: aNumero(datos.precio),
-      precioComparacion: datos.precioComparacion.trim() ? aNumero(datos.precioComparacion) : null,
-      sku: datos.sku.trim() || null,
-      stock: Number(datos.stock.trim()),
+      // Con variantes, cada una lleva su precio "antes" (columna Antes): no se hereda del producto.
+      precioComparacion: !conVariantes && datos.precioComparacion.trim() ? aNumero(datos.precioComparacion) : null,
+      sku: conVariantes ? null : datos.sku.trim() || null,
+      stock: conVariantes ? 0 : Number(datos.stock.trim()),
       activo: datos.activo,
       imagenes,
       categorias,
+      opciones: opciones.map((o) => ({ nombre: o.nombre.trim(), valores: o.valores })),
+      // Con opciones: una variante por combinación. Precio o stock vacíos = los del producto / 0.
+      variantes: conVariantes
+        ? combinaciones(opciones).map((valores, i) => {
+          const f = filas[claveVariante(valores)] ?? {};
+          // Un producto simple que pasa a tener variantes: su variante actual (con sus ventas e
+          // historial de precios) se convierte en la primera combinación, en vez de borrarse.
+          const heredada = i === 0 && !esNuevo && !producto.opciones?.length ? producto.idVariante : null;
+          return {
+            idVariante: f.idVariante ?? heredada,
+            valores,
+            precio: (f.precio ?? '').trim() ? aNumero(f.precio) : null,
+            precioComparacion: (f.precioComparacion ?? '').trim() ? aNumero(f.precioComparacion) : null,
+            sku: (f.sku ?? '').trim() || null,
+            stock: (f.stock ?? '').trim() ? Number(f.stock.trim()) : 0,
+          };
+        })
+        : null,
     };
 
     setEnviando(true);
@@ -160,7 +232,9 @@ export default function FormularioProducto({ idTienda, producto, onGuardado, onC
         // 400: cada error junto a su campo. Los de las fotos llegan como "imagenes[0]".
         const porCampo = {};
         Object.entries(campos).forEach(([clave, mensaje]) => {
-          porCampo[clave.startsWith('imagenes') ? 'imagenes' : clave] ??= mensaje;
+          const campo = clave.startsWith('imagenes') ? 'imagenes'
+            : clave.startsWith('opciones') || clave.startsWith('variantes') ? 'variantes' : clave;
+          porCampo[campo] ??= mensaje;
         });
         setErrores(porCampo);
       } else if (e.response?.status === 409 && /nombre/i.test(texto)) {
@@ -184,7 +258,7 @@ export default function FormularioProducto({ idTienda, producto, onGuardado, onC
       <form
         onSubmit={enviar}
         noValidate
-        className="w-full max-w-3xl rounded-2xl bg-[#f1f1f1] shadow-2xl"
+        className="w-full max-w-4xl rounded-2xl bg-[#f1f1f1] shadow-2xl"
         role="dialog"
         aria-labelledby="titulo-formulario-producto"
       >
@@ -197,7 +271,7 @@ export default function FormularioProducto({ idTienda, producto, onGuardado, onC
           </button>
         </div>
 
-        <div className="grid gap-4 p-4 md:grid-cols-[1fr_240px]">
+        <div className="grid gap-4 p-4 md:grid-cols-[minmax(0,1fr)_240px]">
           <div className="space-y-4">
             {errorGeneral && (
               <p
@@ -291,11 +365,16 @@ export default function FormularioProducto({ idTienda, producto, onGuardado, onC
             {/* Precio */}
             <Tarjeta titulo="Precio">
               <div className="grid gap-3 sm:grid-cols-2">
-                <Campo etiqueta="Precio" error={errores.precio} ayuda="Incluye el impuesto (IGV)">
+                <Campo
+                  etiqueta={conVariantes ? 'Precio por defecto' : 'Precio'}
+                  error={errores.precio}
+                  ayuda={conVariantes ? 'Para las variantes que dejes sin precio. Incluye IGV' : 'Incluye el impuesto (IGV)'}
+                >
                   <ConPrefijo>
                     <input inputMode="decimal" value={datos.precio} onChange={cambiar('precio')} placeholder="0.00" className={estiloInput(errores.precio, true)} />
                   </ConPrefijo>
                 </Campo>
+                {!conVariantes && (
                 <Campo
                   etiqueta="Precio de comparación"
                   error={errores.precioComparacion}
@@ -311,13 +390,35 @@ export default function FormularioProducto({ idTienda, producto, onGuardado, onC
                     />
                   </ConPrefijo>
                 </Campo>
+                )}
               </div>
               {!esNuevo && (
                 <p className="text-[12px] text-[#616161]">Si cambias el precio, las ventas pasadas conservan el precio con que se hicieron.</p>
               )}
             </Tarjeta>
 
-            {/* Inventario */}
+            {/* Variantes: opciones como talla o color, cada combinación con su precio y stock */}
+            <Tarjeta titulo="Variantes">
+              <EditorVariantes
+                opciones={opciones}
+                onOpciones={(lista) => {
+                  setOpciones(lista);
+                  setErrores((er) => ({ ...er, variantes: undefined }));
+                }}
+                filas={filas}
+                onFilas={setFilas}
+                precioBase={datos.precio}
+                errores={errores}
+              />
+              {conVariantes && !esNuevo && producto.opciones?.length === 0 && (
+                <p className="text-[12px] text-[#616161]">
+                  La primera combinación ({combinaciones(opciones)[0]?.join(' / ') ?? '-'}) conserva el historial de ventas del producto.
+                </p>
+              )}
+            </Tarjeta>
+
+            {/* Inventario (solo producto simple: con variantes, cada una tiene su stock y SKU) */}
+            {!conVariantes && (
             <Tarjeta titulo="Inventario">
               <div className="grid gap-3 sm:grid-cols-2">
                 <Campo etiqueta="Cantidad disponible" error={errores.stock}>
@@ -327,7 +428,9 @@ export default function FormularioProducto({ idTienda, producto, onGuardado, onC
                   <input value={datos.sku} onChange={cambiar('sku')} placeholder="POLO-NEG-M" className={estiloInput(errores.sku)} />
                 </Campo>
               </div>
+              <p className="text-[12px] text-[#616161]">Para sumar mercadería que llega, usa Productos → Inventario → Recibir.</p>
             </Tarjeta>
+            )}
           </div>
 
           {/* Columna derecha */}

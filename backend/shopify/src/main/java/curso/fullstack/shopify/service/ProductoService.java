@@ -1,8 +1,12 @@
 package curso.fullstack.shopify.service;
 
+import curso.fullstack.shopify.dto.OpcionRequest;
+import curso.fullstack.shopify.dto.OpcionResponse;
 import curso.fullstack.shopify.dto.ProductoPublicoResponse;
 import curso.fullstack.shopify.dto.ProductoRequest;
 import curso.fullstack.shopify.dto.ProductoResponse;
+import curso.fullstack.shopify.dto.VarianteRequest;
+import curso.fullstack.shopify.dto.VarianteResponse;
 import curso.fullstack.shopify.entity.ImagenProducto;
 import curso.fullstack.shopify.entity.Inventario;
 import curso.fullstack.shopify.entity.Precio;
@@ -20,19 +24,29 @@ import curso.fullstack.shopify.security.UsuarioAutenticado;
 import curso.fullstack.shopify.security.VerificadorTienda;
 import java.math.BigDecimal;
 import java.text.Normalizer;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * CRUD de productos simples (issue #10 · RF2 · rúbrica 1.2) y catálogo público.
+ * CRUD de productos (issue #10 · RF2 · rúbrica 1.2) y catálogo público.
  *
- * Un producto simple ocupa CINCO tablas: productos + variantes (una, con su SKU) + precios (con el
- * precio tachado opcional) + inventario + imagenes_producto.
+ * Un producto ocupa varias tablas: productos + variantes (con su SKU) + precios (con el precio
+ * tachado opcional) + inventario + imagenes_producto + producto_categorias, y si tiene opciones
+ * (talla, color) también producto_opciones y variante_valores.
+ * - Producto simple: UNA variante sin valores.
+ * - Producto con opciones: una variante por combinación ("M / Negro"), cada una con su precio y stock.
  * Por eso crear y editar van en una transacción: o se guarda todo, o nada.
  * Todas las operaciones del panel empiezan con verificadorTienda.delDueno(...): un dueño solo
  * gestiona los productos de SUS tiendas (403 si la tienda es de otro, 404 si no existe).
@@ -72,7 +86,7 @@ public class ProductoService {
     @Transactional(readOnly = true)
     public List<ProductoResponse> listar(UsuarioAutenticado yo, Long idTienda) {
         verificadorTienda.delDueno(yo, idTienda);
-        return productoRepository.filasDeTienda(idTienda).stream().map(ProductoResponse::desde).toList();
+        return respuestas(productoRepository.filasDeTienda(idTienda));
     }
 
     @Transactional(readOnly = true)
@@ -97,23 +111,18 @@ public class ProductoService {
             throw new ApiException(HttpStatus.CONFLICT, "Ya hay un producto con ese nombre en esta tienda");
         }
 
+        List<Plan> planes = planificar(r);        // valida opciones y variantes antes de guardar nada
+
         Producto p = new Producto();
         p.setIdTienda(idTienda);
         copiarDatos(p, r, nombre, slug);
-        productoRepository.saveAndFlush(p);       // flush: se necesita el id para la variante
+        productoRepository.saveAndFlush(p);       // flush: se necesita el id para las variantes
 
-        // Producto simple: una sola variante, sin opciones (en ventas se muestra como "Única").
-        Variante v = new Variante();
-        v.setIdProducto(p.getIdProducto());
-        v.setSku(vacioANull(r.sku()));
-        varianteRepository.saveAndFlush(v);       // flush: se necesita el id para precio e inventario
-
-        crearPrecio(v.getIdVariante(), r.precio(), r.precioComparacion());
-
-        Inventario i = new Inventario();
-        i.setIdVariante(v.getIdVariante());
-        i.setCantidadDisponible(r.stock());
-        inventarioRepository.saveAndFlush(i);
+        crearOpciones(p.getIdProducto(), r.opciones());
+        short posicion = 1;
+        for (Plan plan : planes) {
+            guardarVariante(p.getIdProducto(), null, plan, posicion++);
+        }
 
         guardarImagenes(p, r.imagenes());
         categoriaService.asignar(idTienda, p.getIdProducto(), r.categorias());
@@ -138,43 +147,49 @@ public class ProductoService {
             throw new ApiException(HttpStatus.CONFLICT, "Ya hay otro producto con ese nombre en esta tienda");
         }
 
-        // Este CRUD maneja productos simples. Uno con tallas/colores tiene un precio y un stock por
-        // variante: no se sabría a cuál aplicar el precio y el stock enviados.
-        List<Variante> variantes = varianteRepository.findByIdProducto(idProducto);
-        if (variantes.size() != 1) {
-            throw new ApiException(HttpStatus.CONFLICT,
-                    "Este producto tiene varias variantes: su precio y stock se gestionan por variante");
+        List<Plan> planes = planificar(r);
+        List<Variante> actuales = varianteRepository.findByIdProductoOrderByIdVarianteAsc(idProducto);
+        Map<Long, Variante> porId = actuales.stream().collect(Collectors.toMap(Variante::getIdVariante, v -> v));
+
+        // Producto simple: se conserva su primera variante (la que ya tiene ventas e historial de precios).
+        if (!tieneOpciones(r) && !actuales.isEmpty()) {
+            planes = List.of(planes.get(0).conId(actuales.get(0).getIdVariante()));
         }
-        Variante variante = variantes.get(0);
-        Long idVariante = variante.getIdVariante();
+        // Las variantes enviadas con idVariante deben ser de este producto.
+        for (Plan plan : planes) {
+            if (plan.idVariante() != null && !porId.containsKey(plan.idVariante())) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "La variante " + plan.idVariante() + " no es de este producto");
+            }
+        }
 
         copiarDatos(p, r, nombre, slug);
         productoRepository.saveAndFlush(p);
 
-        variante.setSku(vacioANull(r.sku()));
-        varianteRepository.saveAndFlush(variante);
-
-        // Precio: la base no deja editar el monto ni el precio tachado (cada venta guarda el precio
-        // con que se hizo). Si alguno cambió, se cierra el vigente y se crea uno nuevo.
-        // Si son iguales, no se toca el historial.
-        Precio actual = precioRepository.vigente(idVariante).orElse(null);
-        if (actual == null
-                || actual.getMonto().compareTo(r.precio()) != 0
-                || !mismoMonto(actual.getMontoComparacion(), r.precioComparacion())) {
-            precioRepository.cerrarVigente(idVariante);
-            crearPrecio(idVariante, r.precio(), r.precioComparacion());
-            log.info("Precio cambiado: idProducto={}, {} -> {}", idProducto,
-                    actual == null ? null : actual.getMonto(), r.precio());
+        // Variantes que ya no se venden: se borran (con su precio y stock, en cascada). Si alguna ya
+        // tiene ventas no se puede (detalle_pedido la necesita): se avisa sin cambiar nada.
+        Set<Long> quedan = new HashSet<>();
+        planes.forEach(plan -> quedan.add(plan.idVariante()));
+        List<Variante> quitar = actuales.stream().filter(v -> !quedan.contains(v.getIdVariante())).toList();
+        for (Variante v : quitar) {
+            if (varianteRepository.tieneVentas(v.getIdVariante())) {
+                throw new ApiException(HttpStatus.CONFLICT, "Una variante que quitaste ya tiene ventas y no se puede "
+                        + "eliminar. Déjala con stock 0 para que no se venda más.");
+            }
         }
+        varianteRepository.deleteAll(quitar);
+        varianteRepository.flush();
 
-        // Stock: valor absoluto. Si por algún motivo no tenía fila de inventario, se crea.
-        Inventario i = inventarioRepository.findById(idVariante).orElseGet(() -> {
-            Inventario nuevo = new Inventario();
-            nuevo.setIdVariante(idVariante);
-            return nuevo;
-        });
-        i.setCantidadDisponible(r.stock());
-        inventarioRepository.saveAndFlush(i);
+        // Opciones: se borran (con los valores de las variantes, en cascada) y se crean de nuevo en
+        // el orden recibido. La base revisa al final de la transacción que cada variante tenga un
+        // valor por opción y que no haya dos combinaciones iguales (trigger T5).
+        varianteRepository.borrarOpciones(idProducto);
+        varianteRepository.flush();
+        crearOpciones(idProducto, r.opciones());
+
+        short posicion = 1;
+        for (Plan plan : planes) {
+            guardarVariante(idProducto, plan.idVariante() == null ? null : porId.get(plan.idVariante()), plan, posicion++);
+        }
 
         guardarImagenes(p, r.imagenes());
         categoriaService.asignar(idTienda, idProducto, r.categorias());
@@ -217,7 +232,10 @@ public class ProductoService {
         Tienda t = tiendaRepository.findBySubdominio(subdominio.trim().toLowerCase(Locale.ROOT))
                 .filter(Tienda::estaActiva)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "La tienda no existe"));
-        return productoRepository.filasPublicas(t.getIdTienda()).stream().map(ProductoPublicoResponse::desde).toList();
+        List<ProductoRepository.Fila> filas = productoRepository.filasPublicas(t.getIdTienda());
+        Detalle d = detalle(filas.stream().map(ProductoRepository.Fila::getIdProducto).toList());
+        return filas.stream().map(f -> ProductoPublicoResponse.desde(f, d.opciones(f.getIdProducto()),
+                d.variantesPublicas(f.getIdProducto()))).toList();
     }
 
     /** Detalle público de un producto: 404 si la tienda o el producto no existen o no están activos. */
@@ -226,8 +244,10 @@ public class ProductoService {
         Tienda t = tiendaRepository.findBySubdominio(subdominio.trim().toLowerCase(Locale.ROOT))
                 .filter(Tienda::estaActiva)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "La tienda no existe"));
-        return productoRepository.filaPublica(t.getIdTienda(), idProducto).map(ProductoPublicoResponse::desde)
+        ProductoRepository.Fila f = productoRepository.filaPublica(t.getIdTienda(), idProducto)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El producto no existe"));
+        Detalle d = detalle(List.of(idProducto));
+        return ProductoPublicoResponse.desde(f, d.opciones(idProducto), d.variantesPublicas(idProducto));
     }
 
     // ------------------------------------------------------------------ apoyo
@@ -238,8 +258,200 @@ public class ProductoService {
     }
 
     private ProductoResponse fila(Long idTienda, Long idProducto) {
-        return productoRepository.filaDeTienda(idTienda, idProducto).map(ProductoResponse::desde)
+        ProductoRepository.Fila f = productoRepository.filaDeTienda(idTienda, idProducto)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El producto no existe en esta tienda"));
+        return respuestas(List.of(f)).get(0);
+    }
+
+    /** Respuestas del panel con las opciones y variantes de cada producto (2 consultas en total, no 2 por producto). */
+    private List<ProductoResponse> respuestas(List<ProductoRepository.Fila> filas) {
+        Detalle d = detalle(filas.stream().map(ProductoRepository.Fila::getIdProducto).toList());
+        return filas.stream()
+                .map(f -> ProductoResponse.desde(f, d.opciones(f.getIdProducto()), d.variantes(f.getIdProducto())))
+                .toList();
+    }
+
+    /** Opciones y variantes de varios productos, agrupadas por producto. */
+    private Detalle detalle(Collection<Long> ids) {
+        if (ids.isEmpty()) {
+            return new Detalle(Map.of(), Map.of());
+        }
+        Map<Long, List<VarianteRepository.FilaOpcion>> opciones = varianteRepository.opcionesDeProductos(ids).stream()
+                .collect(Collectors.groupingBy(VarianteRepository.FilaOpcion::getIdProducto, LinkedHashMap::new, Collectors.toList()));
+        Map<Long, List<VarianteRepository.Fila>> variantes = varianteRepository.filasDeProductos(ids).stream()
+                .collect(Collectors.groupingBy(VarianteRepository.Fila::getIdProducto, LinkedHashMap::new, Collectors.toList()));
+        return new Detalle(opciones, variantes);
+    }
+
+    /** Separador de los valores en la consulta (carácter 31, "separador de unidades"). */
+    private static final String SEPARADOR = String.valueOf((char) 31);
+
+    private record Detalle(Map<Long, List<VarianteRepository.FilaOpcion>> opciones,
+                           Map<Long, List<VarianteRepository.Fila>> variantes) {
+
+        List<VarianteResponse> variantes(Long idProducto) {
+            return variantes.getOrDefault(idProducto, List.of()).stream().map(v -> respuesta(v, v.getSku())).toList();
+        }
+
+        /** En la tienda pública no se muestra el SKU (es un dato interno del vendedor). */
+        List<VarianteResponse> variantesPublicas(Long idProducto) {
+            return variantes.getOrDefault(idProducto, List.of()).stream().map(v -> respuesta(v, null)).toList();
+        }
+
+        /** Cada opción con sus valores, en el orden en que aparecen en las variantes. */
+        List<OpcionResponse> opciones(Long idProducto) {
+            List<VarianteRepository.FilaOpcion> lista = opciones.getOrDefault(idProducto, List.of());
+            List<VarianteResponse> vs = variantes(idProducto);
+            List<OpcionResponse> resultado = new ArrayList<>();
+            for (int i = 0; i < lista.size(); i++) {
+                Set<String> valores = new java.util.LinkedHashSet<>();
+                for (VarianteResponse v : vs) {
+                    if (v.valores().size() > i) {
+                        valores.add(v.valores().get(i));
+                    }
+                }
+                resultado.add(new OpcionResponse(lista.get(i).getNombre(), List.copyOf(valores)));
+            }
+            return resultado;
+        }
+
+        private static VarianteResponse respuesta(VarianteRepository.Fila v, String sku) {
+            List<String> valores = v.getValores() == null ? List.of() : List.of(v.getValores().split(SEPARADOR, -1));
+            String nombre = valores.isEmpty() ? "Única" : String.join(" / ", valores);
+            return new VarianteResponse(v.getIdVariante(), valores, nombre, v.getPrecio(), v.getPrecioComparacion(),
+                    sku, v.getStock() == null ? 0 : v.getStock());
+        }
+    }
+
+    // ------------------------------------------------------------------ opciones y variantes
+
+    /**
+     * Lo que se va a guardar de una variante, ya validado y con los valores por defecto puestos.
+     * idVariante = null para una variante nueva.
+     */
+    private record Plan(Long idVariante, List<String> valores, BigDecimal precio, BigDecimal precioComparacion,
+                        String sku, int stock) {
+        Plan conId(Long id) {
+            return new Plan(id, valores, precio, precioComparacion, sku, stock);
+        }
+    }
+
+    private static boolean tieneOpciones(ProductoRequest r) {
+        return r.opciones() != null && !r.opciones().isEmpty();
+    }
+
+    /**
+     * Valida las opciones y variantes y arma la lista de lo que se va a guardar.
+     * - Sin opciones: una sola variante con el precio, stock y SKU del producto.
+     * - Con opciones: nombres de opción distintos, valores distintos dentro de cada opción,
+     *   cada variante con un valor de cada opción y sin combinaciones repetidas (la base lo vuelve
+     *   a revisar con el trigger T5, sin distinguir mayúsculas).
+     */
+    private static List<Plan> planificar(ProductoRequest r) {
+        if (!tieneOpciones(r)) {
+            return List.of(new Plan(null, List.of(), r.precio(), r.precioComparacion(), vacioANull(r.sku()), r.stock()));
+        }
+        Set<String> nombres = new HashSet<>();
+        List<Set<String>> valoresPorOpcion = new ArrayList<>();
+        for (OpcionRequest o : r.opciones()) {
+            if (!nombres.add(o.nombre().trim().toLowerCase(Locale.ROOT))) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "La opción \"" + o.nombre().trim() + "\" está repetida");
+            }
+            Set<String> valores = new HashSet<>();
+            for (String valor : o.valores()) {
+                if (!valores.add(valor.trim().toLowerCase(Locale.ROOT))) {
+                    throw new ApiException(HttpStatus.BAD_REQUEST,
+                            "El valor \"" + valor.trim() + "\" está repetido en " + o.nombre().trim());
+                }
+            }
+            valoresPorOpcion.add(valores);
+        }
+        if (r.variantes() == null || r.variantes().isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Agrega al menos una variante (una combinación de valores)");
+        }
+
+        Set<String> combinaciones = new HashSet<>();
+        Set<Long> ids = new HashSet<>();
+        List<Plan> planes = new ArrayList<>();
+        for (VarianteRequest v : r.variantes()) {
+            if (v.valores().size() != r.opciones().size()) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "Cada variante necesita un valor por cada opción");
+            }
+            List<String> valores = v.valores().stream().map(String::trim).toList();
+            for (int i = 0; i < valores.size(); i++) {
+                if (!valoresPorOpcion.get(i).contains(valores.get(i).toLowerCase(Locale.ROOT))) {
+                    throw new ApiException(HttpStatus.BAD_REQUEST, "\"" + valores.get(i) + "\" no es un valor de "
+                            + r.opciones().get(i).nombre().trim());
+                }
+            }
+            String nombre = String.join(" / ", valores);
+            if (!combinaciones.add(nombre.toLowerCase(Locale.ROOT))) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "La variante " + nombre + " está repetida");
+            }
+            if (v.idVariante() != null && !ids.add(v.idVariante())) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "La variante " + v.idVariante() + " está repetida");
+            }
+            BigDecimal precio = v.precio() != null ? v.precio() : r.precio();
+            BigDecimal comparacion = v.precioComparacion() != null ? v.precioComparacion() : r.precioComparacion();
+            if (comparacion != null && comparacion.compareTo(precio) <= 0) {
+                throw new ApiException(HttpStatus.BAD_REQUEST,
+                        "En " + nombre + ", el precio de comparación debe ser mayor que el precio");
+            }
+            planes.add(new Plan(v.idVariante(), valores, precio, comparacion, vacioANull(v.sku()),
+                    v.stock() != null ? v.stock() : r.stock()));
+        }
+        return planes;
+    }
+
+    private void crearOpciones(Long idProducto, List<OpcionRequest> opciones) {
+        if (opciones == null) {
+            return;
+        }
+        short posicion = 1;
+        for (OpcionRequest o : opciones) {
+            varianteRepository.crearOpcion(idProducto, posicion++, o.nombre().trim());
+        }
+    }
+
+    /**
+     * Crea o actualiza una variante con sus valores, su precio y su stock.
+     * existente = null para una variante nueva.
+     */
+    private void guardarVariante(Long idProducto, Variante existente, Plan plan, short posicion) {
+        Variante v = existente != null ? existente : new Variante();
+        v.setIdProducto(idProducto);
+        v.setSku(plan.sku());
+        v.setPosicion(posicion);
+        varianteRepository.saveAndFlush(v);       // flush: se necesita el id para valores, precio e inventario
+        Long idVariante = v.getIdVariante();
+
+        short pos = 1;
+        for (String valor : plan.valores()) {
+            varianteRepository.crearValor(idVariante, idProducto, pos++, valor);
+        }
+
+        // Precio: la base no deja editar el monto ni el precio tachado (cada venta guarda el precio
+        // con que se hizo). Si alguno cambió, se cierra el vigente y se crea uno nuevo.
+        // Si son iguales, no se toca el historial.
+        Precio actual = existente == null ? null : precioRepository.vigente(idVariante).orElse(null);
+        if (actual == null
+                || actual.getMonto().compareTo(plan.precio()) != 0
+                || !mismoMonto(actual.getMontoComparacion(), plan.precioComparacion())) {
+            if (actual != null) {
+                precioRepository.cerrarVigente(idVariante);
+                log.info("Precio cambiado: idVariante={}, {} -> {}", idVariante, actual.getMonto(), plan.precio());
+            }
+            crearPrecio(idVariante, plan.precio(), plan.precioComparacion());
+        }
+
+        // Stock: valor absoluto (para sumar mercadería que llega está Inventario → Recibir).
+        Inventario i = inventarioRepository.findById(idVariante).orElseGet(() -> {
+            Inventario nuevo = new Inventario();
+            nuevo.setIdVariante(idVariante);
+            return nuevo;
+        });
+        i.setCantidadDisponible(plan.stock());
+        inventarioRepository.saveAndFlush(i);
     }
 
     private void copiarDatos(Producto p, ProductoRequest r, String nombre, String slug) {

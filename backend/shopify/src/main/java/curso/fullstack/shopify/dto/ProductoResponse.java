@@ -22,13 +22,20 @@ public record ProductoResponse(
         String sku,                     // código interno, o null
         String imagenUrl,               // foto principal, o null
         List<String> imagenes,          // todas las fotos en orden (lista vacía si no tiene)
-        List<Long> categorias           // ids de sus categorías
+        List<Long> categorias,          // ids de sus categorías
+        List<OpcionResponse> opciones,  // vacía en un producto simple
+        List<VarianteResponse> variantes
 ) {
-    public static ProductoResponse desde(ProductoRepository.Fila f) {
+    /**
+     * Arma la respuesta. Si el producto tiene varias variantes, precio es el menor ("desde"),
+     * stock la suma, y el detalle de cada una va en "variantes".
+     */
+    public static ProductoResponse desde(ProductoRepository.Fila f, List<OpcionResponse> opciones,
+                                         List<VarianteResponse> variantes) {
         return new ProductoResponse(f.getIdProducto(), f.getNombre(), f.getSlug(), f.getDescripcion(),
                 f.getMarca(), nombreEstado(f.getEstado()), f.getIdVariante(), f.getPrecio(), f.getStock(),
                 f.getPrecioComparacion(), f.getSku(), f.getImagenUrl(), separarImagenes(f.getImagenes()),
-                separarIds(f.getCategorias()));
+                separarIds(f.getCategorias()), opciones, variantes);
     }
 
     // La base guarda el estado como número (CHECK 0..2); al frontend se le envía un texto legible.
