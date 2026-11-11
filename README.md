@@ -14,7 +14,7 @@ Vendely es una plataforma donde cualquier persona crea su tienda online, registr
 
 ```
 shopity/
-├── backend/shopify/   # API REST en Spring Boot (proyecto Maven, se abre en NetBeans)
+├── backend/shopify/   # API REST en Spring Boot (proyecto Maven, se abre en NetBeans); tiene su propio README
 │   └── src/main/java/curso/fullstack/shopify/
 │       ├── controller/   # reciben las peticiones HTTP
 │       ├── service/      # reglas del negocio y transacciones
@@ -23,7 +23,7 @@ shopity/
 │       ├── dto/          # datos que entran y salen de la API, con sus validaciones
 │       ├── security/     # JWT, roles y verificación de la tienda
 │       └── exception/    # formato único de errores
-├── frontend/          # aplicación React (panel del dueño)
+├── frontend/          # aplicación React: panel del dueño y tienda pública del comprador
 ├── db/init/           # 01_esquema.sql, 02_datos_iniciales.sql y 03_usuarios_prueba.sql
 ├── db/tests/          # 03_pruebas.sql: casos que la base debe aceptar y rechazar
 ├── postman/           # colección Vendely_API para probar la API
@@ -35,13 +35,24 @@ shopity/
 | Módulo | Backend | Pantalla en el panel |
 |---|---|---|
 | Registro, inicio de sesión y roles | Sí | Sí (login, menú por rol, acceso denegado) |
-| Tiendas | Sí | Pendiente (la sección "Mis tiendas" está en construcción) |
+| Tiendas | Sí | Sí (`/panel/tiendas`, "Mis tiendas") |
 | Clientes (CRUD) | Sí | Sí (`/panel/clientes`) |
 | Productos (CRUD con precio y stock) | Sí | Sí (`/panel/productos`) |
 | Ventas (registro, consulta y eliminación con stock) | Sí | Sí (`/panel/ventas`) |
+| Tienda pública: vitrina, detalle de producto y carrito | Sí | Sí (`/tienda/:subdominio`) |
+| Cliente: ingreso, direcciones, checkout y "Mis pedidos" | Sí | Sí (`/tienda/:subdominio/checkout`, `/mis-pedidos`) |
+| Pago con Mercado Pago (modo de prueba) | Sí | Sí (`/tienda/:subdominio/pago/resultado`) |
 | Manejo de errores y logs | Sí | Mensajes de error en cada pantalla |
 
-Pendiente para el siguiente avance: la tienda pública que ve el comprador (vitrina, carrito y pago) y la pantalla "Mis tiendas".
+### Pendiente
+
+- Probar de punta a punta el pago con Mercado Pago (necesita `MERCADOPAGO_ACCESS_TOKEN` de prueba; sin él la API responde 503).
+- Pruebas automatizadas del backend (JUnit y MockMvc).
+- Panel de `SUPERADMIN` (las pantallas `/admin/tiendas` y `/admin/cuentas` están en construcción y la API no tiene endpoints en `/api/admin/**`).
+- Categorías, imágenes, variantes, ofertas y tarifas de envío editables: las tablas existen, pero aún no tienen API ni pantalla.
+- Paginación y filtros en los listados, documentación Swagger/OpenAPI y despliegue.
+
+El detalle del backend (endpoints, variables y estado) está en [`backend/shopify/README.md`](backend/shopify/README.md).
 
 ## Cómo ejecutar el proyecto
 
@@ -59,7 +70,7 @@ cd shopity
 cp .env.example .env
 ```
 
-Abre `.env` y cambia al menos `POSTGRES_PASSWORD`, `SPRING_DATASOURCE_PASSWORD` y `JWT_SECRET` (mínimo 32 caracteres). El archivo `.env` tiene secretos y nunca se sube al repositorio.
+Abre `.env` y cambia al menos `POSTGRES_PASSWORD`, `SPRING_DATASOURCE_PASSWORD` y `JWT_SECRET` (mínimo 32 caracteres). Para probar el pago, pon también tu Access Token de **prueba** de Mercado Pago en `MERCADOPAGO_ACCESS_TOKEN` (empieza con `TEST-`). El archivo `.env` tiene secretos y nunca se sube al repositorio.
 
 ### 2. Base de datos
 
@@ -186,9 +197,11 @@ Si la base ya existía antes de agregar este archivo, hay que recrearla para que
 2. Con la base recién creada, ejecuta las carpetas **en orden** (clic derecho en la colección → *Run collection*, o carpeta por carpeta):
    - **1. Registro e inicio de sesión** y **2. Casos que deben fallar**: seguridad.
    - **3. Tiendas** y **4. Tiendas: casos que deben fallar**: módulo de tiendas.
+   - **5. Clientes, productos y ventas** y **6. Casos que deben fallar**: panel del dueño (CRUD, venta con descuento y devolución de stock, reglas de 409 y permisos entre dueños).
+   - **7. Tienda pública y compra del cliente** y **8. Casos que deben fallar**: catálogo, registro del comprador, direcciones, pedido, y permisos por rol y entre clientes.
 3. Los tokens y los ids se guardan solos en las variables de la colección.
 
-La colección cubre la seguridad y las tiendas. Los módulos de clientes, productos y ventas se prueban desde sus pantallas del panel.
+Las carpetas 5 a 8 usan la tienda que crea la carpeta 3, así que se ejecutan después de ella. La petición **Iniciar pago** acepta 200 (con `MERCADOPAGO_ACCESS_TOKEN`) o 503 (sin él); el pago completo en Mercado Pago se prueba desde la tienda en el navegador.
 
 > La carpeta 1 crea sola la tienda `zapatillas-carlos` (petición **Crear tienda Zapatillas Carlos**), que usa el registro de clientes. Si ya existía, responde 409 y la prueba igual pasa.
 >
@@ -296,6 +309,27 @@ Ejemplo de venta (`POST`):
 - Al eliminar una venta, el stock vuelve al inventario en la misma transacción. Una venta con pago aprobado no se puede eliminar.
 
 En el panel, el formulario de venta permite agregar varios productos con los botones **Añadir producto** y **Eliminar**, y muestra el total antes de guardar.
+
+## Tienda pública y pedidos del cliente
+
+Cada tienda tiene su vitrina en `/tienda/{subdominio}` (por ejemplo `/tienda/moda-lima`). El comprador ve el catálogo y arma su carrito sin iniciar sesión. Para comprar, ingresa o se registra como cliente de esa tienda.
+
+| Endpoint | Acceso | Qué hace |
+|---|---|---|
+| `GET /api/public/tiendas/{subdominio}/productos` | Abierto | Catálogo de la tienda |
+| `GET /api/public/tiendas/{subdominio}/productos/{idProducto}` | Abierto | Detalle de un producto |
+| `GET /api/cliente/direcciones` | CLIENTE | Mis direcciones |
+| `POST /api/cliente/direcciones` | CLIENTE | Agregar una dirección |
+| `GET /api/cliente/pedidos` | CLIENTE | Mis pedidos |
+| `GET /api/cliente/pedidos/{idPedido}` | CLIENTE | Detalle de un pedido |
+| `POST /api/cliente/pedidos` | CLIENTE | Crear un pedido desde el carrito |
+| `POST /api/cliente/pedidos/{idPedido}/pago` | CLIENTE | Iniciar el pago en Mercado Pago |
+| `POST /api/cliente/pedidos/{idPedido}/pago/confirmar` | CLIENTE | Confirmar el resultado del pago |
+
+**Flujo de compra:** vitrina → carrito → ingresar → checkout (dirección de envío) → pedido → pago en Mercado Pago → vuelve a `/tienda/{subdominio}/pago/resultado` (usa `FRONTEND_URL`) → "Mis pedidos".
+
+- La tienda del cliente sale de su token, no de la petición: un cliente no puede ver ni pagar pedidos de otra tienda.
+- El pago usa Mercado Pago Checkout Pro en **modo de prueba**. Sin `MERCADOPAGO_ACCESS_TOKEN`, iniciar el pago responde 503 "El pago en línea no está disponible por ahora".
 
 ## Manejo de errores y logs
 
