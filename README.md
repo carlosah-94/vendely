@@ -8,6 +8,7 @@ Vendely es una plataforma donde cualquier persona crea su tienda online, registr
 - **Base de datos:** PostgreSQL 16
 - **Frontend:** React 19 con Vite, Tailwind CSS v4, React Router y Axios
 - **Infraestructura:** Docker y Docker Compose
+- **Despliegue:** Neon (base de datos), Render (backend) y Vercel (frontend), en sus planes gratuitos
 - **Pruebas de la API:** Postman
 
 ## Estructura
@@ -50,7 +51,7 @@ shopity/
 - Pruebas automatizadas del backend (JUnit y MockMvc).
 - Panel de `SUPERADMIN` (las pantallas `/admin/tiendas` y `/admin/cuentas` están en construcción y la API no tiene endpoints en `/api/admin/**`).
 - Categorías, imágenes, variantes, ofertas y tarifas de envío editables: las tablas existen, pero aún no tienen API ni pantalla.
-- Paginación y filtros en los listados, documentación Swagger/OpenAPI y despliegue.
+- Paginación y filtros en los listados y documentación Swagger/OpenAPI.
 
 El detalle del backend (endpoints, variables y estado) está en [`backend/shopify/README.md`](backend/shopify/README.md).
 
@@ -116,6 +117,120 @@ docker compose up --build
 ```
 
 Levanta la base, el backend (`http://localhost:8080`) y el frontend (`http://localhost:5174`, según `FRONTEND_PORT`).
+
+## Despliegue en producción
+
+La aplicación está publicada en tres servicios gratuitos:
+
+| Parte | Servicio | Dirección |
+|---|---|---|
+| Frontend | Vercel | https://shopity-7zya.vercel.app |
+| Backend (API) | Render | https://vendely-api.onrender.com/api |
+| Base de datos | Neon (PostgreSQL) | proyecto `vendely`, región AWS US East (N. Virginia) |
+
+```
+Navegador ──► Vercel (React) ──► Render (Spring Boot) ──► Neon (PostgreSQL)
+```
+
+**Por qué estas regiones:** el backend hace varias consultas por cada petición, así que la base y el backend están en la misma zona (Render en Virginia y Neon en N. Virginia). Así cada consulta tarda alrededor de 1 ms en lugar de decenas. Vercel sirve el frontend desde su red mundial.
+
+Render y Vercel se conectan al fork [`AndreeQuispe12/shopity`](https://github.com/AndreeQuispe12/shopity) de este repositorio. Ver [Publicar una versión nueva](#publicar-una-versión-nueva).
+
+### 1. Base de datos en Neon
+
+1. En [neon.tech](https://neon.tech) se creó el proyecto `vendely` (Postgres 18, región AWS US East (N. Virginia)). Neon soporta la extensión `btree_gist` que necesita el esquema.
+2. Los scripts se cargan una sola vez, en orden, con la conexión **directa** (sin `-pooler`). Se puede usar el `psql` del contenedor local, que ya tiene los scripts en `/docker-entrypoint-initdb.d/`:
+
+   ```powershell
+   $env:NEON = "postgresql://USUARIO:CONTRASEÑA@HOST-SIN-POOLER/neondb?sslmode=require"
+   docker compose exec db psql $env:NEON -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/01_esquema.sql
+   docker compose exec db psql $env:NEON -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/02_datos_iniciales.sql
+   docker compose exec db psql $env:NEON -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/03_usuarios_prueba.sql
+   ```
+
+3. Para comprobarla, `db/tests/03_pruebas.sql` se puede correr contra Neon: termina en `ROLLBACK` y no deja datos.
+
+   ```powershell
+   docker compose cp db/tests/03_pruebas.sql db:/tmp/03_pruebas.sql
+   docker compose exec db psql $env:NEON -q -f /tmp/03_pruebas.sql
+   ```
+
+   Se copia el archivo al contenedor en lugar de pasarlo con `Get-Content |`, porque PowerShell 5.1 daña las tildes al enviar texto por una tubería.
+
+La cadena de conexión está en la consola de Neon: **Connect**, con **Connection pooling** desactivado. Usa la directa porque Spring Boot ya tiene su propio pool de conexiones (Hikari). Nunca se sube al repositorio.
+
+### 2. Backend en Render
+
+Servicio **Web Service** en [render.com](https://render.com):
+
+| Campo | Valor |
+|---|---|
+| Name | `vendely-api` |
+| Language | Docker (usa `backend/shopify/Dockerfile`) |
+| Branch | `main` |
+| Region | Virginia (US East) |
+| Root Directory | `backend/shopify` |
+| Instance Type | Free |
+
+Variables de entorno (las lee `application.yml`):
+
+| Variable | Valor |
+|---|---|
+| `SPRING_DATASOURCE_URL` | `jdbc:postgresql://HOST-DE-NEON-SIN-POOLER/neondb?sslmode=require` |
+| `SPRING_DATASOURCE_USERNAME` | usuario de Neon (`neondb_owner`) |
+| `SPRING_DATASOURCE_PASSWORD` | contraseña de Neon |
+| `JWT_SECRET` | clave larga y aleatoria, distinta de la local |
+| `JWT_EXPIRATION` | `86400000` |
+| `PORT` | `8080` (Render envía el tráfico a ese puerto) |
+| `JAVA_TOOL_OPTIONS` | `-XX:MaxRAMPercentage=75` (aprovecha los 512 MB del plan gratuito) |
+| `CORS_ORIGENES` | `https://shopity-7zya.vercel.app` |
+| `FRONTEND_URL` | `https://shopity-7zya.vercel.app` (adonde vuelve el comprador después de pagar) |
+| `MERCADOPAGO_ACCESS_TOKEN`, `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` | opcionales, credenciales **de prueba** |
+
+`CORS_ORIGENES` se compara letra por letra: va sin `/` al final y, si hay varias direcciones, separadas solo por comas, sin espacios. Si no coincide, el navegador bloquea las peticiones con un error de CORS.
+
+Para comprobar que el backend responde: https://vendely-api.onrender.com/api/public/paises/PE/distritos?buscar=mira
+
+### 3. Frontend en Vercel
+
+Proyecto en [vercel.com](https://vercel.com) importado desde GitHub:
+
+| Campo | Valor |
+|---|---|
+| Root Directory | `frontend` |
+| Framework Preset | Vite |
+| Build Command / Output | `npm run build` / `dist` |
+| Variable de entorno | `VITE_API_BASE_URL` = `https://vendely-api.onrender.com/api` |
+
+`VITE_API_BASE_URL` se graba en el frontend al construirlo: si cambia, hay que volver a desplegar.
+
+> **Pendiente:** agregar `frontend/vercel.json` con una regla para que todas las rutas sirvan `index.html`. Sin ella, recargar una página como `/panel/clientes` en Vercel da 404, porque esas rutas las maneja React Router en el navegador.
+>
+> ```json
+> { "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }] }
+> ```
+
+### Publicar una versión nueva
+
+1. Se hace merge del PR a `main` en este repositorio.
+2. En el fork, **Sync fork → Update branch**.
+3. **Render** despliega solo el backend (5 a 10 minutos, por la compilación con Maven).
+4. **Vercel** despliega solo el frontend, con una condición: en el plan gratuito, Vercel **bloquea** (estado "Blocked") el despliegue si el último commit es de alguien que no es el dueño del proyecto en Vercel. Para publicar en ese caso hay dos opciones:
+   - que el último commit de `main` sea del dueño de Vercel (por ejemplo, que él haga el merge del PR);
+   - o publicar desde la computadora del dueño con el CLI, que sube los archivos sin revisar el autor:
+
+     ```bash
+     git pull
+     npx vercel deploy --prod
+     ```
+
+     El CLI crea `.vercel/` y `.env.local` en la carpeta: no se suben al repositorio.
+
+### Límites de los planes gratuitos
+
+- **Render** apaga el backend tras unos 15 minutos sin visitas; la primera petición después tarda de 30 a 60 segundos en despertarlo. Antes de una demostración, conviene abrirlo un minuto antes.
+- **Neon** suspende la base tras unos minutos sin uso y la despierta en alrededor de un segundo con la siguiente conexión.
+- **Vercel Hobby** solo admite un miembro por proyecto (de ahí el bloqueo de despliegues descrito arriba).
 
 ## Seguridad
 
