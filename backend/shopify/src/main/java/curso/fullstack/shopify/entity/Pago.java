@@ -9,7 +9,7 @@ import lombok.Setter;
 /**
  * Tabla "pagos": cada intento de pago de un pedido.
  * Solo puede haber UN pago aprobado por pedido (índice uq_pago_aprobado) y la referencia
- * de la pasarela es única: el mismo pago de Mercado Pago no sirve para dos pedidos.
+ * de la pasarela es única: el mismo pago (de Mercado Pago o de PayPal) no sirve para dos pedidos.
  */
 @Entity
 @Table(name = "pagos")
@@ -17,6 +17,7 @@ import lombok.Setter;
 @Setter
 public class Pago {
 
+    public static final short PAYPAL = 2;
     public static final short MERCADO_PAGO = 3;
     public static final short PENDIENTE = 0;
     public static final short APROBADO = 1;
@@ -41,7 +42,7 @@ public class Pago {
     @Column(name = "estado", nullable = false)
     private Short estado = PENDIENTE;
 
-    /** Código que devuelve la pasarela (el paymentId de Mercado Pago). */
+    /** Código de la pasarela: el paymentId de Mercado Pago o el id de la orden de PayPal. */
     @Column(name = "referencia_transaccion", length = 120)
     private String referenciaTransaccion;
 

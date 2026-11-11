@@ -13,7 +13,7 @@ import { formatoMoneda } from '../../utils/formato';
 
 /**
  * Checkout en dos columnas: a la izquierda Contacto, Entrega y Pago; a la derecha el resumen gris.
- * Al pagar: crea el pedido, pide a Mercado Pago la página de pago y envía al cliente allí.
+ * Al pagar: crea el pedido, pide a la pasarela (PayPal en modo de prueba) la página de pago y envía al cliente allí.
  */
 export default function Checkout() {
   const { tienda, subdominio } = useOutletContext();
@@ -198,7 +198,8 @@ export default function Checkout() {
           <section className="space-y-2">
             <h2 className="text-lg font-semibold">Pago</h2>
             <p className="rounded-md border border-[#d9d9d9] bg-[#f5f5f5] px-3 py-3 text-sm text-[#616161]">
-              Serás redirigido a Mercado Pago para completar tu compra de forma segura.
+              Serás redirigido a PayPal para completar tu compra de forma segura. En este modo de
+              prueba, el cobro se procesa en dólares (USD).
             </p>
           </section>
 

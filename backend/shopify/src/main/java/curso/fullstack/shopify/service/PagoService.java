@@ -12,6 +12,7 @@ import curso.fullstack.shopify.repository.PedidoRepository;
 import curso.fullstack.shopify.repository.TiendaRepository;
 import curso.fullstack.shopify.security.UsuarioAutenticado;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -26,11 +27,12 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
 /**
- * Pago de un pedido con Mercado Pago (Checkout Pro, modo de prueba).
+ * Pago de un pedido con una pasarela en modo de prueba: PayPal (Sandbox) o Mercado Pago (Checkout Pro).
+ * Se usa PayPal si están PAYPAL_CLIENT_ID y PAYPAL_CLIENT_SECRET; si no, Mercado Pago si está su token.
  *
  * Regla de oro: NUNCA se cree lo que manda el navegador. La URL de regreso trae
  * status=approved, pero cualquiera puede escribirla a mano: siempre se consulta el pago
- * en Mercado Pago con el paymentId y se comparan estado, pedido y monto.
+ * en la pasarela (Mercado Pago o PayPal) y se comparan estado, pedido y monto.
  * En los logs no se escribe ningún dato de tarjeta (nunca llegan a este servidor).
  */
 @Slf4j
@@ -41,15 +43,20 @@ public class PagoService {
     private final PagoRepository pagoRepository;
     private final TiendaRepository tiendaRepository;
     private final MercadoPagoClient mercadoPago;
+    private final PayPalClient payPal;
+    private final BigDecimal tipoCambioPenUsd;
     private final String frontendUrl;
 
     public PagoService(PedidoRepository pedidoRepository, PagoRepository pagoRepository,
-                       TiendaRepository tiendaRepository, MercadoPagoClient mercadoPago,
+                       TiendaRepository tiendaRepository, MercadoPagoClient mercadoPago, PayPalClient payPal,
+                       @Value("${app.paypal.tipo-cambio-pen-usd:3.75}") BigDecimal tipoCambioPenUsd,
                        @Value("${app.frontend-url:http://localhost:5173}") String frontendUrl) {
         this.pedidoRepository = pedidoRepository;
         this.pagoRepository = pagoRepository;
         this.tiendaRepository = tiendaRepository;
         this.mercadoPago = mercadoPago;
+        this.payPal = payPal;
+        this.tipoCambioPenUsd = tipoCambioPenUsd;
         this.frontendUrl = frontendUrl.endsWith("/") ? frontendUrl.substring(0, frontendUrl.length() - 1) : frontendUrl;
     }
 
@@ -65,11 +72,14 @@ public class PagoService {
         if (pagoRepository.existsByIdPedidoAndEstado(idPedido, Pago.APROBADO)) {
             throw new ApiException(HttpStatus.CONFLICT, "El pedido #" + p.getNumeroPedido() + " ya está pagado");
         }
+        Tienda tienda = tiendaRepository.findById(p.getIdTienda())
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "La tienda no existe"));
+        if (payPal.estaConfigurado()) {
+            return iniciarPayPal(p, tienda);
+        }
         if (!mercadoPago.estaConfigurado()) {
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "El pago en línea no está disponible por ahora");
         }
-        Tienda tienda = tiendaRepository.findById(p.getIdTienda())
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "La tienda no existe"));
 
         Pago pago = new Pago();
         pago.setIdPedido(idPedido);
@@ -171,7 +181,15 @@ public class PagoService {
                         paymentId, existente.get().getIdPedido(), idPedido);
                 throw new ApiException(HttpStatus.CONFLICT, "Ese pago ya se usó en otro pedido");
             }
+            // Orden de PayPal todavía pendiente: hay que verificarla y cobrarla.
+            if (existente.get().getProveedor() == Pago.PAYPAL && existente.get().getEstado() == Pago.PENDIENTE) {
+                return confirmarPayPal(p, existente.get());
+            }
             return resultado(p, existente.get().getEstado());
+        }
+        if (!paymentId.matches("^[0-9]{1,20}$")) {
+            // No es un id de Mercado Pago ni una orden de PayPal creada para este pedido.
+            throw new ApiException(HttpStatus.NOT_FOUND, "No se encontró ese pago");
         }
 
         Map<String, Object> mp = consultarPago(paymentId);
@@ -246,6 +264,216 @@ public class PagoService {
             log.error("No se pudo conectar con Mercado Pago: {}", e.getMessage());
             throw new ApiException(HttpStatus.BAD_GATEWAY, "No se pudo verificar el pago");
         }
+    }
+
+    // ------------------------------------------------------------------ PayPal (Sandbox)
+
+    /**
+     * Crea la orden en PayPal y guarda el intento (pendiente) con el id de la orden como referencia.
+     * Así, al volver, solo se acepta una orden que se creó para ESTE pedido.
+     * PayPal no cobra en soles: si el pedido está en PEN, se convierte a USD con un tipo de cambio fijo.
+     */
+    private PagoIniciadoResponse iniciarPayPal(Pedido p, Tienda tienda) {
+        BigDecimal montoUsd = montoPayPal(p);
+        String retorno = frontendUrl + "/tienda/" + tienda.getSubdominio() + "/pago/resultado?pedido=" + p.getIdPedido();
+
+        Map<String, Object> monto = new LinkedHashMap<>();
+        monto.put("currency_code", "USD");
+        monto.put("value", montoUsd.toPlainString());
+
+        Map<String, Object> unidad = new LinkedHashMap<>();
+        unidad.put("reference_id", String.valueOf(p.getIdPedido()));
+        unidad.put("custom_id", String.valueOf(p.getIdPedido()));
+        unidad.put("description", recortar("Pedido #" + p.getNumeroPedido() + " - " + tienda.getNombre(), 120));
+        unidad.put("amount", monto);
+
+        Map<String, Object> experiencia = new LinkedHashMap<>();
+        experiencia.put("brand_name", recortar(tienda.getNombre(), 120));
+        experiencia.put("shipping_preference", "NO_SHIPPING");   // la dirección ya la tiene Vendely
+        experiencia.put("user_action", "PAY_NOW");
+        experiencia.put("return_url", retorno);
+        experiencia.put("cancel_url", retorno + "&cancelado=1");
+
+        Map<String, Object> cuerpo = new LinkedHashMap<>();
+        cuerpo.put("intent", "CAPTURE");
+        cuerpo.put("purchase_units", List.of(unidad));
+        cuerpo.put("payment_source", Map.of("paypal", Map.of("experience_context", experiencia)));
+
+        Map<String, Object> orden;
+        try {
+            orden = payPal.crearOrden(cuerpo);
+        } catch (RestClientException e) {
+            throw falloPayPal("crear la orden", e);
+        }
+        String idOrden = orden == null ? null : texto(orden.get("id"));
+        String url = enlace(orden, "payer-action");
+        if (url == null) {
+            url = enlace(orden, "approve");
+        }
+        if (idOrden == null || url == null) {
+            log.error("PayPal no devolvió la orden o el enlace de pago para el pedido #{}", p.getNumeroPedido());
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "No se pudo iniciar el pago con PayPal");
+        }
+
+        Pago pago = new Pago();
+        pago.setIdPedido(p.getIdPedido());
+        pago.setProveedor(Pago.PAYPAL);
+        pago.setMonto(p.getTotal());              // en la moneda del pedido, como indica la columna
+        pago.setEstado(Pago.PENDIENTE);
+        pago.setReferenciaTransaccion(idOrden);
+        guardar(pago);
+
+        log.info("Pago iniciado con PayPal: pedido #{} (id={}), {} {} = {} USD",
+                p.getNumeroPedido(), p.getIdPedido(), p.getTotal(), p.getMoneda(), montoUsd);
+        return new PagoIniciadoResponse(url);
+    }
+
+    /**
+     * Verifica la orden EN PayPal (que sea de este pedido y por el monto correcto) y la cobra.
+     * Solo se aprueba si PayPal confirma el cobro como COMPLETED.
+     */
+    private ResultadoPagoResponse confirmarPayPal(Pedido p, Pago pago) {
+        String idOrden = pago.getReferenciaTransaccion();
+        Map<String, Object> orden = consultarOrdenPayPal(idOrden);
+
+        Map<String, Object> unidad = primeraUnidad(orden);
+        Map<String, Object> monto = mapa(unidad.get("amount"));
+        String pedidoDeLaOrden = texto(unidad.get("custom_id")) != null
+                ? texto(unidad.get("custom_id")) : texto(unidad.get("reference_id"));
+        BigDecimal valor = numero(monto.get("value"));
+        if (!String.valueOf(p.getIdPedido()).equals(pedidoDeLaOrden)
+                || !"USD".equals(texto(monto.get("currency_code")))
+                || valor == null || valor.compareTo(montoPayPal(p)) != 0) {
+            log.warn("Orden de PayPal {} no corresponde al pedido {}: pedido={}, monto={}",
+                    idOrden, p.getIdPedido(), pedidoDeLaOrden, valor);
+            throw new ApiException(HttpStatus.BAD_REQUEST, "El pago no corresponde a este pedido");
+        }
+
+        String estadoOrden = texto(orden.get("status"));
+        if ("COMPLETED".equals(estadoOrden)) {
+            return aprobarPayPal(p, pago);              // ya se había cobrado (por ejemplo, recargó la página)
+        }
+        if (!"APPROVED".equals(estadoOrden)) {
+            // CREATED o PAYER_ACTION_REQUIRED: el cliente no aprobó el pago en PayPal.
+            return rechazarPayPal(p, pago, "estado de la orden " + estadoOrden);
+        }
+
+        Map<String, Object> captura;
+        try {
+            captura = payPal.capturarOrden(idOrden);
+        } catch (RestClientResponseException e) {
+            if (e.getResponseBodyAsString().contains("ORDER_ALREADY_CAPTURED")) {
+                return aprobarPayPal(p, pago);
+            }
+            if (e.getStatusCode().value() == 422) {    // por ejemplo INSTRUMENT_DECLINED: el medio de pago fue rechazado
+                return rechazarPayPal(p, pago, "PayPal rechazó el cobro");
+            }
+            throw falloPayPal("cobrar la orden", e);
+        } catch (RestClientException e) {
+            throw falloPayPal("cobrar la orden", e);
+        }
+
+        String estadoCobro = texto(primeraCaptura(captura).get("status"));
+        if ("COMPLETED".equals(estadoCobro)) {
+            return aprobarPayPal(p, pago);
+        }
+        if ("DECLINED".equals(estadoCobro) || "FAILED".equals(estadoCobro)) {
+            return rechazarPayPal(p, pago, "estado del cobro " + estadoCobro);
+        }
+        log.info("Pago pendiente en PayPal: pedido #{}, estado del cobro {}", p.getNumeroPedido(), estadoCobro);
+        return resultado(p, Pago.PENDIENTE);
+    }
+
+    private ResultadoPagoResponse aprobarPayPal(Pedido p, Pago pago) {
+        pago.setEstado(Pago.APROBADO);
+        pago.setFechaPago(OffsetDateTime.now());
+        guardar(pago);
+        log.info("Pago aprobado con PayPal: pedido #{}, monto {} {}", p.getNumeroPedido(), p.getTotal(), p.getMoneda());
+        return resultado(p, Pago.APROBADO);
+    }
+
+    private ResultadoPagoResponse rechazarPayPal(Pedido p, Pago pago, String motivo) {
+        pago.setEstado(Pago.RECHAZADO);
+        guardar(pago);
+        log.info("Pago no completado con PayPal: pedido #{} ({})", p.getNumeroPedido(), motivo);
+        return resultado(p, Pago.RECHAZADO);
+    }
+
+    /** Monto a cobrar en PayPal (USD): el total si el pedido ya está en USD; si está en PEN, convertido. */
+    private BigDecimal montoPayPal(Pedido p) {
+        String moneda = p.getMoneda() == null ? "PEN" : p.getMoneda().trim();
+        if ("USD".equals(moneda)) {
+            return p.getTotal().setScale(2, RoundingMode.HALF_UP);
+        }
+        if ("PEN".equals(moneda)) {
+            return p.getTotal().divide(tipoCambioPenUsd, 2, RoundingMode.HALF_UP);
+        }
+        throw new ApiException(HttpStatus.BAD_REQUEST, "El pago con PayPal solo está disponible para pedidos en soles o dólares");
+    }
+
+    private Map<String, Object> consultarOrdenPayPal(String idOrden) {
+        try {
+            Map<String, Object> orden = payPal.consultarOrden(idOrden);
+            if (orden == null) {
+                throw new ApiException(HttpStatus.BAD_GATEWAY, "No se pudo verificar el pago");
+            }
+            return orden;
+        } catch (RestClientResponseException e) {
+            log.warn("PayPal respondió {} al consultar la orden {}", e.getStatusCode().value(), idOrden);
+            if (e.getStatusCode().value() == 404) {
+                throw new ApiException(HttpStatus.NOT_FOUND, "No se encontró ese pago en PayPal");
+            }
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "No se pudo verificar el pago");
+        } catch (RestClientException e) {
+            log.error("No se pudo conectar con PayPal: {}", e.getMessage());
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "No se pudo verificar el pago");
+        }
+    }
+
+    private ApiException falloPayPal(String accion, RestClientException e) {
+        if (e instanceof RestClientResponseException r) {
+            log.error("PayPal respondió {} al {}: {}", r.getStatusCode().value(), accion,
+                    recortar(r.getResponseBodyAsString()));
+        } else {
+            log.error("No se pudo conectar con PayPal al {}: {}", accion, e.getMessage());
+        }
+        return new ApiException(HttpStatus.BAD_GATEWAY, "No se pudo completar el pago con PayPal");
+    }
+
+    /** El "href" del enlace con ese "rel" (por ejemplo payer-action: la página de pago de PayPal). */
+    private static String enlace(Map<String, Object> orden, String rel) {
+        if (orden == null || !(orden.get("links") instanceof List<?> enlaces)) {
+            return null;
+        }
+        for (Object o : enlaces) {
+            Map<String, Object> l = mapa(o);
+            if (rel.equals(texto(l.get("rel")))) {
+                return texto(l.get("href"));
+            }
+        }
+        return null;
+    }
+
+    private static Map<String, Object> primeraUnidad(Map<String, Object> orden) {
+        return primero(orden == null ? null : orden.get("purchase_units"));
+    }
+
+    private static Map<String, Object> primeraCaptura(Map<String, Object> captura) {
+        Map<String, Object> pagos = mapa(primeraUnidad(captura).get("payments"));
+        return primero(pagos.get("captures"));
+    }
+
+    private static Map<String, Object> primero(Object lista) {
+        return lista instanceof List<?> l && !l.isEmpty() ? mapa(l.get(0)) : Map.of();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> mapa(Object o) {
+        return o instanceof Map<?, ?> m ? (Map<String, Object>) m : Map.of();
+    }
+
+    private static String recortar(String s, int max) {
+        return s != null && s.length() > max ? s.substring(0, max) : s;
     }
 
     // ------------------------------------------------------------------ apoyo
