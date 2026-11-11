@@ -52,27 +52,42 @@ public interface DireccionRepository extends JpaRepository<Direccion, Long> {
     @Query(value = "DELETE FROM direcciones WHERE id_login = :idLogin", nativeQuery = true)
     int borrarDeCliente(@Param("idLogin") Long idLogin);
 
-    /** Datos de un país que se usan para validar una dirección y para el selector de países. */
+    /** Datos de un país que se usan para validar una dirección, crear tiendas y para los selectores. */
     interface PaisInfo {
         String getIdPais();
         String getNombre();
-        Short getEstado();                  // 1 = Vendely tiene su lista oficial (Perú)
+        Short getEstado();                  // 1 = habilitado: Vendely tiene su lista oficial (Perú, Chile)
         Boolean getRequiereCodigoPostal();
         String getPrefijoTelefono();        // "+34"
-        String getIdMoneda();
+        String getIdMoneda();               // "PEN", "CLP"
+        Short getDecimales();               // decimales de su moneda: PEN 2, CLP 0
+        String getImpuesto();               // impuesto vigente: "IGV", "IVA"
+        java.math.BigDecimal getTasaImpuesto();   // 18.00, 19.00
+        String getNivelFinal();             // último nivel de su lista: "Distrito", "Comuna"
     }
 
     String COLUMNAS_PAIS = """
-            CAST(id_pais AS text) AS "idPais", nombre AS "nombre", estado AS "estado",
-            requiere_codigo_postal AS "requiereCodigoPostal", prefijo_telefono AS "prefijoTelefono",
-            CAST(id_moneda AS text) AS "idMoneda"
+            CAST(p.id_pais AS text) AS "idPais", p.nombre AS "nombre", p.estado AS "estado",
+            p.requiere_codigo_postal AS "requiereCodigoPostal", p.prefijo_telefono AS "prefijoTelefono",
+            CAST(p.id_moneda AS text) AS "idMoneda",
+            (SELECT m.decimales FROM monedas m WHERE m.id_moneda = p.id_moneda) AS "decimales",
+            (SELECT i.nombre FROM impuestos i
+              WHERE i.id_pais = p.id_pais AND i.vigente_desde <= CURRENT_DATE
+                AND (i.vigente_hasta IS NULL OR i.vigente_hasta > CURRENT_DATE)
+              ORDER BY i.vigente_desde DESC LIMIT 1) AS "impuesto",
+            (SELECT i.tasa FROM impuestos i
+              WHERE i.id_pais = p.id_pais AND i.vigente_desde <= CURRENT_DATE
+                AND (i.vigente_hasta IS NULL OR i.vigente_hasta > CURRENT_DATE)
+              ORDER BY i.vigente_desde DESC LIMIT 1) AS "tasaImpuesto",
+            (SELECT n.nombre FROM niveles_division n WHERE n.id_pais = p.id_pais
+              ORDER BY n.nivel DESC LIMIT 1) AS "nivelFinal"
             """;
 
-    @Query(value = "SELECT " + COLUMNAS_PAIS + " FROM paises WHERE id_pais = :idPais", nativeQuery = true)
+    @Query(value = "SELECT " + COLUMNAS_PAIS + " FROM paises p WHERE p.id_pais = :idPais", nativeQuery = true)
     Optional<PaisInfo> pais(@Param("idPais") String idPais);
 
     /** Todos los países, por nombre (para el selector de la dirección y de las tarifas). */
-    @Query(value = "SELECT " + COLUMNAS_PAIS + " FROM paises ORDER BY nombre", nativeQuery = true)
+    @Query(value = "SELECT " + COLUMNAS_PAIS + " FROM paises p ORDER BY p.nombre", nativeQuery = true)
     List<PaisInfo> paises();
 
     /**
@@ -95,13 +110,17 @@ public interface DireccionRepository extends JpaRepository<Direccion, Long> {
         String getProvincia();
     }
 
-    /** Distritos del país cuyo nombre contiene el texto (máximo 20). */
+    /**
+     * Divisiones del último nivel del país (distritos en Perú, comunas en Chile) cuyo nombre contiene
+     * el texto, sin importar mayúsculas ni tildes: "nunoa" encuentra "Ñuñoa" (máximo 20).
+     */
     @Query(value = """
             SELECT d.id_division AS "idDistrito", d.nombre AS "nombre", p.nombre AS "provincia"
               FROM divisiones d LEFT JOIN divisiones p ON p.id_division = d.id_padre
              WHERE d.id_pais = :idPais
                AND d.nivel = (SELECT max(nivel) FROM niveles_division WHERE id_pais = :idPais)
-               AND d.nombre ILIKE '%' || :texto || '%'
+               AND translate(lower(d.nombre), 'áéíóúüñ', 'aeiouun')
+                   LIKE '%' || translate(lower(CAST(:texto AS text)), 'áéíóúüñ', 'aeiouun') || '%'
              ORDER BY d.nombre LIMIT 20
             """, nativeQuery = true)
     List<DistritoFila> buscarDistritos(@Param("idPais") String idPais, @Param("texto") String texto);

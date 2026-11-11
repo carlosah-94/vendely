@@ -20,7 +20,8 @@ export default function IngresarCliente() {
   const destino = location.state?.volver ?? `/tienda/${subdominio}`;
 
   const [modo, setModo] = useState('ingresar'); // 'ingresar' | 'registro'
-  const [datos, setDatos] = useState(VACIO);
+  // El teléfono empieza con el prefijo del país de la tienda (+51 Perú, +56 Chile).
+  const [datos, setDatos] = useState({ ...VACIO, telefono: tienda.idPais === 'CL' ? '+56' : '+51' });
   const [errores, setErrores] = useState({});
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);

@@ -47,7 +47,7 @@ public class AdminService {
 
     @Transactional(readOnly = true)
     public AdminResumenResponse resumen() {
-        return AdminResumenResponse.desde(adminRepository.resumen());
+        return AdminResumenResponse.desde(adminRepository.resumen(), adminRepository.ventasPorMoneda());
     }
 
     @Transactional(readOnly = true)

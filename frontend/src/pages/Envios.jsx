@@ -10,7 +10,7 @@ import { mensajeDeError } from '../services/api';
 import {
   guardarTarifaInternacional, guardarTarifaNacional, listarPaises, obtenerEnvios, quitarTarifaInternacional,
 } from '../services/envios';
-import { formatoMoneda } from '../utils/formato';
+import { decimalesMoneda, ejemploMonto, esMontoValido, formatoMoneda } from '../utils/formato';
 import { BOTON, BOTON_SECUNDARIO, ENCABEZADO_TABLA, TARJETA, etiqueta, inputPanel } from '../utils/panel';
 
 const ESTADO = {
@@ -102,7 +102,7 @@ export default function Envios() {
               <div>
                 <h2 className="font-semibold text-[#101010]">Envíos nacionales · {envios.pais}</h2>
                 <p className="text-[13px] text-[#616161]">
-                  Envías a {activasNac} de {nacionales.length} regiones. Los montos van en {envios.moneda} e incluyen IGV.
+                  Envías a {activasNac} de {nacionales.length} regiones. Los montos van en {envios.moneda} e incluyen {tienda?.impuesto ?? 'el impuesto'}.
                 </p>
               </div>
             </div>
@@ -141,7 +141,7 @@ export default function Envios() {
               <div>
                 <h2 className="font-semibold text-[#101010]">Envíos internacionales</h2>
                 <p className="text-[13px] text-[#616161]">
-                  Solo vendes a los países que agregues aquí. Las ventas al extranjero no llevan IGV.
+                  Solo vendes a los países que agregues aquí. Las ventas al extranjero no llevan {tienda?.impuesto ?? 'impuesto'}.
                 </p>
               </div>
               <button onClick={() => setEditando({ tipo: 'internacional', tarifa: null })} className={`${BOTON} inline-flex items-center gap-1`}>
@@ -250,8 +250,6 @@ function FilaTarifa({ tarifa: t, onEditar, onQuitar }) {
   );
 }
 
-const MONTO = /^\d+(\.\d{1,2})?$/;
-
 /** Ventana para crear o editar una tarifa (de una región o de un país). */
 function FormularioTarifa({ tipo, tarifa, moneda, paises, onCerrar, onGuardar }) {
   const nueva = !tarifa;
@@ -275,8 +273,9 @@ function FormularioTarifa({ tipo, tarifa, moneda, paises, onCerrar, onGuardar })
     e.preventDefault();
     const er = {};
     if (nueva && tipo === 'internacional' && !d.idPais) er.idPais = 'Elige un país';
-    if (!MONTO.test(d.costo.trim())) er.costo = 'Escribe un monto (0 = gratis), con hasta 2 decimales';
-    if (d.gratis.trim() && (!MONTO.test(d.gratis.trim()) || Number(d.gratis) <= 0)) er.gratis = 'Monto mayor que 0';
+    // Montos con los decimales de la moneda de la tienda: soles hasta 2, pesos chilenos ninguno.
+    if (!esMontoValido(d.costo)) er.costo = `Escribe un monto (0 = gratis), ${ejemploMonto()}`;
+    if (d.gratis.trim() && (!esMontoValido(d.gratis) || Number(d.gratis.replace(',', '.')) <= 0)) er.gratis = `Monto mayor que 0, ${ejemploMonto()}`;
     if (d.diasMin.trim() && !/^\d{1,3}$/.test(d.diasMin.trim())) er.diasMin = 'Número de días';
     if (d.diasMax.trim() && !/^\d{1,3}$/.test(d.diasMax.trim())) er.diasMax = 'Número de días';
     if (!er.diasMin && !er.diasMax && d.diasMin.trim() && d.diasMax.trim() && Number(d.diasMin) > Number(d.diasMax)) {
@@ -289,8 +288,8 @@ function FormularioTarifa({ tipo, tarifa, moneda, paises, onCerrar, onGuardar })
     setError('');
     try {
       await onGuardar(nueva && tipo === 'internacional' ? d.idPais : tarifa.idZona, {
-        costo: Number(d.costo),
-        envioGratisDesde: d.gratis.trim() ? Number(d.gratis) : null,
+        costo: Number(d.costo.trim().replace(',', '.')),
+        envioGratisDesde: d.gratis.trim() ? Number(d.gratis.trim().replace(',', '.')) : null,
         diasEntregaMin: d.diasMin.trim() ? Number(d.diasMin) : null,
         diasEntregaMax: d.diasMax.trim() ? Number(d.diasMax) : null,
         activa: d.activa,
@@ -325,10 +324,10 @@ function FormularioTarifa({ tipo, tarifa, moneda, paises, onCerrar, onGuardar })
           )}
           <div className="grid grid-cols-2 gap-3">
             <CampoPanel etiqueta={`Costo (${moneda})`} error={errores.costo} ayuda="0 = envío gratis">
-              <input inputMode="decimal" value={d.costo} onChange={cambiar('costo')} placeholder="10.00" className={inputPanel(errores.costo)} />
+              <input inputMode="decimal" value={d.costo} onChange={cambiar('costo')} placeholder={decimalesMoneda() === 0 ? '3990' : '10.00'} className={inputPanel(errores.costo)} />
             </CampoPanel>
             <CampoPanel etiqueta={`Gratis desde (${moneda})`} error={errores.gratis} ayuda="Opcional">
-              <input inputMode="decimal" value={d.gratis} onChange={cambiar('gratis')} placeholder="200.00" className={inputPanel(errores.gratis)} />
+              <input inputMode="decimal" value={d.gratis} onChange={cambiar('gratis')} placeholder={decimalesMoneda() === 0 ? '50000' : '200.00'} className={inputPanel(errores.gratis)} />
             </CampoPanel>
             <CampoPanel etiqueta="Entrega: días mínimos" error={errores.diasMin}>
               <input inputMode="numeric" value={d.diasMin} onChange={cambiar('diasMin')} placeholder="1" className={inputPanel(errores.diasMin)} />

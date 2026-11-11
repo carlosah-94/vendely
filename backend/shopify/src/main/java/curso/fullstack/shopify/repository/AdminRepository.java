@@ -21,7 +21,6 @@ public interface AdminRepository extends Repository<Tienda, Long> {
         Long getDuenos();
         Long getClientes();
         Long getPedidos();
-        BigDecimal getVentasPagadas();
     }
 
     // Una venta "pagada" es un pedido con un pago aprobado (pagos.estado = 1).
@@ -30,12 +29,24 @@ public interface AdminRepository extends Repository<Tienda, Long> {
                    (SELECT count(*) FROM tiendas WHERE estado = 0) AS "tiendasSuspendidas",
                    (SELECT count(*) FROM login WHERE id_rol = 2)   AS "duenos",
                    (SELECT count(*) FROM login WHERE id_rol = 3)   AS "clientes",
-                   (SELECT count(*) FROM pedidos)                  AS "pedidos",
-                   (SELECT coalesce(sum(p.total), 0) FROM pedidos p
-                     WHERE EXISTS (SELECT 1 FROM pagos pg WHERE pg.id_pedido = p.id_pedido AND pg.estado = 1))
-                                                                   AS "ventasPagadas"
+                   (SELECT count(*) FROM pedidos)                  AS "pedidos"
             """, nativeQuery = true)
     Resumen resumen();
+
+    /** Ventas pagadas sumadas por moneda: no se suman soles con pesos chilenos. */
+    interface VentaMoneda {
+        String getMoneda();
+        BigDecimal getMonto();
+    }
+
+    @Query(value = """
+            SELECT CAST(p.moneda AS text) AS "moneda", sum(p.total) AS "monto"
+              FROM pedidos p
+             WHERE EXISTS (SELECT 1 FROM pagos pg WHERE pg.id_pedido = p.id_pedido AND pg.estado = 1)
+             GROUP BY p.moneda
+             ORDER BY sum(p.total) DESC
+            """, nativeQuery = true)
+    List<VentaMoneda> ventasPorMoneda();
 
     /** Una tienda con su dueño y sus números. */
     interface FilaTienda {
@@ -50,6 +61,7 @@ public interface AdminRepository extends Repository<Tienda, Long> {
         Long getProductos();
         Long getPedidos();
         BigDecimal getVentasPagadas();
+        String getMoneda();          // moneda de la tienda: sus ventas van en ella
     }
 
     @Query(value = """
@@ -61,8 +73,10 @@ public interface AdminRepository extends Repository<Tienda, Long> {
                    (SELECT coalesce(sum(pe.total), 0) FROM pedidos pe
                      WHERE pe.id_tienda = t.id_tienda
                        AND EXISTS (SELECT 1 FROM pagos pg WHERE pg.id_pedido = pe.id_pedido AND pg.estado = 1))
-                                                                                         AS "ventasPagadas"
+                                                                                         AS "ventasPagadas",
+                   CAST(pa.id_moneda AS text) AS "moneda"
               FROM tiendas t
+              JOIN paises pa        ON pa.id_pais = t.id_pais
               JOIN propietarios pro ON pro.id_propietario = t.id_propietario
               JOIN login l          ON l.id_login = pro.id_login
              ORDER BY t.fecha_creacion DESC

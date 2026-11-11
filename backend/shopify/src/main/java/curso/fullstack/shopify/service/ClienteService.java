@@ -262,9 +262,10 @@ public class ClienteService {
 
     /**
      * Completa el país y la ubicación de una dirección, con las mismas reglas que la base (T12):
-     * - País de la tienda: distrito de la lista oficial, del último nivel. Sin ciudad ni región escritas.
+     * - País habilitado (el de la tienda, o Perú y Chile, que tienen su lista oficial): se elige la
+     *   división del último nivel (distrito en Perú, comuna en Chile). Sin ciudad ni región escritas.
      * - Otro país: ciudad obligatoria, región opcional y código postal si el país lo exige,
-     *   con el formato del país. Sin distrito.
+     *   con el formato del país. Sin división.
      * Se valida aquí para responder 400 con un mensaje claro en vez del error del trigger.
      */
     private void ubicar(Direccion d, DireccionRequest r, String paisTienda) {
@@ -275,22 +276,19 @@ public class ClienteService {
         if (codigoPostal != null) {
             codigoPostal = codigoPostal.toUpperCase(Locale.ROOT);
         }
+        boolean conLista = idPais.equals(paisTienda) || (pais.getEstado() != null && pais.getEstado() == 1);
 
         d.setIdPais(idPais);
-        if (idPais.equals(paisTienda)) {
+        if (conLista) {
             if (r.idDistrito() == null || !direccionRepository.esDistritoValido(r.idDistrito(), idPais)) {
+                String division = pais.getNivelFinal() == null ? "distrito" : pais.getNivelFinal().toLowerCase(Locale.ROOT);
                 throw new ApiException(HttpStatus.BAD_REQUEST,
-                        "Elige el distrito de la lista oficial de " + pais.getNombre());
+                        "Elige tu " + division + " de la lista oficial de " + pais.getNombre());
             }
             d.setIdDivision(r.idDistrito());
             d.setCiudad(null);
             d.setRegion(null);
         } else {
-            if (pais.getEstado() != null && pais.getEstado() == 1) {
-                // Un país con lista oficial exige elegir la división (T12); hoy solo Perú la tiene.
-                throw new ApiException(HttpStatus.BAD_REQUEST,
-                        "Por ahora no se pueden registrar direcciones en " + pais.getNombre() + " desde esta tienda");
-            }
             String ciudad = vacioANull(r.ciudad());
             if (ciudad == null) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "Escribe la ciudad");

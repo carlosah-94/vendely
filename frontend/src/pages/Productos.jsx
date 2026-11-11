@@ -247,7 +247,7 @@ export default function Productos() {
                       </div>
                     </div>
                   </td>
-                  {/* Soles (por ahora solo Perú está habilitado para crear tiendas). */}
+                  {/* En la moneda de la tienda: soles en Perú, pesos en Chile. */}
                   <td className="whitespace-nowrap px-4 py-3 text-right text-[#303030]">
                     {formatoMoneda(p.precio)}
                     {p.precioComparacion && (
@@ -311,6 +311,7 @@ export default function Productos() {
       {formulario && tienda && (
         <FormularioProducto
           idTienda={idTienda}
+          impuesto={tienda?.impuesto}
           producto={formulario === 'nuevo' ? null : formulario}
           onGuardado={alGuardar}
           onCerrar={cerrarFormulario}

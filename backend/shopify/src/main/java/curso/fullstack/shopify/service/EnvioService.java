@@ -25,7 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
  * Envíos de una tienda, nacionales e internacionales.
  *
  * La base ya hace cumplir las reglas al crear un pedido (trigger T2): el costo sale de la tarifa,
- * una venta al extranjero no lleva IGV y, si la tienda no tiene tarifa para ese país, el pedido
+ * una venta al extranjero no lleva el impuesto de la tienda (IGV, IVA) y, si la tienda no tiene tarifa para ese país, el pedido
  * se rechaza. Este service le da al dueño las pantallas para configurar sus tarifas y al cliente
  * una cotización ANTES de pagar, con la misma regla.
  */
@@ -57,7 +57,7 @@ public class EnvioService {
         return armar(t);
     }
 
-    /** Crea o cambia la tarifa de una región del país de la tienda (departamento en Perú). */
+    /** Crea o cambia la tarifa de una región del país de la tienda (departamento en Perú, región en Chile). */
     @Transactional
     public EnviosResponse guardarNacional(UsuarioAutenticado yo, Long idTienda, Long idDivision, TarifaRequest r) {
         Tienda t = verificadorTienda.delDueno(yo, idTienda);
@@ -126,10 +126,16 @@ public class EnvioService {
         if (c.getEnvioGratisDesde() != null && subtotal != null && subtotal.compareTo(c.getEnvioGratisDesde()) >= 0) {
             costo = BigDecimal.ZERO;
         }
-        String mensaje = internacional
-                ? "Envío internacional a " + c.getPais() + ". El precio no incluye IGV: los impuestos de "
-                  + "importación de tu país los pagas al recibir el pedido."
-                : null;
+        String mensaje = null;
+        if (internacional) {
+            // El impuesto del país de la tienda (IGV en Perú, IVA en Chile) no se cobra en una exportación.
+            String impuesto = tiendaRepository.findById(yo.idTienda())
+                    .flatMap(t -> direccionRepository.pais(t.getIdPais()))
+                    .map(DireccionRepository.PaisInfo::getImpuesto)
+                    .orElse("impuesto");
+            mensaje = "Envío internacional a " + c.getPais() + ". El precio no incluye " + impuesto
+                    + ": los impuestos de importación de tu país los pagas al recibir el pedido.";
+        }
         return new CotizacionEnvioResponse(true, internacional, c.getIdPais(), c.getPais(), costo,
                 c.getEnvioGratisDesde(), c.getDiasEntregaMin(), c.getDiasEntregaMax(), mensaje);
     }

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { montoVacio, simboloMoneda } from '../utils/formato';
 import { claveVariante, combinaciones, MAX_OPCIONES, MAX_VARIANTES, nombreVariante } from '../utils/variantes';
 import { IconoCerrar, IconoMas } from './Iconos';
 
@@ -51,8 +52,8 @@ export default function EditorVariantes({ opciones, onOpciones, filas, onFilas, 
             <thead className="bg-[#f7f7f7] text-left text-[#616161]">
               <tr>
                 <th className="px-3 py-2 font-medium">Variante</th>
-                <th className="px-3 py-2 font-medium">Precio (S/)</th>
-                <th className="px-3 py-2 font-medium">Antes (S/)</th>
+                <th className="px-3 py-2 font-medium">Precio ({simboloMoneda()})</th>
+                <th className="px-3 py-2 font-medium">Antes ({simboloMoneda()})</th>
                 <th className="px-3 py-2 font-medium">Stock</th>
                 <th className="px-3 py-2 font-medium">SKU</th>
               </tr>
@@ -72,7 +73,7 @@ export default function EditorVariantes({ opciones, onOpciones, filas, onFilas, 
                       <input
                         inputMode="decimal"
                         value={f.precio ?? ''}
-                        placeholder={precioBase || '0.00'}
+                        placeholder={precioBase || montoVacio()}
                         onChange={(e) => cambiarFila(clave, 'precio', e.target.value)}
                         aria-label={`Precio de ${nombreVariante(valores)}`}
                         className="w-24 rounded-md border border-[#c9c9c9] px-2 py-1"

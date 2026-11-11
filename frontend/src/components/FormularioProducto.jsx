@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { mensajeDeError } from '../services/api';
 import { listarCategorias } from '../services/categorias';
 import { actualizarProducto, crearProducto } from '../services/productos';
+import { ejemploMonto, esMontoValido, montoVacio, simboloMoneda } from '../utils/formato';
 import { claveVariante, combinaciones, MAX_VARIANTES } from '../utils/variantes';
 import EditorVariantes from './EditorVariantes';
 import { IconoCerrar } from './Iconos';
@@ -9,7 +10,6 @@ import ImagenProducto from './ImagenProducto';
 
 const MAX_DESCRIPCION = 500;
 const MAX_IMAGENES = 5;
-const PATRON_MONTO = /^\d+(\.\d{1,2})?$/;
 const PATRON_URL = /^https?:\/\/\S+$/;
 
 const aNumero = (texto) => Number(texto.trim().replace(',', '.'));
@@ -51,8 +51,8 @@ function validarVariantes(opciones, filas, precioBase) {
     const precio = (f.precio ?? '').trim() || precioBase.trim();
     const comparacion = (f.precioComparacion ?? '').trim();
     let error = '';
-    if (!PATRON_MONTO.test(precio.replace(',', '.')) || Number(precio.replace(',', '.')) <= 0) error = 'Precio no válido';
-    else if (comparacion && (!PATRON_MONTO.test(comparacion.replace(',', '.'))
+    if (!esMontoValido(precio) || Number(precio.replace(',', '.')) <= 0) error = 'Precio no válido';
+    else if (comparacion && (!esMontoValido(comparacion)
       || Number(comparacion.replace(',', '.')) <= Number(precio.replace(',', '.')))) error = 'El precio "antes" debe ser mayor';
     else if ((f.stock ?? '').trim() && !/^\d+$/.test(f.stock.trim())) error = 'Stock no válido';
     else if ((f.sku ?? '').trim().length > 60) error = 'SKU muy largo';
@@ -68,15 +68,16 @@ function validar(datos) {
   if (datos.descripcion.length > MAX_DESCRIPCION) e.descripcion = `La descripción puede tener hasta ${MAX_DESCRIPCION} caracteres`;
   if (datos.marca.trim().length > 100) e.marca = 'Máximo 100 caracteres';
 
-  // Precio: número mayor que 0 con hasta 2 decimales (céntimos), como NUMERIC(12,2).
+  // Precio: número mayor que 0 con los decimales de la moneda de la tienda
+  // (soles: hasta 2, pesos chilenos: ninguno), como exige la base (T16).
   const precio = datos.precio.trim().replace(',', '.');
-  if (!PATRON_MONTO.test(precio)) e.precio = 'Escribe un precio válido, con hasta 2 decimales (ej. 49.90)';
+  if (!esMontoValido(precio)) e.precio = `Escribe un precio válido, ${ejemploMonto()}`;
   else if (Number(precio) <= 0) e.precio = 'El precio debe ser mayor que 0';
 
   // Precio de comparación: opcional; si se escribe, debe ser mayor que el precio (si no, no es rebaja).
   const comparacion = datos.precioComparacion.trim().replace(',', '.');
   if (comparacion && !datos.conVariantes) {
-    if (!PATRON_MONTO.test(comparacion)) e.precioComparacion = 'Escribe un precio válido, con hasta 2 decimales';
+    if (!esMontoValido(comparacion)) e.precioComparacion = `Escribe un precio válido, ${ejemploMonto()}`;
     else if (!e.precio && Number(comparacion) <= Number(precio)) e.precioComparacion = 'Debe ser mayor que el precio';
   }
 
@@ -95,7 +96,7 @@ function validar(datos) {
  * Al editar el precio, el backend cierra el precio anterior y crea uno nuevo: las ventas
  * pasadas conservan el precio con el que se hicieron.
  */
-export default function FormularioProducto({ idTienda, producto, onGuardado, onCerrar }) {
+export default function FormularioProducto({ idTienda, impuesto = 'IGV', producto, onGuardado, onCerrar }) {
   const esNuevo = !producto;
   const [datos, setDatos] = useState({
     nombre: producto?.nombre ?? '',
@@ -368,10 +369,10 @@ export default function FormularioProducto({ idTienda, producto, onGuardado, onC
                 <Campo
                   etiqueta={conVariantes ? 'Precio por defecto' : 'Precio'}
                   error={errores.precio}
-                  ayuda={conVariantes ? 'Para las variantes que dejes sin precio. Incluye IGV' : 'Incluye el impuesto (IGV)'}
+                  ayuda={conVariantes ? `Para las variantes que dejes sin precio. Incluye ${impuesto}` : `Incluye el impuesto (${impuesto})`}
                 >
                   <ConPrefijo>
-                    <input inputMode="decimal" value={datos.precio} onChange={cambiar('precio')} placeholder="0.00" className={estiloInput(errores.precio, true)} />
+                    <input inputMode="decimal" value={datos.precio} onChange={cambiar('precio')} placeholder={montoVacio()} className={estiloInput(errores.precio, true)} />
                   </ConPrefijo>
                 </Campo>
                 {!conVariantes && (
@@ -385,7 +386,7 @@ export default function FormularioProducto({ idTienda, producto, onGuardado, onC
                       inputMode="decimal"
                       value={datos.precioComparacion}
                       onChange={cambiar('precioComparacion')}
-                      placeholder="0.00"
+                      placeholder={montoVacio()}
                       className={estiloInput(errores.precioComparacion, true)}
                     />
                   </ConPrefijo>
@@ -523,11 +524,11 @@ function Campo({ etiqueta, error, ayuda, children }) {
   );
 }
 
-/** Pone "S/" delante del input de un monto. */
+/** Pone el símbolo de la moneda de la tienda ("S/" o "$") delante del input de un monto. */
 function ConPrefijo({ children }) {
   return (
     <div className="relative">
-      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[13px] text-[#616161]">S/</span>
+      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[13px] text-[#616161]">{simboloMoneda()}</span>
       {children}
     </div>
   );

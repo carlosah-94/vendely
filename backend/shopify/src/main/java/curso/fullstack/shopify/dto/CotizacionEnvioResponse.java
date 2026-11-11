@@ -5,7 +5,7 @@ import java.math.BigDecimal;
 /**
  * Cuánto cuesta enviar a una dirección del cliente, antes de pagar.
  * disponible = false: la tienda no envía ahí (mensaje explica por qué) y el pedido no se puede crear.
- * internacional = true: venta al extranjero, sin IGV (los impuestos de importación los paga el
+ * internacional = true: venta al extranjero, sin el impuesto de la tienda (IGV, IVA) (los impuestos de importación los paga el
  * comprador al recibir).
  */
 public record CotizacionEnvioResponse(

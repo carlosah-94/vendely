@@ -4,7 +4,7 @@ import { CarritoProvider, useCarrito } from '../../context/CarritoContext';
 import { useAuth } from '../../context/AuthContext';
 import { mensajeDeError } from '../../services/api';
 import { paisesDeEnvio } from '../../services/envios';
-import { colorTextoSobre } from '../../utils/formato';
+import { colorTextoSobre, usarMoneda } from '../../utils/formato';
 import { obtenerTienda } from '../../services/tienda';
 import { IconoBuscar, IconoCarrito, IconoCuenta } from '../Iconos';
 import CarritoDrawer from './CarritoDrawer';
@@ -75,6 +75,8 @@ function Marco({ subdominio }) {
 
   const { tienda } = estado;
   const contexto = { tienda, subdominio };
+  // Precios, carrito y checkout en la moneda de la tienda: soles en Perú, pesos en Chile.
+  usarMoneda(tienda.moneda);
   // El color de la tienda se pasa como variable CSS: los botones usan bg-[var(--tienda)].
   const colores = {
     '--tienda': tienda.colorPrincipal || '#303030',

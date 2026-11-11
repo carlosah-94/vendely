@@ -130,13 +130,13 @@ export default function Checkout() {
         <div className="flex items-baseline justify-between pt-2 text-xl font-semibold">
           <dt>Total</dt>
           <dd>
-            <span className="mr-2 text-xs font-normal text-[#616161]">PEN</span>
+            <span className="mr-2 text-xs font-normal text-[#616161]">{tienda.moneda ?? 'PEN'}</span>
             {formatoMoneda(subtotal + (costoEnvio ?? 0))}
           </dd>
         </div>
         <p className="text-xs text-[#616161]">
           {cotizacion?.datos?.internacional
-            ? 'Venta al extranjero: sin IGV. Los impuestos de importación los pagas al recibir.'
+            ? `Venta al extranjero: sin ${tienda.impuesto ?? 'impuesto'}. Los impuestos de importación los pagas al recibir.`
             : costoEnvio != null ? 'Impuestos incluidos.' : 'Más el costo de envío. Impuestos incluidos.'}
         </p>
       </dl>
@@ -233,6 +233,7 @@ export default function Checkout() {
             {nueva && direcciones && (
               <FormularioDireccion
                 idPais={tienda.idPais}
+                nivelTienda={tienda.nivelFinal}
                 puedeCancelar={direcciones.length > 0}
                 onCancelar={() => setNueva(false)}
                 onGuardada={(d) => {
@@ -275,33 +276,47 @@ export default function Checkout() {
   );
 }
 
-/** Ubicación de una dirección: el distrito si es del país de la tienda; si no, ciudad, región, CP y país. */
+/**
+ * Ubicación de una dirección: el distrito o la comuna de la lista oficial (más el país si no es el
+ * de la tienda); si el país no tiene lista, ciudad, región, CP y país.
+ */
 function textoUbicacion(d, idPaisTienda) {
-  if (d.idPais && d.idPais !== idPaisTienda) {
-    return [d.ciudad, d.region, d.codigoPostal, d.pais].filter(Boolean).join(', ');
+  const extranjera = d.idPais && d.idPais !== idPaisTienda;
+  if (d.distrito) {
+    return extranjera ? `${d.distrito}, ${d.pais}` : d.distrito;
   }
-  return d.distrito;
+  return [d.ciudad, d.region, d.codigoPostal, d.pais].filter(Boolean).join(', ');
 }
 
 /**
- * Formulario de una dirección nueva. En el país de la tienda se busca el distrito de la lista
- * oficial; en otro país se escriben la ciudad, la región y el código postal (como en Shopify).
+ * Formulario de una dirección nueva. En un país con lista oficial (el de la tienda, Perú o Chile)
+ * se busca el distrito o la comuna; en otro país se escriben la ciudad, la región y el código
+ * postal (como en Shopify).
  */
-function FormularioDireccion({ idPais, puedeCancelar, onCancelar, onGuardada }) {
+function FormularioDireccion({ idPais, nivelTienda = 'Distrito', puedeCancelar, onCancelar, onGuardada }) {
   const [paises, setPaises] = useState([]);
   const [datos, setDatos] = useState({
-    idPais, idDistrito: null, ciudad: '', region: '', codigoPostal: '', direccion: '', referencia: '', telefono: '+51',
+    idPais, idDistrito: null, ciudad: '', region: '', codigoPostal: '', direccion: '', referencia: '', telefono: '+',
   });
   const [errores, setErrores] = useState({});
   const [error, setError] = useState('');
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
-    listarPaises().then(setPaises).catch(() => setPaises([]));
-  }, []);
+    listarPaises()
+      .then((lista) => {
+        setPaises(lista);
+        // El teléfono empieza con el prefijo del país de la tienda: +51 en Perú, +56 en Chile.
+        const prefijo = lista.find((p) => p.idPais === idPais)?.prefijoTelefono;
+        if (prefijo) setDatos((d) => (/^\+\d{0,4}$/.test(d.telefono.trim()) ? { ...d, telefono: prefijo } : d));
+      })
+      .catch(() => setPaises([]));
+  }, [idPais]);
 
-  const local = datos.idPais === idPais;
   const pais = paises.find((p) => p.idPais === datos.idPais);
+  // Con lista oficial: se elige la división del último nivel (distrito, comuna) en vez de escribir la ciudad.
+  const local = datos.idPais === idPais || Boolean(pais?.habilitado);
+  const nivel = datos.idPais === idPais ? nivelTienda : (pais?.nivelFinal ?? 'Distrito');
 
   function cambiarPais(nuevo) {
     const prefijo = paises.find((p) => p.idPais === nuevo)?.prefijoTelefono ?? '+';
@@ -317,7 +332,7 @@ function FormularioDireccion({ idPais, puedeCancelar, onCancelar, onGuardada }) 
 
   async function guardar() {
     const e = {};
-    if (local && !datos.idDistrito) e.idDistrito = 'Elige un distrito de la lista';
+    if (local && !datos.idDistrito) e.idDistrito = `Elige tu ${nivel.toLowerCase()} de la lista`;
     if (!local && !datos.ciudad.trim()) e.ciudad = 'Escribe la ciudad';
     if (!local && pais?.requiereCodigoPostal && !datos.codigoPostal.trim()) e.codigoPostal = 'El código postal es obligatorio en este país';
     if (!datos.direccion.trim()) e.direccion = 'La dirección es obligatoria';
@@ -363,7 +378,9 @@ function FormularioDireccion({ idPais, puedeCancelar, onCancelar, onGuardada }) 
       </Campo>
       {local ? (
         <BuscadorDistrito
-          idPais={idPais}
+          key={datos.idPais}
+          idPais={datos.idPais}
+          etiqueta={nivel}
           error={errores.idDistrito}
           onElegir={(id) => {
             setDatos((d) => ({ ...d, idDistrito: id }));

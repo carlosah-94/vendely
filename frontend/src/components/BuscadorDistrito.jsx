@@ -3,12 +3,16 @@ import { buscarDistritos } from '../services/clientes';
 import { estiloInput } from '../utils/estilos';
 import Campo from './Campo';
 
+// Un ejemplo conocido de cada país para el placeholder.
+const EJEMPLO = { PE: 'Miraflores', CL: 'Providencia' };
+
 /**
- * Elegir el distrito escribiendo su nombre ("mira" → Miraflores). Se usa la lista oficial
- * (ubigeo en Perú) porque el backend exige un distrito de esa lista.
+ * Elegir la división del último nivel escribiendo su nombre: el distrito en Perú ("mira" →
+ * Miraflores), la comuna en Chile ("provi" → Providencia). Se usa la lista oficial (ubigeo en
+ * Perú, CUT en Chile) porque el backend exige una división de esa lista. No importan las tildes.
  * Espera 300 ms después de la última tecla para no llamar al servidor en cada letra.
  */
-export default function BuscadorDistrito({ idPais, error, onElegir }) {
+export default function BuscadorDistrito({ idPais, etiqueta = 'Distrito', error, onElegir }) {
   const [texto, setTexto] = useState('');
   const [resultados, setResultados] = useState([]);
   const [elegido, setElegido] = useState(null);
@@ -34,7 +38,7 @@ export default function BuscadorDistrito({ idPais, error, onElegir }) {
 
   return (
     <div className="relative">
-      <Campo etiqueta="Distrito" error={error} ayuda="Escribe al menos 2 letras y elige de la lista">
+      <Campo etiqueta={etiqueta} error={error} ayuda="Escribe al menos 2 letras y elige de la lista">
         <input
           value={texto}
           onChange={(e) => {
@@ -48,7 +52,7 @@ export default function BuscadorDistrito({ idPais, error, onElegir }) {
               onElegir(null);
             }
           }}
-          placeholder="Miraflores"
+          placeholder={EJEMPLO[idPais] ?? ''}
           autoComplete="off"
           className={estiloInput(error)}
         />

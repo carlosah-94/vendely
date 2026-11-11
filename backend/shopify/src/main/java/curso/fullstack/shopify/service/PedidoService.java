@@ -155,7 +155,7 @@ public class PedidoService {
                     cantidad, precio.getMonto(), importe));
         }
 
-        // 4. Guardar el pedido: Java manda el subtotal; el trigger pone número, envío, total e IGV
+        // 4. Guardar el pedido: Java manda el subtotal; el trigger pone número, envío, total e impuesto (IGV, IVA)
         Pedido p = new Pedido();
         p.setIdTienda(idTienda);
         p.setIdLogin(cliente.getIdLogin());

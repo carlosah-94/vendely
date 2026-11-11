@@ -27,5 +27,10 @@ public record TiendaCrearRequest(
         @Pattern(regexp = "^#[0-9A-Fa-f]{6}$", message = "El color debe tener el formato #RRGGBB, por ejemplo #1D4ED8")
         String colorPrincipal,
 
-        Boolean permiteInvitados
+        Boolean permiteInvitados,
+
+        // País donde vende (ISO 3166-1). Opcional: si no viene, Perú. Define moneda, impuesto y
+        // la lista de ubicaciones, y no se cambia después (T8). Solo países habilitados (T12).
+        @Pattern(regexp = "^[A-Z]{2}$", message = "El país no es válido")
+        String idPais
 ) {}

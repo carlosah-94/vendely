@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 
 /**
  * Crear o editar una tarifa de envío (a una región del país o a otro país).
- * Los montos van en la moneda de la tienda (soles en Perú).
+ * Los montos van en la moneda de la tienda (soles en Perú, pesos sin decimales en Chile).
  */
 public record TarifaRequest(
         @NotNull(message = "El costo es obligatorio (0 = envío gratis)")

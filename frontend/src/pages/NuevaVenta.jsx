@@ -159,8 +159,8 @@ export default function NuevaVenta() {
     return <Mensaje tipo="info" texto="Todavía no tienes tiendas. Crea una para registrar ventas." />;
   }
 
-  // La vista previa usa soles; el monto final, con su moneda, lo devuelve el backend al guardar.
-  const moneda = 'PEN';
+  // La vista previa va en la moneda de la tienda (soles, pesos chilenos); el monto final lo calcula la base al guardar.
+  const moneda = tienda.moneda ?? 'PEN';
 
   // Un producto ya elegido en otra fila no se ofrece de nuevo: para más unidades se sube la cantidad.
   const elegidos = lineas.map((l) => Number(l.idVariante));

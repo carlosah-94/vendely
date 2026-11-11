@@ -7,6 +7,7 @@ import curso.fullstack.shopify.dto.TiendaResponse;
 import curso.fullstack.shopify.entity.Propietario;
 import curso.fullstack.shopify.entity.Tienda;
 import curso.fullstack.shopify.exception.ApiException;
+import curso.fullstack.shopify.repository.DireccionRepository;
 import curso.fullstack.shopify.repository.TiendaRepository;
 import curso.fullstack.shopify.security.UsuarioAutenticado;
 import curso.fullstack.shopify.security.VerificadorTienda;
@@ -29,12 +30,14 @@ public class TiendaService {
             "soporte", "ayuda", "static", "cdn", "login", "registro", "tienda", "tiendas");
 
     private final TiendaRepository tiendaRepository;
+    private final DireccionRepository direccionRepository;
     private final VerificadorTienda verificadorTienda;
     private final EntityManager entityManager;
 
-    public TiendaService(TiendaRepository tiendaRepository, VerificadorTienda verificadorTienda,
-            EntityManager entityManager) {
+    public TiendaService(TiendaRepository tiendaRepository, DireccionRepository direccionRepository,
+            VerificadorTienda verificadorTienda, EntityManager entityManager) {
         this.tiendaRepository = tiendaRepository;
+        this.direccionRepository = direccionRepository;
         this.verificadorTienda = verificadorTienda;
         this.entityManager = entityManager;
     }
@@ -52,9 +55,19 @@ public class TiendaService {
         if (tiendaRepository.existsBySubdominio(subdominio)) {
             throw new ApiException(HttpStatus.CONFLICT, "Ese subdominio ya está en uso");
         }
+        // Solo en un país habilitado: con su lista oficial de ubicaciones, impuesto y moneda.
+        // La base también lo exige (T12); aquí se valida para dar un mensaje claro.
+        String idPais = (r.idPais() == null || r.idPais().isBlank()) ? "PE" : r.idPais().trim();
+        DireccionRepository.PaisInfo pais = direccionRepository.pais(idPais)
+                .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "El país no existe"));
+        if (pais.getEstado() == null || pais.getEstado() != 1) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "Todavía no se pueden crear tiendas en " + pais.getNombre() + ". Por ahora: Perú y Chile");
+        }
 
         Tienda t = new Tienda();
         t.setIdPropietario(propietario.getIdPropietario());
+        t.setIdPais(idPais);
         t.setSubdominio(subdominio);
         copiarDatos(t, r.nombre(), r.descripcion(), r.correoContacto(), r.logoUrl(), r.colorPrincipal(),
                 r.permiteInvitados());
@@ -63,21 +76,21 @@ public class TiendaService {
         // Sin tarifa de envío la base rechaza cualquier venta: se crea una por defecto
         // para cada región.
         tiendaRepository.crearTarifasPorDefecto(t.getIdTienda());
-        log.info("Tienda creada: idTienda={}, subdominio={}, idPropietario={}",
-                t.getIdTienda(), t.getSubdominio(), t.getIdPropietario());
-        return TiendaResponse.desde(t);
+        log.info("Tienda creada: idTienda={}, subdominio={}, pais={}, idPropietario={}",
+                t.getIdTienda(), t.getSubdominio(), idPais, t.getIdPropietario());
+        return TiendaResponse.desde(t, pais);
     }
 
     @Transactional(readOnly = true)
     public List<TiendaResponse> misTiendas(UsuarioAutenticado yo) {
         Propietario propietario = verificadorTienda.propietario(yo);
         return tiendaRepository.findByIdPropietarioOrderByIdTiendaAsc(propietario.getIdPropietario())
-                .stream().map(TiendaResponse::desde).toList();
+                .stream().map(this::responder).toList();
     }
 
     @Transactional(readOnly = true)
     public TiendaResponse miTienda(UsuarioAutenticado yo, Long idTienda) {
-        return TiendaResponse.desde(verificadorTienda.delDueno(yo, idTienda));
+        return responder(verificadorTienda.delDueno(yo, idTienda));
     }
 
     @Transactional
@@ -87,7 +100,7 @@ public class TiendaService {
                 r.permiteInvitados());
         tiendaRepository.saveAndFlush(t);
         log.info("Tienda actualizada: idTienda={}", idTienda);
-        return TiendaResponse.desde(t);
+        return responder(t);
     }
 
     // ------------------------------------------------------------ vitrina pública
@@ -97,10 +110,20 @@ public class TiendaService {
         Tienda t = tiendaRepository.findBySubdominio(subdominio.trim().toLowerCase(Locale.ROOT))
                 .filter(Tienda::estaActiva) // una tienda suspendida no se muestra
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "La tienda no existe"));
-        return TiendaPublicaResponse.desde(t);
+        return TiendaPublicaResponse.desde(t, paisDe(t));
     }
 
     // ------------------------------------------------------------------ apoyo
+
+    private TiendaResponse responder(Tienda t) {
+        return TiendaResponse.desde(t, paisDe(t));
+    }
+
+    /** Moneda, impuesto y divisiones del país de la tienda. */
+    private DireccionRepository.PaisInfo paisDe(Tienda t) {
+        return direccionRepository.pais(t.getIdPais())
+                .orElseThrow(() -> new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "El país de la tienda no existe"));
+    }
 
     private static void copiarDatos(Tienda t, String nombre, String descripcion, String correo,
             String logoUrl, String color, Boolean permiteInvitados) {
