@@ -6,17 +6,21 @@ import { mensajeDeError } from '../../services/api';
 import { confirmarPago, iniciarPago } from '../../services/tienda';
 
 /**
- * Regreso de Mercado Pago. Lee payment_id y external_reference (id del pedido) de la URL, pero
- * NUNCA cree el "status" de la URL: pide al backend que consulte el pago en Mercado Pago.
+ * Regreso de la pasarela de pago.
+ * - Mercado Pago agrega payment_id y external_reference (id del pedido).
+ * - PayPal agrega token (id de la orden); el id del pedido va en "pedido". Si el cliente
+ *   canceló en PayPal, vuelve con cancelado=1.
+ * NUNCA se cree el "status" de la URL: el backend consulta el pago en la pasarela.
  */
 export default function ResultadoPago() {
   const { subdominio } = useOutletContext();
   const [params] = useSearchParams();
   const { vaciar } = useCarrito();
 
-  const paymentId = params.get('payment_id') ?? params.get('collection_id');
-  const idPedido = params.get('external_reference');
-  const sinDatos = !paymentId || !idPedido || paymentId === 'null';
+  const paymentId = params.get('payment_id') ?? params.get('collection_id') ?? params.get('token');
+  const idPedido = params.get('external_reference') ?? params.get('pedido');
+  const cancelado = params.get('cancelado') === '1';
+  const sinDatos = cancelado || !paymentId || !idPedido || paymentId === 'null';
 
   // Sin payment_id el cliente volvió sin pagar: no hay nada que confirmar.
   const [estado, setEstado] = useState({ fase: sinDatos ? 'rechazado' : 'cargando', numero: null, error: '' });
@@ -58,7 +62,7 @@ export default function ResultadoPago() {
   const base = `/tienda/${subdominio}`;
 
   if (estado.fase === 'cargando') {
-    return <p className="p-16 text-center text-[#616161]">Confirmando tu pago con Mercado Pago...</p>;
+    return <p className="p-16 text-center text-[#616161]">Confirmando tu pago...</p>;
   }
 
   if (estado.fase === 'aprobado') {
@@ -86,7 +90,7 @@ export default function ResultadoPago() {
     return (
       <div className="mx-auto max-w-md space-y-4 px-4 py-16 text-center">
         <h1 className="text-3xl font-semibold tracking-tight">Tu pago está pendiente</h1>
-        <p className="text-[#616161]">Mercado Pago aún no confirma el pago del pedido #{estado.numero}. Revisa más tarde en Mis pedidos.</p>
+        <p className="text-[#616161]">La pasarela aún no confirma el pago del pedido #{estado.numero}. Revisa más tarde en Mis pedidos.</p>
         <Link to={`${base}/mis-pedidos`} className="inline-block rounded-md bg-[#303030] px-6 py-3 font-medium text-white">
           Ver mis pedidos
         </Link>

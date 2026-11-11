@@ -2,6 +2,10 @@ server:
   port: ${SERVER_PORT:8080}
 
 spring:
+  config:
+    # Credenciales de prueba para desarrollo (por ejemplo, las de PayPal). Es un archivo local
+    # que NO se sube a Git; si no existe, se ignora (en Docker se usan las variables del .env).
+    import: optional:file:./secretos-local.properties
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/shopify_db}
     username: ${SPRING_DATASOURCE_USERNAME:shopify_user}
@@ -39,5 +43,13 @@ app:
   mercadopago:
     # Access Token de PRUEBA (TEST-...). Nunca se escribe aquí: viene de la variable de entorno.
     access-token: ${MERCADOPAGO_ACCESS_TOKEN:}
-  # Dirección del frontend: a ella vuelve el cliente después de pagar en Mercado Pago
+  paypal:
+    # Credenciales de PRUEBA (Sandbox) de developer.paypal.com. Nunca se escriben aquí: vienen del entorno.
+    # Si están, se paga con PayPal; si no, con Mercado Pago (si está su token).
+    client-id: ${PAYPAL_CLIENT_ID:}
+    client-secret: ${PAYPAL_CLIENT_SECRET:}
+    base-url: ${PAYPAL_BASE_URL:https://api-m.sandbox.paypal.com}
+    # PayPal no cobra en soles: los pedidos en PEN se cobran en USD con este tipo de cambio fijo
+    tipo-cambio-pen-usd: ${PAYPAL_TIPO_CAMBIO:3.75}
+  # Dirección del frontend: a ella vuelve el cliente después de pagar en la pasarela
   frontend-url: ${FRONTEND_URL:http://localhost:5173}

@@ -7,3 +7,6 @@ frontend/dist/
 Thumbs.db
 *.log
 logs/
+
+# Credenciales de prueba para correr el backend desde NetBeans
+secretos-local.properties
