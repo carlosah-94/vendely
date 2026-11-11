@@ -197,9 +197,11 @@ Si la base ya existía antes de agregar este archivo, hay que recrearla para que
 2. Con la base recién creada, ejecuta las carpetas **en orden** (clic derecho en la colección → *Run collection*, o carpeta por carpeta):
    - **1. Registro e inicio de sesión** y **2. Casos que deben fallar**: seguridad.
    - **3. Tiendas** y **4. Tiendas: casos que deben fallar**: módulo de tiendas.
+   - **5. Clientes, productos y ventas** y **6. Casos que deben fallar**: panel del dueño (CRUD, venta con descuento y devolución de stock, reglas de 409 y permisos entre dueños).
+   - **7. Tienda pública y compra del cliente** y **8. Casos que deben fallar**: catálogo, registro del comprador, direcciones, pedido, y permisos por rol y entre clientes.
 3. Los tokens y los ids se guardan solos en las variables de la colección.
 
-La colección cubre la seguridad y las tiendas. Los módulos de clientes, productos y ventas se prueban desde sus pantallas del panel.
+Las carpetas 5 a 8 usan la tienda que crea la carpeta 3, así que se ejecutan después de ella. La petición **Iniciar pago** acepta 200 (con `MERCADOPAGO_ACCESS_TOKEN`) o 503 (sin él); el pago completo en Mercado Pago se prueba desde la tienda en el navegador.
 
 > La carpeta 1 crea sola la tienda `zapatillas-carlos` (petición **Crear tienda Zapatillas Carlos**), que usa el registro de clientes. Si ya existía, responde 409 y la prueba igual pasa.
 >
