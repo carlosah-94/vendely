@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import EtiquetaPago from '../components/EtiquetaPago';
 import Mensaje from '../components/Mensaje';
 import SelectorTienda from '../components/SelectorTienda';
 import { useTiendaActual } from '../hooks/useTiendaActual';
@@ -105,6 +106,7 @@ export default function Ventas() {
                 <th className="px-4 py-3">Pedido</th>
                 <th className="px-4 py-3">Fecha</th>
                 <th className="px-4 py-3">Cliente</th>
+                <th className="px-4 py-3">Pago</th>
                 <th className="px-4 py-3">Estado</th>
                 <th className="px-4 py-3 text-right">Total</th>
                 <th className="px-4 py-3 text-right">Acciones</th>
@@ -116,6 +118,7 @@ export default function Ventas() {
                   <td className="px-4 py-3 font-medium text-slate-800">#{v.numeroPedido}</td>
                   <td className="px-4 py-3 text-slate-600">{formatoFecha(v.fechaCreacion)}</td>
                   <td className="px-4 py-3 text-slate-800">{v.cliente}</td>
+                  <td className="px-4 py-3"><EtiquetaPago estado={v.estadoPago} /></td>
                   <td className="px-4 py-3 text-slate-600">{NOMBRE_ESTADO[v.estado] ?? v.estado}</td>
                   <td className="px-4 py-3 text-right font-medium text-slate-800">
                     {formatoMoneda(v.total, v.moneda)}
