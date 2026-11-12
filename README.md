@@ -25,7 +25,7 @@ shopity/
 │       ├── security/     # JWT, roles y verificación de la tienda
 │       └── exception/    # formato único de errores
 ├── frontend/          # aplicación React: panel del dueño y tienda pública del comprador
-├── db/init/           # 01_esquema.sql, 02_datos_iniciales.sql y 03_usuarios_prueba.sql
+├── db/init/           # 01_esquema.sql, 02_datos_iniciales.sql, 03_usuarios_prueba.sql y 04_habilitar_chile.sql
 ├── db/tests/          # 03_pruebas.sql: casos que la base debe aceptar y rechazar
 ├── postman/           # colección Vendely_API para probar la API
 └── docker-compose.yml
@@ -35,23 +35,30 @@ shopity/
 
 | Módulo | Backend | Pantalla en el panel |
 |---|---|---|
-| Registro, inicio de sesión y roles | Sí | Sí (login, menú por rol, acceso denegado) |
-| Tiendas | Sí | Sí (`/panel/tiendas`, "Mis tiendas") |
+| Registro, inicio de sesión y roles | Sí | Sí (login, registro de dueño con su primera tienda, menú por rol, acceso denegado) |
+| Tiendas (en Perú o Chile) | Sí | Sí (`/panel/tiendas`, "Mis tiendas") |
+| Personalizar la tienda (logo, color, descripción) | Sí | Sí (`/panel/personalizar`) |
 | Clientes (CRUD) | Sí | Sí (`/panel/clientes`) |
-| Productos (CRUD con precio y stock) | Sí | Sí (`/panel/productos`) |
+| Productos: precio, stock, imágenes, precio de comparación, SKU | Sí | Sí (`/panel/productos`) |
+| Variantes de producto (talla, color…) con precio, stock y SKU propios | Sí | Sí (dentro del formulario de producto) |
+| Categorías de productos | Sí | Sí (`/panel/productos/categorias`) |
+| Inventario: reposición, stock mínimo y aviso de stock bajo | Sí | Sí (`/panel/productos/inventario`) |
+| Envíos nacionales (por región) e internacionales (por país) | Sí | Sí (`/panel/envios`) |
 | Ventas (registro, consulta y eliminación con stock) | Sí | Sí (`/panel/ventas`) |
-| Tienda pública: vitrina, detalle de producto y carrito | Sí | Sí (`/tienda/:subdominio`) |
-| Cliente: ingreso, direcciones, checkout y "Mis pedidos" | Sí | Sí (`/tienda/:subdominio/checkout`, `/mis-pedidos`) |
-| Pago con Mercado Pago (modo de prueba) | Sí | Sí (`/tienda/:subdominio/pago/resultado`) |
+| Tienda pública: vitrina con filtros por categoría, detalle con variantes y carrito | Sí | Sí (`/tienda/:subdominio`) |
+| Cliente: ingreso, direcciones (también en otros países), costo de envío, checkout y "Mis pedidos" | Sí | Sí (`/tienda/:subdominio/checkout`, `/mis-pedidos`) |
+| Pago en modo de prueba: PayPal Sandbox o Mercado Pago | Sí | Sí (`/tienda/:subdominio/pago/resultado`) |
+| Panel del superadmin: resumen, tiendas y cuentas (suspender y reactivar) | Sí | Sí (`/admin/tiendas`, `/admin/cuentas`) |
 | Manejo de errores y logs | Sí | Mensajes de error en cada pantalla |
+| Despliegue (Neon, Render y Vercel) | Sí | https://shopity-7zya.vercel.app |
 
 ### Pendiente
 
-- Probar de punta a punta el pago con Mercado Pago (necesita `MERCADOPAGO_ACCESS_TOKEN` de prueba; sin él la API responde 503).
+- Probar de punta a punta el pago en producción (necesita las credenciales de prueba de PayPal o Mercado Pago en Render; sin ellas la API responde 503).
 - Pruebas automatizadas del backend (JUnit y MockMvc).
-- Panel de `SUPERADMIN` (las pantallas `/admin/tiendas` y `/admin/cuentas` están en construcción y la API no tiene endpoints en `/api/admin/**`).
-- Categorías, imágenes, variantes, ofertas y tarifas de envío editables: las tablas existen, pero aún no tienen API ni pantalla.
-- Paginación y filtros en los listados y documentación Swagger/OpenAPI.
+- Ofertas (tablas `ofertas` y `oferta_productos`): existen en la base, pero aún no tienen API ni pantalla.
+- Habilitar más países (México, Colombia, Argentina y Ecuador ya tienen su primer nivel territorial; falta cargar su lista completa, como `04_habilitar_chile.sql`).
+- Paginación en los listados y documentación Swagger/OpenAPI.
 
 El detalle del backend (endpoints, variables y estado) está en [`backend/shopify/README.md`](backend/shopify/README.md).
 
@@ -79,7 +86,7 @@ Abre `.env` y cambia al menos `POSTGRES_PASSWORD`, `SPRING_DATASOURCE_PASSWORD` 
 docker compose up -d db
 ```
 
-La primera vez, Docker crea la base y ejecuta en orden los scripts de `db/init/`: el esquema (tablas, restricciones y triggers), los datos iniciales (países, divisiones e impuestos) y los usuarios de prueba. La base queda disponible en el puerto `POSTGRES_PORT` de tu computadora (5433 por defecto).
+La primera vez, Docker crea la base y ejecuta en orden los scripts de `db/init/`: el esquema (tablas, restricciones y triggers), los datos iniciales (países, divisiones e impuestos), los usuarios de prueba y la habilitación de Chile (sus 56 provincias y 346 comunas). La base queda disponible en el puerto `POSTGRES_PORT` de tu computadora (5433 por defecto).
 
 Para borrar la base y crearla de nuevo (por ejemplo, después de un cambio en `db/init/`):
 
@@ -92,6 +99,12 @@ Para cargar los scripts a mano en una base ya creada:
 
 ```bash
 docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < db/init/03_usuarios_prueba.sql
+```
+
+Si tu base es anterior a `04_habilitar_chile.sql`, ejecútalo una vez de la misma forma (se puede repetir sin duplicar datos):
+
+```bash
+docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < db/init/04_habilitar_chile.sql
 ```
 
 ### 3. Backend
@@ -146,7 +159,10 @@ Render y Vercel se conectan al fork [`AndreeQuispe12/shopity`](https://github.co
    docker compose exec db psql $env:NEON -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/01_esquema.sql
    docker compose exec db psql $env:NEON -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/02_datos_iniciales.sql
    docker compose exec db psql $env:NEON -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/03_usuarios_prueba.sql
+   docker compose exec db psql $env:NEON -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/04_habilitar_chile.sql
    ```
+
+   Cuando se agrega un script nuevo a `db/init/` (como `04_habilitar_chile.sql`), hay que ejecutarlo también en Neon: allí no corre solo como en Docker.
 
 3. Para comprobarla, `db/tests/03_pruebas.sql` se puede correr contra Neon: termina en `ROLLBACK` y no deja datos.
 
@@ -341,14 +357,16 @@ Un dueño (rol `ADMIN_TIENDA`) puede tener varias tiendas. Cada tienda se identi
 | `POST /api/panel/tiendas` | ADMIN_TIENDA | Crea una tienda del dueño |
 | `GET /api/panel/tiendas` | ADMIN_TIENDA | Lista **sus** tiendas |
 | `GET /api/panel/tiendas/{idTienda}` | ADMIN_TIENDA (solo si es suya) | Ver una tienda |
-| `PUT /api/panel/tiendas/{idTienda}` | ADMIN_TIENDA (solo si es suya) | Editar nombre, descripción, contacto, logo, color e invitados |
+| `PUT /api/panel/tiendas/{idTienda}` | ADMIN_TIENDA (solo si es suya) | Editar nombre, descripción, contacto, logo, color e invitados (pantalla "Personalizar") |
 | `GET /api/public/tiendas/{subdominio}` | Abierto | Datos públicos de una tienda activa (vitrina) |
+| `GET /api/public/paises` | Abierto | Países, para los selectores de tienda, direcciones y tarifas |
 
 **Reglas:**
 
 - El subdominio solo acepta letras, números y guiones (se guarda en minúsculas), es único y **no se cambia** después de crear la tienda, porque es la dirección que usan los clientes.
 - Algunos subdominios están reservados por Vendely (`www`, `api`, `admin`, `panel`, `login`…).
 - Una tienda suspendida no aparece en la vitrina pública.
+- **País:** al crear la tienda se elige el país (`idPais`, por defecto `PE`). Define la moneda, el impuesto y la lista de ubicaciones, y **no se cambia** después. Solo se aceptan países habilitados: hoy **Perú** (soles, IGV 18 %, ubigeo) y **Chile** (pesos sin decimales, IVA 19 %, comunas).
 
 ### Regla para los demás módulos del panel: `VerificadorTienda`
 
@@ -397,12 +415,82 @@ Cada producto se guarda con su variante, su precio vigente y su stock (tablas `p
 | `PUT /api/panel/tiendas/{idTienda}/productos/{idProducto}` | Editar |
 | `DELETE /api/panel/tiendas/{idTienda}/productos/{idProducto}` | Eliminar |
 
+**Datos del producto** (`ProductoRequest`): nombre, descripción, marca, precio, stock y activo, más:
+
+- `precioComparacion`: precio "antes", que la tienda muestra tachado (debe ser mayor que el precio).
+- `sku`: código interno del vendedor.
+- `imagenes`: hasta 5 enlaces `https://`, en orden (la primera es la principal).
+- `categorias`: ids de las categorías de la tienda donde aparece.
+- `opciones` y `variantes`: para productos con talla, color, etc. (ver abajo).
+
 **Reglas:**
 
 - El nombre es único dentro de la tienda.
 - El precio debe ser mayor que 0 y el stock, mayor o igual a 0.
 - Al cambiar el precio no se edita el anterior: se cierra y se crea uno nuevo, así las ventas pasadas conservan el precio con el que se hicieron.
 - Un producto con ventas no se puede eliminar (409); se puede desactivar.
+
+### Variantes (talla, color…)
+
+Un producto puede tener hasta 3 **opciones** (por ejemplo `Talla: S, M, L` y `Color: Negro, Blanco`). Cada combinación (`M / Negro`) es una **variante** con su propio precio, precio de comparación, stock y SKU; si no se indican, toma los del producto.
+
+- Una variante necesita un valor por cada opción, y no puede haber dos con la misma combinación (lo revisa la base, trigger T5).
+- Una variante que ya se vendió no se borra.
+- En el panel se editan dentro del formulario del producto (`EditorVariantes`); en la tienda, el comprador elige la combinación en el detalle del producto.
+
+### Categorías
+
+| Endpoint | Qué hace |
+|---|---|
+| `GET /api/panel/tiendas/{idTienda}/categorias` | Lista las categorías de la tienda |
+| `POST /api/panel/tiendas/{idTienda}/categorias` | Crear (nombre hasta 100, descripción hasta 500, activa) |
+| `PUT /api/panel/tiendas/{idTienda}/categorias/{idCategoria}` | Editar |
+| `DELETE /api/panel/tiendas/{idTienda}/categorias/{idCategoria}` | Eliminar |
+| `GET /api/public/tiendas/{subdominio}/categorias` | Categorías activas con productos, para los filtros de la tienda |
+
+### Inventario
+
+| Endpoint | Qué hace |
+|---|---|
+| `GET /api/panel/tiendas/{idTienda}/inventario` | Stock de cada variante, con su mínimo y la fecha de la última reposición |
+| `PATCH /api/panel/tiendas/{idTienda}/inventario/{idVariante}` | Cambiar el inventario de una variante |
+
+El `PATCH` acepta al menos uno de estos campos:
+
+- `recibir`: unidades que llegaron. Se **suman** al stock con un solo `UPDATE` en la base (si en ese momento entra una venta, ninguna pisa a la otra) y se anota la fecha de reposición.
+- `cantidad`: corregir el stock a un valor exacto (por ejemplo, después de contar el almacén).
+- `stockMinimo`: debajo de ese número, el producto se marca con **stock bajo** en el panel.
+
+## Envíos
+
+Cada tienda define cuánto cobra por enviar: **por región** dentro de su país y **por país** hacia el extranjero. Si no hay tarifa para un destino, la tienda no vende ahí.
+
+| Endpoint | Qué hace |
+|---|---|
+| `GET /api/panel/tiendas/{idTienda}/envios` | Tarifas nacionales e internacionales de la tienda |
+| `PUT /api/panel/tiendas/{idTienda}/envios/nacional/{idDivision}` | Crear o editar la tarifa a una región del país (departamento en Perú, región en Chile) |
+| `PUT /api/panel/tiendas/{idTienda}/envios/internacional/{idPais}` | Crear o editar la tarifa a otro país |
+| `DELETE /api/panel/tiendas/{idTienda}/envios/internacional/{idPais}` | Dejar de vender a ese país |
+| `GET /api/public/tiendas/{subdominio}/envios` | Países a los que vende la tienda |
+
+Cada tarifa tiene `costo` (0 = gratis), `envioGratisDesde` (opcional), días de entrega mínimo y máximo, y `activa`. Los montos van en la moneda de la tienda.
+
+- Una **venta al extranjero** es una exportación: **no lleva el impuesto** de la tienda (IGV o IVA); los impuestos de importación los paga el comprador al recibir.
+- La base calcula el costo de envío y el impuesto de cada pedido (trigger T2), así que el total siempre coincide con las tarifas.
+
+## Panel del superadmin
+
+Solo para la cuenta `SUPERADMIN` (`admin@vendely.pe`). Las pantallas están en `/admin/tiendas` y `/admin/cuentas`.
+
+| Endpoint | Qué hace |
+|---|---|
+| `GET /api/admin/resumen` | Números de la plataforma: tiendas activas y suspendidas, dueños, clientes, pedidos y ventas pagadas **por moneda** |
+| `GET /api/admin/tiendas` | Todas las tiendas |
+| `PATCH /api/admin/tiendas/{idTienda}/estado` | Suspender o reactivar una tienda (`{ "activa": false }`) |
+| `GET /api/admin/cuentas` | Todas las cuentas |
+| `PATCH /api/admin/cuentas/{idLogin}/estado` | Desactivar o reactivar una cuenta |
+
+Las ventas se suman por moneda (soles, pesos chilenos…) porque cada tienda cobra en la moneda de su país: sumarlas sin convertir daría un número falso.
 
 ## Ventas
 
@@ -435,20 +523,25 @@ Cada tienda tiene su vitrina en `/tienda/{subdominio}` (por ejemplo `/tienda/mod
 
 | Endpoint | Acceso | Qué hace |
 |---|---|---|
-| `GET /api/public/tiendas/{subdominio}/productos` | Abierto | Catálogo de la tienda |
+| `GET /api/public/tiendas/{subdominio}/productos` | Abierto | Catálogo de la tienda (con imagen, precio tachado y variantes) |
 | `GET /api/public/tiendas/{subdominio}/productos/{idProducto}` | Abierto | Detalle de un producto |
+| `GET /api/public/tiendas/{subdominio}/categorias` | Abierto | Categorías para filtrar la vitrina |
+| `GET /api/public/tiendas/{subdominio}/envios` | Abierto | Países a los que vende la tienda |
 | `GET /api/cliente/direcciones` | CLIENTE | Mis direcciones |
-| `POST /api/cliente/direcciones` | CLIENTE | Agregar una dirección |
+| `POST /api/cliente/direcciones` | CLIENTE | Agregar una dirección (en el país de la tienda o en otro país con tarifa) |
+| `GET /api/cliente/direcciones/{idDireccion}/envio` | CLIENTE | Costo y plazo de envío a esa dirección, antes de pagar |
 | `GET /api/cliente/pedidos` | CLIENTE | Mis pedidos |
 | `GET /api/cliente/pedidos/{idPedido}` | CLIENTE | Detalle de un pedido |
 | `POST /api/cliente/pedidos` | CLIENTE | Crear un pedido desde el carrito |
-| `POST /api/cliente/pedidos/{idPedido}/pago` | CLIENTE | Iniciar el pago en Mercado Pago |
+| `POST /api/cliente/pedidos/{idPedido}/pago` | CLIENTE | Iniciar el pago (PayPal o Mercado Pago) |
 | `POST /api/cliente/pedidos/{idPedido}/pago/confirmar` | CLIENTE | Confirmar el resultado del pago |
 
-**Flujo de compra:** vitrina → carrito → ingresar → checkout (dirección de envío) → pedido → pago en Mercado Pago → vuelve a `/tienda/{subdominio}/pago/resultado` (usa `FRONTEND_URL`) → "Mis pedidos".
+**Flujo de compra:** vitrina → carrito → ingresar → checkout (dirección y costo de envío) → pedido → pago → vuelve a `/tienda/{subdominio}/pago/resultado` (usa `FRONTEND_URL`) → "Mis pedidos".
 
 - La tienda del cliente sale de su token, no de la petición: un cliente no puede ver ni pagar pedidos de otra tienda.
-- El pago usa Mercado Pago Checkout Pro en **modo de prueba**. Sin `MERCADOPAGO_ACCESS_TOKEN`, iniciar el pago responde 503 "El pago en línea no está disponible por ahora".
+- **Direcciones:** en un país con lista oficial (Perú, Chile) el distrito o la comuna se elige de la lista; en otros países se escriben región, ciudad y código postal. Si la tienda no tiene tarifa para ese destino, el checkout lo avisa y no deja crear el pedido.
+- **Pago en modo de prueba:** se usa **PayPal Sandbox** si están `PAYPAL_CLIENT_ID` y `PAYPAL_CLIENT_SECRET`; si no, **Mercado Pago Checkout Pro** si está `MERCADOPAGO_ACCESS_TOKEN`. PayPal cobra en dólares, así que el monto en soles se convierte con `PAYPAL_TIPO_CAMBIO` (3.75 soles por dólar por defecto). Sin credenciales, iniciar el pago responde 503 "El pago en línea no está disponible por ahora".
+- Al confirmar, el backend consulta el pago en la pasarela y compara estado, pedido y monto: nunca confía en lo que diga el navegador.
 
 ## Manejo de errores y logs
 
