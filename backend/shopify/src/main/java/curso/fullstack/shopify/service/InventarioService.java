@@ -3,6 +3,7 @@ package curso.fullstack.shopify.service;
 import curso.fullstack.shopify.dto.InventarioRequest;
 import curso.fullstack.shopify.dto.InventarioResponse;
 import curso.fullstack.shopify.entity.Inventario;
+import curso.fullstack.shopify.evento.StockCambiadoEvent;
 import curso.fullstack.shopify.exception.ApiException;
 import curso.fullstack.shopify.repository.InventarioRepository;
 import curso.fullstack.shopify.repository.VarianteRepository;
@@ -10,6 +11,7 @@ import curso.fullstack.shopify.security.UsuarioAutenticado;
 import curso.fullstack.shopify.security.VerificadorTienda;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,9 +28,11 @@ public class InventarioService {
     private final VerificadorTienda verificadorTienda;
     private final InventarioRepository inventarioRepository;
     private final VarianteRepository varianteRepository;
+    private final ApplicationEventPublisher eventos;
 
     public InventarioService(VerificadorTienda verificadorTienda, InventarioRepository inventarioRepository,
-                             VarianteRepository varianteRepository) {
+                             VarianteRepository varianteRepository, ApplicationEventPublisher eventos) {
+        this.eventos = eventos;
         this.verificadorTienda = verificadorTienda;
         this.inventarioRepository = inventarioRepository;
         this.varianteRepository = varianteRepository;
@@ -77,6 +81,9 @@ public class InventarioService {
         } else {
             log.info("Inventario actualizado: tienda={}, variante={}", idTienda, idVariante);
         }
+
+        Integer quedan = inventarioRepository.cantidadDe(idVariante);
+        eventos.publishEvent(new StockCambiadoEvent(idTienda, idVariante, quedan == null ? 0 : quedan));
 
         return inventarioRepository.filasDeTienda(idTienda).stream()
                 .filter(f -> f.getIdVariante().equals(idVariante))

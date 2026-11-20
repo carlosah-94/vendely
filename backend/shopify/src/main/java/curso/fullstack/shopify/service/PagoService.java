@@ -6,6 +6,7 @@ import curso.fullstack.shopify.dto.ResultadoPagoResponse;
 import curso.fullstack.shopify.entity.Pago;
 import curso.fullstack.shopify.entity.Pedido;
 import curso.fullstack.shopify.entity.Tienda;
+import curso.fullstack.shopify.evento.PagoAprobadoEvent;
 import curso.fullstack.shopify.exception.ApiException;
 import curso.fullstack.shopify.repository.PagoRepository;
 import curso.fullstack.shopify.repository.PedidoRepository;
@@ -20,6 +21,7 @@ import java.util.Map;
 import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,12 +46,14 @@ public class PagoService {
     private final TiendaRepository tiendaRepository;
     private final MercadoPagoClient mercadoPago;
     private final PayPalClient payPal;
+    private final ApplicationEventPublisher eventos;
     private final BigDecimal tipoCambioPenUsd;
     private final BigDecimal tipoCambioClpUsd;
     private final String frontendUrl;
 
     public PagoService(PedidoRepository pedidoRepository, PagoRepository pagoRepository,
                        TiendaRepository tiendaRepository, MercadoPagoClient mercadoPago, PayPalClient payPal,
+                       ApplicationEventPublisher eventos,
                        @Value("${app.paypal.tipo-cambio-pen-usd:3.75}") BigDecimal tipoCambioPenUsd,
                        @Value("${app.paypal.tipo-cambio-clp-usd:950}") BigDecimal tipoCambioClpUsd,
                        @Value("${app.frontend-url:http://localhost:5173}") String frontendUrl) {
@@ -58,6 +62,7 @@ public class PagoService {
         this.tiendaRepository = tiendaRepository;
         this.mercadoPago = mercadoPago;
         this.payPal = payPal;
+        this.eventos = eventos;
         this.tipoCambioPenUsd = tipoCambioPenUsd;
         this.tipoCambioClpUsd = tipoCambioClpUsd;
         this.frontendUrl = frontendUrl.endsWith("/") ? frontendUrl.substring(0, frontendUrl.length() - 1) : frontendUrl;
@@ -222,6 +227,7 @@ public class PagoService {
             pago.setFechaPago(OffsetDateTime.now());
             pago.setReferenciaTransaccion(paymentId);
             guardar(pago);
+            eventos.publishEvent(new PagoAprobadoEvent(p.getIdTienda(), p.getIdPedido()));
             log.info("Pago aprobado: pedido #{}, monto {}", p.getNumeroPedido(), p.getTotal());
             return resultado(p, Pago.APROBADO);
         }
@@ -391,6 +397,7 @@ public class PagoService {
         pago.setEstado(Pago.APROBADO);
         pago.setFechaPago(OffsetDateTime.now());
         guardar(pago);
+        eventos.publishEvent(new PagoAprobadoEvent(p.getIdTienda(), p.getIdPedido()));
         log.info("Pago aprobado con PayPal: pedido #{}, monto {} {}", p.getNumeroPedido(), p.getTotal(), p.getMoneda());
         return resultado(p, Pago.APROBADO);
     }

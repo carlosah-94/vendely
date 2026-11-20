@@ -7,6 +7,8 @@ import curso.fullstack.shopify.dto.PedidoResumenResponse;
 import curso.fullstack.shopify.dto.VentaRequest;
 import curso.fullstack.shopify.dto.VentaResponse;
 import curso.fullstack.shopify.entity.*;
+import curso.fullstack.shopify.evento.PedidoCreadoEvent;
+import curso.fullstack.shopify.evento.StockCambiadoEvent;
 import curso.fullstack.shopify.exception.ApiException;
 import curso.fullstack.shopify.repository.*;
 import curso.fullstack.shopify.security.UsuarioAutenticado;
@@ -18,6 +20,7 @@ import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,6 +39,7 @@ public class PedidoService {
     private final DetallePedidoRepository detallePedidoRepository;
     private final TiendaRepository tiendaRepository;
     private final PagoRepository pagoRepository;
+    private final ApplicationEventPublisher eventos;
 
     @PersistenceContext
     private EntityManager em;
@@ -44,7 +48,9 @@ public class PedidoService {
                          DireccionRepository direccionRepository, VarianteRepository varianteRepository,
                          PrecioRepository precioRepository, InventarioRepository inventarioRepository,
                          PedidoRepository pedidoRepository, DetallePedidoRepository detallePedidoRepository,
-                         TiendaRepository tiendaRepository, PagoRepository pagoRepository) {
+                         TiendaRepository tiendaRepository, PagoRepository pagoRepository,
+                         ApplicationEventPublisher eventos) {
+        this.eventos = eventos;
         this.tiendaRepository = tiendaRepository;
         this.pagoRepository = pagoRepository;
         this.verificadorTienda = verificadorTienda;
@@ -139,6 +145,8 @@ public class PedidoService {
                 throw new ApiException(HttpStatus.CONFLICT, "Stock insuficiente de "
                         + info.getNombreProducto() + " (" + info.getNombreVariante() + ")");
             }
+            Integer quedan = inventarioRepository.cantidadDe(idVariante);
+            eventos.publishEvent(new StockCambiadoEvent(idTienda, idVariante, quedan == null ? 0 : quedan));
 
             BigDecimal importe = precio.getMonto().multiply(BigDecimal.valueOf(cantidad));
             subtotal = subtotal.add(importe);
@@ -170,6 +178,7 @@ public class PedidoService {
             d.setIdPedido(p.getIdPedido());
         }
         detallePedidoRepository.saveAll(detalles);
+        eventos.publishEvent(new PedidoCreadoEvent(idTienda, p.getIdPedido()));
 
         log.info("Venta registrada: tienda={}, pedido #{} (id={}), {} producto(s), total {} {}",
                 idTienda, p.getNumeroPedido(), p.getIdPedido(), detalles.size(), p.getTotal(), p.getMoneda());
