@@ -79,4 +79,8 @@ public interface InventarioRepository extends JpaRepository<Inventario, Long> {
              WHERE id_variante = :idVariante
             """, nativeQuery = true)
     int recibir(@Param("idVariante") Long idVariante, @Param("cantidad") int cantidad);
+
+    /** Stock actual leido directo de la base (tras un UPDATE nativo la entidad en memoria puede estar desactualizada). */
+    @Query(value = "SELECT cantidad_disponible FROM inventario WHERE id_variante = :idVariante", nativeQuery = true)
+    Integer cantidadDe(@Param("idVariante") Long idVariante);
 }
