@@ -232,9 +232,9 @@ function Editor({ tienda, tiendas, idTienda, onCambiarTienda }) {
           <p className="border-b border-[#ebebeb] px-4 py-2.5 text-[12px] font-medium text-[#616161]">Vista previa</p>
           <div className="text-[#303030]">
             <div className="py-1.5 text-center text-[11px]" style={{ background: color, color: texto }}>Envíos a todo el país</div>
-            <div className={`flex items-center justify-between border-b border-[#e3e3e3] px-4 py-3 ${v.plantilla === 'boutique' ? 'uppercase tracking-[0.2em]' : ''}`}>
+            <div className="flex items-center justify-between border-b border-[#e3e3e3] px-4 py-3">
               <span className="text-[12px]">Inicio · Catálogo</span>
-              <span className="flex items-center gap-2 font-semibold" style={v.plantilla === 'boutique' ? { fontFamily: '"Playfair Display", serif' } : undefined}>
+              <span className={`flex items-center gap-2 font-semibold ${v.plantilla === 'boutique' ? 'letra-serifa text-lg font-medium' : v.plantilla === 'moderna' ? 'letra-ancha' : ''}`}>
                 {logo && !logoRoto && (
                   <img src={logo} alt="" onError={() => setLogoRoto(true)} className="h-7 w-7 rounded object-contain" />
                 )}
@@ -257,8 +257,8 @@ function Editor({ tienda, tiendas, idTienda, onCambiarTienda }) {
             </div>
             <div className="px-4 pb-4">
               <span
-                className={`block py-2 text-center text-sm font-medium ${v.plantilla === 'moderna' ? 'rounded-full' : v.plantilla === 'boutique' ? 'border uppercase tracking-[0.2em] text-[11px]' : 'rounded-md'}`}
-                style={v.plantilla === 'boutique' ? { borderColor: color, color: '#1a1a1a' } : { background: color, color: texto }}
+                className={`block py-2 text-center text-sm font-medium ${v.plantilla === 'moderna' ? 'rounded-full' : v.plantilla === 'boutique' ? 'mx-auto w-fit border-b !py-0.5' : 'rounded-md'}`}
+                style={v.plantilla === 'boutique' ? { borderColor: '#222', color: '#222' } : v.plantilla === 'moderna' ? { background: '#141414', color: '#fff' } : { background: color, color: texto }}
               >
                 Agregar al carrito
               </span>
@@ -271,31 +271,33 @@ function Editor({ tienda, tiendas, idTienda, onCambiarTienda }) {
   );
 }
 
-/** Portada de la vista previa según la plantilla (versión pequeña de utils/plantillas.js). */
+/** Portada de la vista previa: versión pequeña de las portadas de components/tienda/Vitrina*.jsx. */
 function PortadaPrevia({ plantilla, nombre, descripcion, color, texto }) {
   if (plantilla === 'moderna') {
     return (
-      <div
-        className="space-y-3 px-6 py-14 text-left"
-        style={{ background: `linear-gradient(120deg, ${color}, color-mix(in srgb, ${color} 55%, black))`, color: texto }}
-      >
-        <p className="text-3xl font-extrabold leading-none tracking-tighter">{nombre}</p>
-        {descripcion && <p className="text-sm opacity-85">{descripcion}</p>}
-        <span className="inline-block rounded-full px-5 py-2 text-sm font-semibold" style={{ background: texto, color }}>
-          Ver productos
-        </span>
+      <div className="grid grid-cols-[1.2fr_1fr] items-center gap-4 px-5 py-10" style={{ background: color, color: texto }}>
+        <div className="space-y-3">
+          <p className="letra-ancha text-3xl leading-none">{nombre}</p>
+          {descripcion && <p className="text-xs opacity-85">{descripcion}</p>}
+          <span className="inline-block rounded-full px-4 py-1.5 text-xs font-semibold" style={{ background: texto, color }}>
+            Ver productos
+          </span>
+        </div>
+        <div className="relative h-32">
+          <span className="absolute left-0 top-0 h-24 w-20 -rotate-3 rounded-2xl bg-[#d9d4cc] ring-2 ring-white" />
+          <span className="absolute bottom-0 right-2 h-20 w-16 rotate-3 rounded-2xl bg-[#3b4a63] ring-2 ring-white" />
+          <span className="absolute right-4 top-1 h-10 w-10 rotate-6 rounded-xl bg-[#b9bab4] ring-2 ring-white" />
+        </div>
       </div>
     );
   }
   if (plantilla === 'boutique') {
     return (
-      <div className="space-y-3 border-b border-[#e8e4dc] bg-[#faf8f4] px-6 py-14 text-center text-[#1a1a1a]">
-        <p className="text-[10px] uppercase tracking-[0.3em] text-[#8a7f6a]">Colección</p>
-        <p className="text-3xl" style={{ fontFamily: '"Playfair Display", serif' }}>{nombre}</p>
-        {descripcion && <p className="text-sm text-[#616161]">{descripcion}</p>}
-        <span className="inline-block border px-6 py-2 text-[11px] uppercase tracking-[0.25em]" style={{ borderColor: color }}>
-          Ver productos
-        </span>
+      <div className="flex h-56 items-end bg-[linear-gradient(to_top,#1c1a18,#6d635a)] px-6 pb-6 text-white">
+        <div className="space-y-3">
+          <p className="letra-serifa text-4xl leading-none">{nombre}</p>
+          <span className="inline-block border border-white px-4 py-1.5 text-[11px] tracking-[0.12em]">Ver la colección</span>
+        </div>
       </div>
     );
   }

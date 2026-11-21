@@ -74,7 +74,7 @@ function Marco({ subdominio }) {
   }
 
   const { tienda } = estado;
-  const contexto = { tienda, subdominio };
+  const contexto = { tienda, subdominio, paises };
   // Precios, carrito y checkout en la moneda de la tienda: soles en Perú, pesos en Chile.
   usarMoneda(tienda.moneda);
   // El color de la tienda se pasa como variable CSS: los botones usan bg-[var(--tienda)].
@@ -97,13 +97,39 @@ function Marco({ subdominio }) {
 
   return (
     <div className={`flex min-h-screen flex-col bg-white text-[#303030] ${clasePlantilla}`} style={{ fontSize: 16, ...colores }}>
-      <div className="bg-[var(--tienda)] py-2 text-center text-xs tracking-wide text-[var(--tienda-texto)]">{textoEnvios(paises)}</div>
+      <div
+        className={`py-2 text-center text-xs tracking-wide ${
+          tienda.plantilla === 'boutique'
+            ? 'border-b border-[#ebe9e6] bg-white text-[#6b6b6b]'
+            : 'bg-[var(--tienda)] text-[var(--tienda-texto)]'
+        }`}
+      >
+        {textoEnvios(paises)}
+      </div>
       <Cabecera tienda={tienda} subdominio={subdominio} />
       <main className="flex-1">
         <Outlet context={contexto} />
       </main>
-      <footer className="mt-16 bg-[#f1f2f4] px-4 py-10 text-center text-sm text-[#616161]">
-        <p className="text-base font-semibold text-[#303030]">{tienda.nombre}</p>
+      <footer
+        className={`mt-16 px-4 py-10 text-center text-sm ${
+          tienda.plantilla === 'moderna'
+            ? 'bg-[#141414] text-white/70'
+            : tienda.plantilla === 'boutique'
+              ? 'border-t border-[#ebe9e6] bg-white text-[#6b6b6b]'
+              : 'bg-[#f1f2f4] text-[#616161]'
+        }`}
+      >
+        <p
+          className={
+            tienda.plantilla === 'moderna'
+              ? 'letra-ancha text-2xl text-white'
+              : tienda.plantilla === 'boutique'
+                ? 'letra-serifa text-3xl text-[#222]'
+                : 'text-base font-semibold text-[#303030]'
+          }
+        >
+          {tienda.nombre}
+        </p>
         {tienda.correoContacto && <p className="mt-1">{tienda.correoContacto}</p>}
         {paises.length > 0 && (
           <p className="mt-3 text-xs">Enviamos a: {paises.map((p) => p.nombre).join(' · ')}</p>
@@ -127,12 +153,21 @@ function Cabecera({ tienda, subdominio }) {
 
   return (
     <header className="sticky top-0 z-40 border-b border-[#e3e3e3] bg-white">
-      <div className={`mx-auto grid max-w-6xl grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 py-4 ${tienda.plantilla === 'boutique' ? 'uppercase tracking-[0.2em]' : ''}`}>
+      <div className="mx-auto grid max-w-6xl grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 py-4">
         <nav className="hidden gap-5 text-sm sm:flex">
           <Link to={base} className="hover:underline">Inicio</Link>
           <a href={`${base}#catalogo`} className="hover:underline">Catálogo</a>
         </nav>
-        <Link to={base} className="col-start-2 flex items-center justify-center gap-2 text-center text-xl font-semibold tracking-tight sm:text-2xl">
+        <Link
+          to={base}
+          className={`col-start-2 flex items-center justify-center gap-2 text-center ${
+            tienda.plantilla === 'moderna'
+              ? 'letra-ancha text-xl sm:text-2xl'
+              : tienda.plantilla === 'boutique'
+                ? 'letra-serifa text-2xl font-medium sm:text-3xl'
+                : 'text-xl font-semibold tracking-tight sm:text-2xl'
+          }`}
+        >
           {tienda.logoUrl && <img src={tienda.logoUrl} alt="" className="h-9 w-9 rounded-md object-contain" />}
           {tienda.nombre}
         </Link>
