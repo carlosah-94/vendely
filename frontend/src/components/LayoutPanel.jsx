@@ -27,6 +27,7 @@ const MENU = {
   SUPERADMIN: [
     { ruta: '/admin/tiendas', texto: 'Tiendas de Vendely', icono: IconoTienda },
     { ruta: '/admin/cuentas', texto: 'Cuentas', icono: IconoClientes },
+    { ruta: '/admin/planes', texto: 'Planes', icono: IconoCheck },
   ],
 };
 

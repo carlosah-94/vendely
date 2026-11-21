@@ -48,6 +48,52 @@ public interface AdminRepository extends Repository<Tienda, Long> {
             """, nativeQuery = true)
     List<VentaMoneda> ventasPorMoneda();
 
+    /** Lo que Vendely cobro este mes por planes (suscripciones pagadas creadas este mes), en dolares. */
+    interface IngresoPlanes {
+        BigDecimal getMonto();
+        Long getPagos();
+    }
+
+    @Query(value = """
+            SELECT coalesce(sum(s.monto_usd), 0) AS "monto", count(*) AS "pagos"
+              FROM suscripciones s
+             WHERE s.estado = 1 AND s.fecha_creacion >= date_trunc('month', now())
+            """, nativeQuery = true)
+    IngresoPlanes ingresoPlanesDelMes();
+
+    /**
+     * Comisiones de Vendely de este mes, por moneda: total de cada venta pagada este mes por el
+     * porcentaje del plan que la tienda tiene hoy. Es un ESTIMADO: cuando pedidos tenga la columna
+     * comision_plataforma (issue de Pedidos), se suma esa "foto" guardada al momento de la venta.
+     */
+    @Query(value = """
+            SELECT CAST(p.moneda AS text) AS "moneda", round(sum(p.total * pl.comision / 100), 2) AS "monto"
+              FROM pedidos p
+              JOIN tiendas t ON t.id_tienda = p.id_tienda
+              JOIN planes pl ON pl.id_plan = t.id_plan
+             WHERE EXISTS (SELECT 1 FROM pagos pg
+                            WHERE pg.id_pedido = p.id_pedido AND pg.estado = 1
+                              AND pg.fecha_pago >= date_trunc('month', now()))
+             GROUP BY p.moneda
+             ORDER BY 2 DESC
+            """, nativeQuery = true)
+    List<VentaMoneda> comisionesDelMes();
+
+    /** Cuantas tiendas hay en cada plan (incluye los planes sin tiendas). */
+    interface TiendasPlan {
+        String getPlan();
+        Long getTiendas();
+    }
+
+    @Query(value = """
+            SELECT pl.nombre AS "plan", count(t.id_tienda) AS "tiendas"
+              FROM planes pl
+              LEFT JOIN tiendas t ON t.id_plan = pl.id_plan
+             GROUP BY pl.id_plan, pl.nombre, pl.precio_usd
+             ORDER BY pl.precio_usd
+            """, nativeQuery = true)
+    List<TiendasPlan> tiendasPorPlan();
+
     /** Una tienda con su dueño y sus números. */
     interface FilaTienda {
         Long getIdTienda();
@@ -62,6 +108,8 @@ public interface AdminRepository extends Repository<Tienda, Long> {
         Long getPedidos();
         BigDecimal getVentasPagadas();
         String getMoneda();          // moneda de la tienda: sus ventas van en ella
+        String getPlan();            // Gratis, Basico, Pro
+        Long getPlanVenceEl();       // segundos desde 1970; null en Gratis
     }
 
     @Query(value = """
@@ -74,8 +122,10 @@ public interface AdminRepository extends Repository<Tienda, Long> {
                      WHERE pe.id_tienda = t.id_tienda
                        AND EXISTS (SELECT 1 FROM pagos pg WHERE pg.id_pedido = pe.id_pedido AND pg.estado = 1))
                                                                                          AS "ventasPagadas",
-                   CAST(pa.id_moneda AS text) AS "moneda"
+                   CAST(pa.id_moneda AS text) AS "moneda",
+                   pl.nombre AS "plan", CAST(extract(epoch FROM t.plan_vence_el) AS bigint) AS "planVenceEl"
               FROM tiendas t
+              JOIN planes pl        ON pl.id_plan = t.id_plan
               JOIN paises pa        ON pa.id_pais = t.id_pais
               JOIN propietarios pro ON pro.id_propietario = t.id_propietario
               JOIN login l          ON l.id_login = pro.id_login

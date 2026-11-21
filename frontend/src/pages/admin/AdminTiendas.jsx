@@ -15,6 +15,28 @@ const PESTANAS = [
 
 const SOMBRA = 'shadow-[0_1px_0_rgba(0,0,0,0.08),0_0_0_1px_rgba(0,0,0,0.05)]';
 
+const NOMBRE_MONEDA = { PEN: 'soles', CLP: 'pesos chilenos', USD: 'dólares' };
+
+/**
+ * Montos en varias monedas, uno por línea y con el nombre de la moneda: "$39.268 pesos chilenos"
+ * y "S/ 1,354.30 soles". No se convierten ni se suman entre sí (cada tienda cobra en la de su país).
+ */
+function porMoneda(lista) {
+  if (!lista.length) return formatoMoneda(0, 'PEN');
+  return lista.map((v) => (
+    <span key={v.moneda} className="block">
+      {formatoMoneda(v.monto, v.moneda)}{' '}
+      <span className="text-[12px] font-normal text-[#616161]">{NOMBRE_MONEDA[v.moneda] ?? v.moneda}</span>
+    </span>
+  ));
+}
+
+const COLOR_PLAN = {
+  Gratis: 'bg-[#e3e3e3] text-[#4a4a4a]',
+  'Básico': 'bg-[#eaf4ff] text-[#00527c]',
+  Pro: 'bg-[#f1e8ff] text-[#5a1fa8]',
+};
+
 /**
  * Panel del superadmin: números de toda la plataforma y la lista de todas las tiendas,
  * con su dueño. Desde aquí se suspende o se reactiva una tienda.
@@ -71,7 +93,12 @@ export default function AdminTiendas() {
     ['Clientes', r?.clientes],
     ['Pedidos', r?.pedidos],
     // Por moneda: cada tienda cobra en la de su país y no se suman soles con pesos.
-    ['Ventas pagadas', r ? (r.ventasPagadas.length ? r.ventasPagadas.map((v) => formatoMoneda(v.monto, v.moneda)).join(' · ') : formatoMoneda(0, 'PEN')) : undefined],
+    ['Ventas de las tiendas', r ? porMoneda(r.ventasPagadas) : undefined],
+  ];
+  // Lo que gana Vendely este mes: planes (en dólares, PayPal) y comisiones (en la moneda de cada tienda).
+  const ingresos = [
+    ['Planes pagados este mes', r ? `${formatoMoneda(r.ingresoPlanesMesUsd, 'USD')} (${r.pagosPlanesMes} pagos)` : undefined],
+    ['Comisiones del mes (estimado)', r ? porMoneda(r.comisionesMes) : undefined],
   ];
 
   return (
@@ -91,6 +118,25 @@ export default function AdminTiendas() {
             <p className="mt-1 text-xl font-semibold text-[#101010]">{datos.cargando ? '…' : (valor ?? '-')}</p>
           </div>
         ))}
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        {ingresos.map(([titulo, valor]) => (
+          <div key={titulo} className={`rounded-xl bg-white p-4 ${SOMBRA}`}>
+            <p className="text-xs text-[#616161]">{titulo}</p>
+            <p className="mt-1 text-xl font-semibold text-[#101010]">{datos.cargando ? '…' : (valor ?? '-')}</p>
+          </div>
+        ))}
+        <div className={`rounded-xl bg-white p-4 ${SOMBRA}`}>
+          <p className="text-xs text-[#616161]">Tiendas por plan</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {(r?.tiendasPorPlan ?? []).map((p) => (
+              <span key={p.plan} className={`rounded-full px-2.5 py-0.5 text-[13px] font-semibold ${COLOR_PLAN[p.plan] ?? COLOR_PLAN.Gratis}`}>
+                {p.plan}: {p.tiendas}
+              </span>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className={`overflow-hidden rounded-xl bg-white ${SOMBRA}`}>
@@ -126,6 +172,7 @@ export default function AdminTiendas() {
               <tr>
                 <th className="px-4 py-2.5 font-medium">Tienda</th>
                 <th className="px-4 py-2.5 font-medium">Dueño</th>
+                <th className="px-4 py-2.5 font-medium">Plan</th>
                 <th className="px-4 py-2.5 text-right font-medium">Productos</th>
                 <th className="px-4 py-2.5 text-right font-medium">Pedidos</th>
                 <th className="px-4 py-2.5 text-right font-medium">Ventas pagadas</th>
@@ -136,11 +183,11 @@ export default function AdminTiendas() {
             </thead>
             <tbody className="divide-y divide-[#ebebeb]">
               {datos.cargando && (
-                <tr><td colSpan={8} className="px-4 py-8 text-center text-[#616161]">Cargando tiendas...</td></tr>
+                <tr><td colSpan={9} className="px-4 py-8 text-center text-[#616161]">Cargando tiendas...</td></tr>
               )}
               {!datos.cargando && visibles.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-[#616161]">
+                  <td colSpan={9} className="px-4 py-12 text-center text-[#616161]">
                     <span className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-[#f1f1f1]">
                       <IconoTienda tamano={24} />
                     </span>
@@ -157,6 +204,10 @@ export default function AdminTiendas() {
                   <td className="px-4 py-3">
                     <p className="text-[#303030]">{t.dueno}</p>
                     <p className="text-xs text-[#616161]">{t.correoDueno}</p>
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3">
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${COLOR_PLAN[t.plan] ?? COLOR_PLAN.Gratis}`}>{t.plan}</span>
+                    {t.planVenceEl && <p className="mt-0.5 text-xs text-[#616161]">Vence {formatoFecha(t.planVenceEl)}</p>}
                   </td>
                   <td className="px-4 py-3 text-right">{t.productos}</td>
                   <td className="px-4 py-3 text-right">{t.pedidos}</td>

@@ -17,11 +17,14 @@ public record AdminTiendaResponse(
         long productos,
         long pedidos,
         BigDecimal ventasPagadas,
-        String moneda               // la de la tienda: "PEN", "CLP"
+        String moneda,              // la de la tienda: "PEN", "CLP"
+        String plan,                // Gratis, Basico, Pro
+        String planVenceEl          // ISO 8601; null en Gratis
 ) {
     public static AdminTiendaResponse desde(AdminRepository.FilaTienda f) {
         return new AdminTiendaResponse(f.getIdTienda(), f.getNombre(), f.getSubdominio(), f.getPais(),
                 f.getEstado() != null && f.getEstado() == 1 ? "ACTIVA" : "SUSPENDIDA", Instant.ofEpochSecond(f.getFechaCreacion()).toString(),
-                f.getDueno(), f.getCorreoDueno(), f.getProductos(), f.getPedidos(), f.getVentasPagadas(), f.getMoneda());
+                f.getDueno(), f.getCorreoDueno(), f.getProductos(), f.getPedidos(), f.getVentasPagadas(), f.getMoneda(),
+                f.getPlan(), f.getPlanVenceEl() == null ? null : Instant.ofEpochSecond(f.getPlanVenceEl()).toString());
     }
 }

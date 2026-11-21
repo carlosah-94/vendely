@@ -3,6 +3,7 @@ import LayoutPanel from './components/LayoutPanel';
 import RutaProtegida from './components/RutaProtegida';
 import AccesoDenegado from './pages/AccesoDenegado';
 import AdminCuentas from './pages/admin/AdminCuentas';
+import AdminPlanes from './pages/admin/AdminPlanes';
 import AdminTiendas from './pages/admin/AdminTiendas';
 import Clientes from './pages/Clientes';
 import DetalleVenta from './pages/DetalleVenta';
@@ -77,6 +78,7 @@ export default function App() {
         <Route element={<LayoutPanel />}>
           <Route path="/admin/tiendas" element={<AdminTiendas />} />
           <Route path="/admin/cuentas" element={<AdminCuentas />} />
+          <Route path="/admin/planes" element={<AdminPlanes />} />
         </Route>
       </Route>
 
