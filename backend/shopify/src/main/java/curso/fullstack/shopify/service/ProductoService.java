@@ -66,11 +66,14 @@ public class ProductoService {
     private final InventarioRepository inventarioRepository;
     private final ImagenProductoRepository imagenProductoRepository;
     private final CategoriaService categoriaService;
+    private final PlanService planService;
 
     public ProductoService(VerificadorTienda verificadorTienda, TiendaRepository tiendaRepository,
                            ProductoRepository productoRepository, VarianteRepository varianteRepository,
                            PrecioRepository precioRepository, InventarioRepository inventarioRepository,
-                           ImagenProductoRepository imagenProductoRepository, CategoriaService categoriaService) {
+                           ImagenProductoRepository imagenProductoRepository, CategoriaService categoriaService,
+                           PlanService planService) {
+        this.planService = planService;
         this.verificadorTienda = verificadorTienda;
         this.tiendaRepository = tiendaRepository;
         this.productoRepository = productoRepository;
@@ -101,6 +104,7 @@ public class ProductoService {
     @Transactional
     public ProductoResponse crear(UsuarioAutenticado yo, Long idTienda, ProductoRequest r) {
         verificadorTienda.delDueno(yo, idTienda);
+        planService.exigir(idTienda, FuncionPlan.CREAR_PRODUCTO);   // plan Gratis: hasta 10 productos
         validarPrecioComparacion(r);
         String nombre = r.nombre().trim();
         String slug = slug(nombre);

@@ -1,5 +1,6 @@
 package curso.fullstack.shopify.dto;
 
+import curso.fullstack.shopify.entity.Plan;
 import curso.fullstack.shopify.entity.Tienda;
 import curso.fullstack.shopify.repository.DireccionRepository;
 
@@ -18,11 +19,25 @@ public record TiendaPublicaResponse(
         String correoContacto,
         String logoUrl,
         String colorPrincipal,
-        Boolean permiteInvitados
+        Boolean permiteInvitados,
+        String plantilla,       // clasica, moderna o boutique (la que su plan permite)
+        Boolean selloVendely    // true = muestra "Hecho con Vendely" en el pie (plan Gratis)
 ) {
     public static TiendaPublicaResponse desde(Tienda t, DireccionRepository.PaisInfo p) {
+        return desde(t, p, null);
+    }
+
+    /**
+     * Con el plan: lo que el plan no incluye no se muestra, aunque este guardado.
+     * Gratis: colores de Vendely, sin logo, plantilla clasica y sello en el pie.
+     * Al mejorar el plan vuelve a verse lo que ya habia configurado (no se borro nada).
+     */
+    public static TiendaPublicaResponse desde(Tienda t, DireccionRepository.PaisInfo p, Plan plan) {
+        boolean personaliza = plan == null || Boolean.TRUE.equals(plan.getPermitePersonalizar());
+        boolean plantillas = plan == null || Boolean.TRUE.equals(plan.getPermitePlantillas());
         return new TiendaPublicaResponse(t.getIdTienda(), t.getIdPais(), p.getNombre(), p.getIdMoneda(), p.getDecimales(),
                 p.getImpuesto(), p.getNivelFinal(), t.getNombre(), t.getSubdominio(), t.getDescripcion(),
-                t.getCorreoContacto(), t.getLogoUrl(), t.getColorPrincipal(), t.getPermiteInvitados());
+                t.getCorreoContacto(), personaliza ? t.getLogoUrl() : null, personaliza ? t.getColorPrincipal() : null,
+                t.getPermiteInvitados(), plantillas ? t.getPlantilla() : "clasica", !personaliza);
     }
 }

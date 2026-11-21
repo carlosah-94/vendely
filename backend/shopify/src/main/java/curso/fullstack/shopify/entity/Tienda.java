@@ -68,6 +68,21 @@ public class Tienda {
     @Column(name = "ultimo_numero_pedido", insertable = false, updatable = false)
     private Integer ultimoNumeroPedido;
 
+    /** Plan actual: 1 Gratis · 2 Basico · 3 Pro (tabla planes). Toda tienda nueva empieza en Gratis. */
+    @Setter
+    @Column(name = "id_plan", nullable = false)
+    private Short idPlan = 1;
+
+    /** Hasta cuando esta pagado el plan. null en Gratis. */
+    @Setter
+    @Column(name = "plan_vence_el")
+    private OffsetDateTime planVenceEl;
+
+    /** Diseno de la tienda: clasica, moderna o boutique (CHECK ck_tiendas_plantilla). */
+    @Setter
+    @Column(name = "plantilla", nullable = false, length = 20)
+    private String plantilla = "clasica";
+
     /** 1 activa · 0 suspendida */
     @Setter
     @Column(name = "estado", nullable = false)

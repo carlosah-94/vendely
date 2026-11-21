@@ -1,5 +1,6 @@
 package curso.fullstack.shopify.dto;
 
+import curso.fullstack.shopify.entity.Plan;
 import curso.fullstack.shopify.entity.Tienda;
 import curso.fullstack.shopify.repository.DireccionRepository;
 import java.math.BigDecimal;
@@ -23,12 +24,23 @@ public record TiendaResponse(
         String colorPrincipal,
         Boolean permiteInvitados,
         String estado,              // "ACTIVA" o "SUSPENDIDA"
-        OffsetDateTime fechaCreacion
+        OffsetDateTime fechaCreacion,
+        String plantilla,           // clasica, moderna o boutique
+        String plan,                // "Gratis", "Basico", "Pro"
+        Boolean permitePersonalizar,// su plan deja poner logo y color
+        Boolean permitePlantillas   // su plan deja elegir plantilla
 ) {
     public static TiendaResponse desde(Tienda t, DireccionRepository.PaisInfo p) {
+        return desde(t, p, null);
+    }
+
+    public static TiendaResponse desde(Tienda t, DireccionRepository.PaisInfo p, Plan plan) {
         return new TiendaResponse(t.getIdTienda(), t.getNombre(), t.getSubdominio(), t.getIdPais(),
                 p.getNombre(), p.getIdMoneda(), p.getDecimales(), p.getImpuesto(), p.getTasaImpuesto(), p.getNivelFinal(),
                 t.getDescripcion(), t.getCorreoContacto(), t.getLogoUrl(), t.getColorPrincipal(), t.getPermiteInvitados(),
-                t.estaActiva() ? "ACTIVA" : "SUSPENDIDA", t.getFechaCreacion());
+                t.estaActiva() ? "ACTIVA" : "SUSPENDIDA", t.getFechaCreacion(), t.getPlantilla(),
+                plan == null ? null : plan.getNombre(),
+                plan == null || Boolean.TRUE.equals(plan.getPermitePersonalizar()),
+                plan == null || Boolean.TRUE.equals(plan.getPermitePlantillas()));
     }
 }

@@ -3,15 +3,21 @@ import { Link, useOutletContext, useSearchParams } from 'react-router-dom';
 import ImagenProducto from '../../components/ImagenProducto';
 import Mensaje from '../../components/Mensaje';
 import PrecioTienda from '../../components/tienda/PrecioTienda';
+import VitrinaBoutique from '../../components/tienda/VitrinaBoutique';
+import VitrinaModerna from '../../components/tienda/VitrinaModerna';
+import { BotonComprar, tieneVariosPrecios } from '../../components/tienda/comprar';
 import { useCarrito } from '../../context/CarritoContext';
 import { mensajeDeError } from '../../services/api';
 import { categoriasPublicas } from '../../services/categorias';
 import { listarProductos } from '../../services/tienda';
 import { enOferta } from '../../utils/formato';
 
-/** Portada de la tienda: hero con su color y la grilla de productos activos. */
+/**
+ * Portada de la tienda. Carga productos y categorías y los dibuja con la plantilla elegida:
+ * Clásica (aquí abajo), Moderna o Boutique (components/tienda/Vitrina*.jsx).
+ */
 export default function Vitrina() {
-  const { tienda, subdominio } = useOutletContext();
+  const { tienda, subdominio, paises } = useOutletContext();
   const { agregar, abrir } = useCarrito();
   const [estado, setEstado] = useState({ subdominio: null, productos: [], error: '' });
   const [categorias, setCategorias] = useState([]);
@@ -39,14 +45,35 @@ export default function Vitrina() {
     };
   }, [subdominio]);
 
-  const cargando = estado.subdominio !== subdominio;
   const elegida = categorias.find((c) => c.slug === slugCategoria);
-  const productos = elegida ? estado.productos.filter((p) => (p.categorias ?? []).includes(elegida.idCategoria)) : estado.productos;
+  const vista = {
+    tienda,
+    subdominio,
+    paises: paises ?? [],
+    todos: estado.productos,
+    productos: elegida
+      ? estado.productos.filter((p) => (p.categorias ?? []).includes(elegida.idCategoria))
+      : estado.productos,
+    categorias,
+    elegida,
+    cargando: estado.subdominio !== subdominio,
+    error: estado.error,
+    elegirCategoria: (slug) => setParametros(slug ? { categoria: slug } : {}, { replace: true }),
+    agregarAlCarrito: (p) => {
+      agregar(p, 1);
+      abrir();
+    },
+  };
 
+  if (tienda.plantilla === 'moderna') return <VitrinaModerna {...vista} />;
+  if (tienda.plantilla === 'boutique') return <VitrinaBoutique {...vista} />;
+  return <VitrinaClasica {...vista} />;
+}
+
+/** Plantilla Clásica: portada centrada con el color de la tienda y grilla de 4 columnas. */
+function VitrinaClasica({ tienda, subdominio, productos, categorias, elegida, cargando, error, elegirCategoria, agregarAlCarrito }) {
   return (
     <>
-      {/* Portada */}
-      {/* Portada con el color de la tienda (Personalizar tienda en el panel) */}
       <section className="bg-[var(--tienda)] px-4 py-16 text-center text-[var(--tienda-texto)] sm:py-24">
         <div className="mx-auto max-w-2xl space-y-4">
           {tienda.logoUrl && (
@@ -68,7 +95,7 @@ export default function Vitrina() {
               <button
                 key={c.slug || 'todos'}
                 type="button"
-                onClick={() => setParametros(c.slug ? { categoria: c.slug } : {}, { replace: true })}
+                onClick={() => elegirCategoria(c.slug)}
                 className={`rounded-full border px-4 py-1.5 text-sm ${
                   (elegida?.slug ?? '') === c.slug
                     ? 'border-[var(--tienda)] bg-[var(--tienda)] text-[var(--tienda-texto)]'
@@ -80,10 +107,10 @@ export default function Vitrina() {
             ))}
           </div>
         )}
-        {estado.error && <Mensaje tipo="error" texto={estado.error} />}
+        {error && <Mensaje tipo="error" texto={error} />}
         {cargando ? (
           <p className="text-[#616161]">Cargando productos...</p>
-        ) : productos.length === 0 && !estado.error ? (
+        ) : productos.length === 0 && !error ? (
           <p className="text-[#616161]">
             {elegida ? 'No hay productos en esta categoría.' : 'Esta tienda todavía no tiene productos.'}
           </p>
@@ -109,32 +136,10 @@ export default function Vitrina() {
                     )}
                   </div>
                   <h3 className="mt-3 text-sm text-[#303030] group-hover:underline">{p.nombre}</h3>
-                  <PrecioTienda
-                    producto={p}
-                    desde={new Set((p.variantes ?? []).map((v) => Number(v.precio))).size > 1}
-                  />
+                  <PrecioTienda producto={p} desde={tieneVariosPrecios(p)} />
                 </Link>
-                {(p.variantes?.length ?? 0) > 1 ? (
-                  // Con talla o color hay que elegir la combinación: se va a la página del producto.
-                  <Link
-                    to={`/tienda/${subdominio}/producto/${p.idProducto}`}
-                    className="mt-3 rounded-md border border-[var(--tienda)] py-2 text-center text-sm font-medium hover:bg-[var(--tienda)] hover:text-[var(--tienda-texto)]"
-                  >
-                    {p.disponible ? 'Elegir opciones' : 'Agotado'}
-                  </Link>
-                ) : (
-                <button
-                  type="button"
-                  disabled={!p.disponible}
-                  onClick={() => {
-                    agregar(p, 1);
-                    abrir();
-                  }}
-                  className="mt-3 rounded-md border border-[var(--tienda)] py-2 text-sm font-medium hover:bg-[var(--tienda)] hover:text-[var(--tienda-texto)] disabled:cursor-not-allowed disabled:border-[#c9c9c9] disabled:text-[#9a9a9a] disabled:hover:bg-transparent disabled:hover:text-[#9a9a9a]"
-                >
-                  {p.disponible ? 'Agregar al carrito' : 'Agotado'}
-                </button>
-                )}
+                <BotonComprar producto={p} subdominio={subdominio} onAgregar={agregarAlCarrito}
+                  className="mt-3 rounded-md border border-[var(--tienda)] py-2 text-center text-sm font-medium hover:bg-[var(--tienda)] hover:text-[var(--tienda-texto)] disabled:cursor-not-allowed disabled:border-[#c9c9c9] disabled:text-[#9a9a9a] disabled:hover:bg-transparent disabled:hover:text-[#9a9a9a]" />
               </article>
             ))}
           </div>

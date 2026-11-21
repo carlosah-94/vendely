@@ -40,9 +40,12 @@ public class EnvioService {
     private final TiendaRepository tiendaRepository;
     private final EnvioRepository envioRepository;
     private final DireccionRepository direccionRepository;
+    private final PlanService planService;
 
     public EnvioService(VerificadorTienda verificadorTienda, TiendaRepository tiendaRepository,
-                        EnvioRepository envioRepository, DireccionRepository direccionRepository) {
+                        EnvioRepository envioRepository, DireccionRepository direccionRepository,
+                        PlanService planService) {
+        this.planService = planService;
         this.verificadorTienda = verificadorTienda;
         this.tiendaRepository = tiendaRepository;
         this.envioRepository = envioRepository;
@@ -75,6 +78,7 @@ public class EnvioService {
     @Transactional
     public EnviosResponse guardarInternacional(UsuarioAutenticado yo, Long idTienda, String idPais, TarifaRequest r) {
         Tienda t = verificadorTienda.delDueno(yo, idTienda);
+        planService.exigir(idTienda, FuncionPlan.ENVIO_INTERNACIONAL);   // solo plan Pro
         String pais = idPais.trim().toUpperCase(Locale.ROOT);
         if (direccionRepository.pais(pais).isEmpty()) {
             throw new ApiException(HttpStatus.NOT_FOUND, "El país no existe");

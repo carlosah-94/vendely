@@ -27,3 +27,59 @@ body {
   background: #f1f1f1;
   -webkit-font-smoothing: antialiased;
 }
+
+/*
+ * Plantillas de la tienda pública (Personalizar → Plantilla). La clase va en el contenedor
+ * de la tienda y da la letra y las esquinas a todas sus páginas (portada, producto, carrito, checkout).
+ *
+ * Moderna: Archivo ensanchada y muy gruesa para los títulos, Inter para el texto; esquinas redondas.
+ * Boutique: Cormorant Garamond (serifa fina) para títulos y nombres, Jost para el texto; esquinas rectas.
+ */
+.letra-ancha {
+  font-family: "Archivo", "Inter", sans-serif;
+  font-stretch: 125%;
+  font-weight: 800;
+}
+.letra-serifa {
+  font-family: "Cormorant Garamond", Georgia, serif;
+}
+
+.plantilla-moderna h1,
+.plantilla-moderna h2 {
+  font-family: "Archivo", "Inter", sans-serif;
+  font-stretch: 125%;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.plantilla-moderna .rounded-md {
+  border-radius: 0.875rem;
+}
+
+.plantilla-boutique {
+  font-family: "Jost", "Inter", sans-serif;
+  font-weight: 300;
+}
+.plantilla-boutique h1,
+.plantilla-boutique h2,
+.plantilla-boutique h3 {
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-weight: 500;
+}
+.plantilla-boutique b,
+.plantilla-boutique strong,
+.plantilla-boutique .font-medium,
+.plantilla-boutique .font-semibold {
+  font-weight: 500;
+}
+.plantilla-boutique .rounded-md,
+.plantilla-boutique .rounded-full,
+.plantilla-boutique .rounded-lg {
+  border-radius: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plantilla-moderna *,
+  .plantilla-boutique * {
+    transition: none !important;
+  }
+}

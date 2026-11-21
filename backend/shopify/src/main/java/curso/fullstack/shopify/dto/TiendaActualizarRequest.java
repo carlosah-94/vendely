@@ -25,5 +25,9 @@ public record TiendaActualizarRequest(
         @Pattern(regexp = "^#[0-9A-Fa-f]{6}$", message = "El color debe tener el formato #RRGGBB, por ejemplo #1D4ED8")
         String colorPrincipal,
 
-        Boolean permiteInvitados
+        Boolean permiteInvitados,
+
+        // Opcional: si no se envia, la plantilla no cambia. Moderna y Boutique solo con plan Pro.
+        @Pattern(regexp = "^(clasica|moderna|boutique)$", message = "La plantilla debe ser clasica, moderna o boutique")
+        String plantilla
 ) {}

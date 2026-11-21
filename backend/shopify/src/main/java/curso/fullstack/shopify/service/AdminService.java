@@ -3,12 +3,16 @@ package curso.fullstack.shopify.service;
 import curso.fullstack.shopify.dto.AdminCuentaResponse;
 import curso.fullstack.shopify.dto.AdminResumenResponse;
 import curso.fullstack.shopify.dto.AdminTiendaResponse;
+import curso.fullstack.shopify.dto.PlanEditarRequest;
+import curso.fullstack.shopify.dto.PlanResponse;
+import curso.fullstack.shopify.entity.Plan;
 import curso.fullstack.shopify.entity.Login;
 import curso.fullstack.shopify.entity.RolUsuario;
 import curso.fullstack.shopify.entity.Tienda;
 import curso.fullstack.shopify.exception.ApiException;
 import curso.fullstack.shopify.repository.AdminRepository;
 import curso.fullstack.shopify.repository.LoginRepository;
+import curso.fullstack.shopify.repository.PlanRepository;
 import curso.fullstack.shopify.repository.TiendaRepository;
 import curso.fullstack.shopify.security.UsuarioAutenticado;
 import java.util.List;
@@ -37,9 +41,11 @@ public class AdminService {
     private final AdminRepository adminRepository;
     private final TiendaRepository tiendaRepository;
     private final LoginRepository loginRepository;
+    private final PlanRepository planRepository;
 
     public AdminService(AdminRepository adminRepository, TiendaRepository tiendaRepository,
-                        LoginRepository loginRepository) {
+                        LoginRepository loginRepository, PlanRepository planRepository) {
+        this.planRepository = planRepository;
         this.adminRepository = adminRepository;
         this.tiendaRepository = tiendaRepository;
         this.loginRepository = loginRepository;
@@ -47,7 +53,43 @@ public class AdminService {
 
     @Transactional(readOnly = true)
     public AdminResumenResponse resumen() {
-        return AdminResumenResponse.desde(adminRepository.resumen(), adminRepository.ventasPorMoneda());
+        return AdminResumenResponse.desde(adminRepository.resumen(), adminRepository.ventasPorMoneda(),
+                adminRepository.ingresoPlanesDelMes(), adminRepository.comisionesDelMes(), adminRepository.tiendasPorPlan());
+    }
+
+    // ------------------------------------------------------------------ planes
+
+    @Transactional(readOnly = true)
+    public List<PlanResponse> planes() {
+        return planRepository.findAllByOrderByPrecioUsdAsc().stream().map(PlanResponse::desde).toList();
+    }
+
+    /**
+     * Cambia precio, limites y beneficios de un plan. Lo ya pagado no cambia: cada suscripcion
+     * guarda el monto que se pago (monto_usd). El nuevo precio se cobra desde el proximo pago.
+     */
+    @Transactional
+    public PlanResponse editarPlan(UsuarioAutenticado yo, Short idPlan, PlanEditarRequest r) {
+        Plan p = planRepository.findById(idPlan)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El plan no existe"));
+        boolean esGratis = idPlan == Plan.GRATIS;
+        if (esGratis && r.precioUsd().signum() != 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "El plan Gratis siempre cuesta 0");
+        }
+        if (!esGratis && r.precioUsd().signum() <= 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Un plan pagado debe costar mas de 0");
+        }
+        p.setPrecioUsd(r.precioUsd());
+        p.setMaxProductos(r.maxProductos());
+        p.setComision(r.comision());
+        p.setPermitePersonalizar(r.permitePersonalizar());
+        p.setPermitePlantillas(r.permitePlantillas());
+        p.setPermiteEnvioInternacional(r.permiteEnvioInternacional());
+        p.setPermiteMasMetodosPago(r.permiteMasMetodosPago());
+        planRepository.saveAndFlush(p);
+        log.info("Superadmin {} cambio el plan {}: {} USD, max {} productos, comision {} %",
+                yo.idLogin(), p.getNombre(), p.getPrecioUsd(), p.getMaxProductos(), p.getComision());
+        return PlanResponse.desde(p);
     }
 
     @Transactional(readOnly = true)

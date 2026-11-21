@@ -15,13 +15,25 @@ public record AdminResumenResponse(
         long duenos,
         long clientes,
         long pedidos,
-        List<VentaMoneda> ventasPagadas
+        List<VentaMoneda> ventasPagadas,
+        BigDecimal ingresoPlanesMesUsd,      // lo que pagaron las tiendas por sus planes este mes
+        long pagosPlanesMes,
+        List<VentaMoneda> comisionesMes,     // comision de Vendely por las ventas del mes (por moneda)
+        List<TiendasPlan> tiendasPorPlan
 ) {
     public record VentaMoneda(String moneda, BigDecimal monto) {}
 
-    public static AdminResumenResponse desde(AdminRepository.Resumen r, List<AdminRepository.VentaMoneda> ventas) {
+    public record TiendasPlan(String plan, long tiendas) {}
+
+    public static AdminResumenResponse desde(AdminRepository.Resumen r, List<AdminRepository.VentaMoneda> ventas,
+                                             AdminRepository.IngresoPlanes planes,
+                                             List<AdminRepository.VentaMoneda> comisiones,
+                                             List<AdminRepository.TiendasPlan> porPlan) {
         return new AdminResumenResponse(r.getTiendasActivas(), r.getTiendasSuspendidas(), r.getDuenos(),
                 r.getClientes(), r.getPedidos(),
-                ventas.stream().map(v -> new VentaMoneda(v.getMoneda(), v.getMonto())).toList());
+                ventas.stream().map(v -> new VentaMoneda(v.getMoneda(), v.getMonto())).toList(),
+                planes.getMonto(), planes.getPagos(),
+                comisiones.stream().map(v -> new VentaMoneda(v.getMoneda(), v.getMonto())).toList(),
+                porPlan.stream().map(p -> new TiendasPlan(p.getPlan(), p.getTiendas())).toList());
     }
 }

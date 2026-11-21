@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { ToastProvider } from '../context/ToastContext';
 import { useTiendaActual } from '../hooks/useTiendaActual';
 import {
-  IconoBuscar, IconoClientes, IconoEnlaceExterno, IconoEnvio, IconoInicio, IconoMenu, IconoPedidos, IconoProductos,
+  IconoBuscar, IconoCheck, IconoClientes, IconoEnlaceExterno, IconoEnvio, IconoInicio, IconoMenu, IconoPedidos, IconoProductos,
   IconoSalir, IconoTienda,
 } from './Iconos';
 
@@ -22,10 +22,12 @@ const MENU = {
     { ruta: '/panel/clientes', texto: 'Clientes', icono: IconoClientes },
     { ruta: '/panel/envios', texto: 'Envíos', icono: IconoEnvio },
     { ruta: '/panel/tiendas', texto: 'Mis tiendas', icono: IconoTienda },
+    { ruta: '/panel/plan', texto: 'Plan', icono: IconoCheck },
   ],
   SUPERADMIN: [
     { ruta: '/admin/tiendas', texto: 'Tiendas de Vendely', icono: IconoTienda },
     { ruta: '/admin/cuentas', texto: 'Cuentas', icono: IconoClientes },
+    { ruta: '/admin/planes', texto: 'Planes', icono: IconoCheck },
   ],
 };
 

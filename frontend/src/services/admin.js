@@ -23,3 +23,13 @@ export async function listarCuentasAdmin() {
 export async function cambiarEstadoCuenta(idLogin, activa) {
   await api.patch(`/admin/cuentas/${idLogin}/estado`, { activa });
 }
+
+/** Planes de Vendely (Gratis, Básico, Pro) con su precio, límites y beneficios. */
+export async function listarPlanesAdmin() {
+  return (await api.get('/admin/planes')).data;
+}
+
+/** datos = { precioUsd, maxProductos (null = ilimitados), comision, permitePersonalizar, ... } */
+export async function editarPlanAdmin(idPlan, datos) {
+  return (await api.put(`/admin/planes/${idPlan}`, datos)).data;
+}

@@ -3,6 +3,7 @@ import LayoutPanel from './components/LayoutPanel';
 import RutaProtegida from './components/RutaProtegida';
 import AccesoDenegado from './pages/AccesoDenegado';
 import AdminCuentas from './pages/admin/AdminCuentas';
+import AdminPlanes from './pages/admin/AdminPlanes';
 import AdminTiendas from './pages/admin/AdminTiendas';
 import Clientes from './pages/Clientes';
 import DetalleVenta from './pages/DetalleVenta';
@@ -15,6 +16,7 @@ import Envios from './pages/Envios';
 import Inventario from './pages/Inventario';
 import NuevaVenta from './pages/NuevaVenta';
 import PersonalizarTienda from './pages/PersonalizarTienda';
+import Plan from './pages/Plan';
 import Portada from './pages/Portada';
 import Productos from './pages/Productos';
 import Registro from './pages/Registro';
@@ -64,6 +66,7 @@ export default function App() {
           <Route path="/panel/clientes" element={<Clientes />} />
           <Route path="/panel/envios" element={<Envios />} />
           <Route path="/panel/personalizar" element={<PersonalizarTienda />} />
+          <Route path="/panel/plan" element={<Plan />} />
           <Route path="/panel/ventas" element={<Ventas />} />
           <Route path="/panel/ventas/nueva" element={<NuevaVenta />} />
           <Route path="/panel/ventas/:idPedido" element={<DetalleVenta />} />
@@ -75,6 +78,7 @@ export default function App() {
         <Route element={<LayoutPanel />}>
           <Route path="/admin/tiendas" element={<AdminTiendas />} />
           <Route path="/admin/cuentas" element={<AdminCuentas />} />
+          <Route path="/admin/planes" element={<AdminPlanes />} />
         </Route>
       </Route>
 

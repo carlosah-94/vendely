@@ -91,6 +91,9 @@ public interface ProductoRepository extends JpaRepository<Producto, Long> {
     // RF2.1.1: nombre único en la tienda (sin distinguir mayúsculas). Al editar se excluye el propio.
     boolean existsByIdTiendaAndNombreIgnoreCase(Long idTienda, String nombre);
 
+    /** Cuantos productos tiene la tienda: para el limite del plan. */
+    long countByIdTienda(Long idTienda);
+
     boolean existsByIdTiendaAndNombreIgnoreCaseAndIdProductoNot(Long idTienda, String nombre, Long idProducto);
 
     // El slug es UNIQUE por tienda en la base: se revisa antes para responder 409 claro.

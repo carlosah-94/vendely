@@ -33,9 +33,11 @@ public class TiendaService {
     private final DireccionRepository direccionRepository;
     private final VerificadorTienda verificadorTienda;
     private final EntityManager entityManager;
+    private final PlanService planService;
 
     public TiendaService(TiendaRepository tiendaRepository, DireccionRepository direccionRepository,
-            VerificadorTienda verificadorTienda, EntityManager entityManager) {
+            VerificadorTienda verificadorTienda, EntityManager entityManager, PlanService planService) {
+        this.planService = planService;
         this.tiendaRepository = tiendaRepository;
         this.direccionRepository = direccionRepository;
         this.verificadorTienda = verificadorTienda;
@@ -78,7 +80,7 @@ public class TiendaService {
         tiendaRepository.crearTarifasPorDefecto(t.getIdTienda());
         log.info("Tienda creada: idTienda={}, subdominio={}, pais={}, idPropietario={}",
                 t.getIdTienda(), t.getSubdominio(), idPais, t.getIdPropietario());
-        return TiendaResponse.desde(t, pais);
+        return TiendaResponse.desde(t, pais, planService.planDe(t.getIdTienda()));
     }
 
     @Transactional(readOnly = true)
@@ -96,6 +98,19 @@ public class TiendaService {
     @Transactional
     public TiendaResponse actualizar(UsuarioAutenticado yo, Long idTienda, TiendaActualizarRequest r) {
         Tienda t = verificadorTienda.delDueno(yo, idTienda);
+        // Logo y color propios solo con plan Basico o Pro. Nombre, descripcion y correo los edita cualquiera.
+        if (cambia(t.getLogoUrl(), vacioANull(r.logoUrl()))
+                || cambia(t.getColorPrincipal(), r.colorPrincipal() == null || r.colorPrincipal().isBlank()
+                        ? null : r.colorPrincipal().trim().toUpperCase(Locale.ROOT))) {
+            planService.exigir(idTienda, FuncionPlan.PERSONALIZAR);
+        }
+        // Moderna y Boutique solo con plan Pro; volver a la clasica siempre se puede.
+        if (r.plantilla() != null && !r.plantilla().equals(t.getPlantilla())) {
+            if (!"clasica".equals(r.plantilla())) {
+                planService.exigir(idTienda, FuncionPlan.PLANTILLAS);
+            }
+            t.setPlantilla(r.plantilla());
+        }
         copiarDatos(t, r.nombre(), r.descripcion(), r.correoContacto(), r.logoUrl(), r.colorPrincipal(),
                 r.permiteInvitados());
         tiendaRepository.saveAndFlush(t);
@@ -110,13 +125,13 @@ public class TiendaService {
         Tienda t = tiendaRepository.findBySubdominio(subdominio.trim().toLowerCase(Locale.ROOT))
                 .filter(Tienda::estaActiva) // una tienda suspendida no se muestra
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "La tienda no existe"));
-        return TiendaPublicaResponse.desde(t, paisDe(t));
+        return TiendaPublicaResponse.desde(t, paisDe(t), planService.planDe(t.getIdTienda()));
     }
 
     // ------------------------------------------------------------------ apoyo
 
     private TiendaResponse responder(Tienda t) {
-        return TiendaResponse.desde(t, paisDe(t));
+        return TiendaResponse.desde(t, paisDe(t), planService.planDe(t.getIdTienda()));
     }
 
     /** Moneda, impuesto y divisiones del país de la tienda. */
@@ -133,6 +148,10 @@ public class TiendaService {
         t.setLogoUrl(vacioANull(logoUrl));
         t.setColorPrincipal(color == null || color.isBlank() ? null : color.trim().toUpperCase(Locale.ROOT));
         t.setPermiteInvitados(permiteInvitados == null || permiteInvitados);
+    }
+
+    private static boolean cambia(String actual, String nuevo) {
+        return !java.util.Objects.equals(actual, nuevo);
     }
 
     private static String vacioANull(String s) {

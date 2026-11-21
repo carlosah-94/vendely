@@ -39,6 +39,8 @@ export const EVENTO_ACCESO_DENEGADO = "vendely:acceso-denegado";
 //   para que muestre la página "Acceso denegado".
 // Las rutas /auth no cuentan: ahí un 401 o 403 se muestra como mensaje en el
 // mismo formulario (por ejemplo, contraseña incorrecta).
+// Un 403 por el PLAN ("Mejora tu plan para usar esto") tampoco: la cuenta sí tiene
+// permiso, solo que su plan no incluye esa función. Se muestra como mensaje en la pantalla.
 api.interceptors.response.use(
   (respuesta) => respuesta,
   (error) => {
@@ -48,12 +50,21 @@ api.interceptors.response.use(
       tokenStorage.clear();
       window.dispatchEvent(new Event(EVENTO_SESION_EXPIRADA));
     }
-    if (estado === 403 && !esAuth) {
+    const esLimiteDePlan = esErrorDePlan(error);
+    if (estado === 403 && !esAuth && !esLimiteDePlan) {
       window.dispatchEvent(new Event(EVENTO_ACCESO_DENEGADO));
     }
     return Promise.reject(error);
   },
 );
+
+/** true si el backend rechazó la acción porque el plan de la tienda no la incluye. */
+export function esErrorDePlan(error) {
+  return (
+    error.response?.status === 403 &&
+    (error.response?.data?.mensaje ?? "").includes("Mejora tu plan")
+  );
+}
 
 /** Texto para mostrar al usuario cuando una petición falla. */
 export function mensajeDeError(error) {

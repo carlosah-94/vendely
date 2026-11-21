@@ -4,6 +4,8 @@ import curso.fullstack.shopify.dto.AdminCuentaResponse;
 import curso.fullstack.shopify.dto.AdminResumenResponse;
 import curso.fullstack.shopify.dto.AdminTiendaResponse;
 import curso.fullstack.shopify.dto.CambioEstadoRequest;
+import curso.fullstack.shopify.dto.PlanEditarRequest;
+import curso.fullstack.shopify.dto.PlanResponse;
 import curso.fullstack.shopify.security.UsuarioAutenticado;
 import curso.fullstack.shopify.service.AdminService;
 import jakarta.validation.Valid;
@@ -13,6 +15,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -26,6 +29,8 @@ import org.springframework.web.bind.annotation.RestController;
  * PATCH /api/admin/tiendas/{id}/estado      suspender o reactivar una tienda  {"activa": false}
  * GET   /api/admin/cuentas                  todas las cuentas (dueños, clientes y superadmins)
  * PATCH /api/admin/cuentas/{id}/estado      desactivar o activar una cuenta   {"activa": false}
+ * GET   /api/admin/planes                   los planes de Vendely
+ * PUT   /api/admin/planes/{id}              cambiar precio, limites y beneficios de un plan
  */
 @RestController
 @RequestMapping("/api/admin")
@@ -54,6 +59,17 @@ public class AdminController {
                                     @PathVariable Long idTienda,
                                     @Valid @RequestBody CambioEstadoRequest request) {
         adminService.cambiarEstadoTienda(yo, idTienda, request.activa());
+    }
+
+    @GetMapping("/planes")
+    public List<PlanResponse> planes() {
+        return adminService.planes();
+    }
+
+    @PutMapping("/planes/{idPlan}")
+    public PlanResponse editarPlan(@AuthenticationPrincipal UsuarioAutenticado yo, @PathVariable Short idPlan,
+                                   @Valid @RequestBody PlanEditarRequest request) {
+        return adminService.editarPlan(yo, idPlan, request);
     }
 
     @GetMapping("/cuentas")
