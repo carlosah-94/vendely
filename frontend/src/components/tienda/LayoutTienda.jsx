@@ -83,17 +83,20 @@ function Marco({ subdominio }) {
     '--tienda-texto': colorTextoSobre(tienda.colorPrincipal || '#303030'),
   };
 
+  // Plantilla elegida en Personalizar (Moderna y Boutique solo con plan Pro): ver utils/plantillas.js.
+  const clasePlantilla = `plantilla-${tienda.plantilla ?? 'clasica'}`;
+
   // El checkout va sin cabecera ni pie: solo el nombre de la tienda arriba (lo pone la propia página).
   if (enCheckout) {
     return (
-      <div className="min-h-screen bg-white text-[#303030]" style={colores}>
+      <div className={`min-h-screen bg-white text-[#303030] ${clasePlantilla}`} style={colores}>
         <Outlet context={contexto} />
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-white text-[#303030]" style={{ fontSize: 16, ...colores }}>
+    <div className={`flex min-h-screen flex-col bg-white text-[#303030] ${clasePlantilla}`} style={{ fontSize: 16, ...colores }}>
       <div className="bg-[var(--tienda)] py-2 text-center text-xs tracking-wide text-[var(--tienda-texto)]">{textoEnvios(paises)}</div>
       <Cabecera tienda={tienda} subdominio={subdominio} />
       <main className="flex-1">
@@ -105,7 +108,11 @@ function Marco({ subdominio }) {
         {paises.length > 0 && (
           <p className="mt-3 text-xs">Enviamos a: {paises.map((p) => p.nombre).join(' · ')}</p>
         )}
-        <p className="mt-4 text-xs">© 2026 · Hecho con Vendely</p>
+        <p className="mt-4 text-xs">
+          © 2026 · {tienda.nombre}
+          {/* Plan Gratis: el sello de Vendely en el pie (los planes pagados no lo llevan) */}
+          {tienda.selloVendely && <> · Hecho con <b>Vendely</b></>}
+        </p>
       </footer>
       <CarritoDrawer subdominio={subdominio} />
     </div>
@@ -120,7 +127,7 @@ function Cabecera({ tienda, subdominio }) {
 
   return (
     <header className="sticky top-0 z-40 border-b border-[#e3e3e3] bg-white">
-      <div className="mx-auto grid max-w-6xl grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 py-4">
+      <div className={`mx-auto grid max-w-6xl grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 py-4 ${tienda.plantilla === 'boutique' ? 'uppercase tracking-[0.2em]' : ''}`}>
         <nav className="hidden gap-5 text-sm sm:flex">
           <Link to={base} className="hover:underline">Inicio</Link>
           <a href={`${base}#catalogo`} className="hover:underline">Catálogo</a>

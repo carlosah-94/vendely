@@ -8,6 +8,7 @@ import { mensajeDeError } from '../../services/api';
 import { categoriasPublicas } from '../../services/categorias';
 import { listarProductos } from '../../services/tienda';
 import { enOferta } from '../../utils/formato';
+import { estiloPlantilla } from '../../utils/plantillas';
 
 /** Portada de la tienda: hero con su color y la grilla de productos activos. */
 export default function Vitrina() {
@@ -40,6 +41,7 @@ export default function Vitrina() {
   }, [subdominio]);
 
   const cargando = estado.subdominio !== subdominio;
+  const estilo = estiloPlantilla(tienda.plantilla);
   const elegida = categorias.find((c) => c.slug === slugCategoria);
   const productos = elegida ? estado.productos.filter((p) => (p.categorias ?? []).includes(elegida.idCategoria)) : estado.productos;
 
@@ -47,14 +49,19 @@ export default function Vitrina() {
     <>
       {/* Portada */}
       {/* Portada con el color de la tienda (Personalizar tienda en el panel) */}
-      <section className="bg-[var(--tienda)] px-4 py-16 text-center text-[var(--tienda-texto)] sm:py-24">
-        <div className="mx-auto max-w-2xl space-y-4">
+      <section className={estilo.portada}>
+        <div className={estilo.contenidoPortada}>
           {tienda.logoUrl && (
-            <img src={tienda.logoUrl} alt="" className="mx-auto h-16 w-16 rounded-full bg-white object-contain p-1" />
+            <img
+              src={tienda.logoUrl}
+              alt=""
+              className={`h-16 w-16 rounded-full bg-white object-contain p-1 ${tienda.plantilla === 'moderna' ? '' : 'mx-auto'}`}
+            />
           )}
-          <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">{tienda.nombre}</h1>
+          {tienda.plantilla === 'boutique' && <p className="text-xs uppercase tracking-[0.3em] text-[#8a7f6a]">Colección</p>}
+          <h1 className={estilo.titulo}>{tienda.nombre}</h1>
           {tienda.descripcion && <p className="text-lg opacity-85">{tienda.descripcion}</p>}
-          <a href="#catalogo" className="inline-block rounded-md bg-[var(--tienda-texto)] px-6 py-3 font-medium text-[var(--tienda)] hover:opacity-90">
+          <a href="#catalogo" className={estilo.botonPortada}>
             Ver productos
           </a>
         </div>
@@ -88,11 +95,11 @@ export default function Vitrina() {
             {elegida ? 'No hay productos en esta categoría.' : 'Esta tienda todavía no tiene productos.'}
           </p>
         ) : (
-          <div className="grid grid-cols-2 gap-x-4 gap-y-8 lg:grid-cols-4">
+          <div className={estilo.grilla}>
             {productos.map((p) => (
-              <article key={p.idProducto} className="group flex flex-col">
+              <article key={p.idProducto} className={estilo.tarjeta}>
                 <Link to={`/tienda/${subdominio}/producto/${p.idProducto}`} className="block">
-                  <div className="relative overflow-hidden rounded-md">
+                  <div className={estilo.imagen}>
                     <ImagenProducto
                       url={p.imagenUrl}
                       nombre={p.nombre}

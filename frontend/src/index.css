@@ -27,3 +27,35 @@ body {
   background: #f1f1f1;
   -webkit-font-smoothing: antialiased;
 }
+
+/*
+ * Plantillas de la tienda pública (Personalizar → Plantilla). La clase va en el contenedor
+ * de la tienda y cambia la letra y las esquinas en todas sus páginas.
+ */
+.plantilla-moderna h1,
+.plantilla-moderna h2 {
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+.plantilla-moderna .rounded-md {
+  border-radius: 9999px;
+}
+.plantilla-moderna img.rounded-md,
+.plantilla-moderna .overflow-hidden.rounded-md {
+  border-radius: 1rem;
+}
+
+.plantilla-boutique {
+  background: #fffdf9;
+}
+.plantilla-boutique h1,
+.plantilla-boutique h2,
+.plantilla-boutique h3 {
+  font-family: "Playfair Display", Georgia, serif;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+.plantilla-boutique .rounded-md,
+.plantilla-boutique .rounded-full {
+  border-radius: 0;
+}
