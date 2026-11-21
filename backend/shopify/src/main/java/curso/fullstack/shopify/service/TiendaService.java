@@ -33,9 +33,11 @@ public class TiendaService {
     private final DireccionRepository direccionRepository;
     private final VerificadorTienda verificadorTienda;
     private final EntityManager entityManager;
+    private final PlanService planService;
 
     public TiendaService(TiendaRepository tiendaRepository, DireccionRepository direccionRepository,
-            VerificadorTienda verificadorTienda, EntityManager entityManager) {
+            VerificadorTienda verificadorTienda, EntityManager entityManager, PlanService planService) {
+        this.planService = planService;
         this.tiendaRepository = tiendaRepository;
         this.direccionRepository = direccionRepository;
         this.verificadorTienda = verificadorTienda;
@@ -96,6 +98,12 @@ public class TiendaService {
     @Transactional
     public TiendaResponse actualizar(UsuarioAutenticado yo, Long idTienda, TiendaActualizarRequest r) {
         Tienda t = verificadorTienda.delDueno(yo, idTienda);
+        // Logo y color propios solo con plan Basico o Pro. Nombre, descripcion y correo los edita cualquiera.
+        if (cambia(t.getLogoUrl(), vacioANull(r.logoUrl()))
+                || cambia(t.getColorPrincipal(), r.colorPrincipal() == null || r.colorPrincipal().isBlank()
+                        ? null : r.colorPrincipal().trim().toUpperCase(Locale.ROOT))) {
+            planService.exigir(idTienda, FuncionPlan.PERSONALIZAR);
+        }
         copiarDatos(t, r.nombre(), r.descripcion(), r.correoContacto(), r.logoUrl(), r.colorPrincipal(),
                 r.permiteInvitados());
         tiendaRepository.saveAndFlush(t);
@@ -133,6 +141,10 @@ public class TiendaService {
         t.setLogoUrl(vacioANull(logoUrl));
         t.setColorPrincipal(color == null || color.isBlank() ? null : color.trim().toUpperCase(Locale.ROOT));
         t.setPermiteInvitados(permiteInvitados == null || permiteInvitados);
+    }
+
+    private static boolean cambia(String actual, String nuevo) {
+        return !java.util.Objects.equals(actual, nuevo);
     }
 
     private static String vacioANull(String s) {
