@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS planes (
 
 INSERT INTO planes (id_plan, nombre, precio_usd, max_productos, comision,
                     permite_personalizar, permite_plantillas, permite_envio_internacional, permite_mas_metodos_pago)
-VALUES (1, 'Gratis',  0.00,   10, 5.00, FALSE, FALSE, FALSE, FALSE),
+VALUES (1, 'Gratis',  0.00,    5, 5.00, FALSE, FALSE, FALSE, FALSE),
        (2, 'Básico', 15.00,  100, 2.00, TRUE,  FALSE, FALSE, TRUE),
        (3, 'Pro',    39.00, NULL, 0.50, TRUE,  TRUE,  TRUE,  TRUE)
 ON CONFLICT (id_plan) DO NOTHING;

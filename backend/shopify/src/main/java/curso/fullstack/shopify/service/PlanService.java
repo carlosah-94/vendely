@@ -89,7 +89,8 @@ public class PlanService {
     private static String mensaje(Plan p, FuncionPlan funcion) {
         String plan = "Tu plan " + p.getNombre();
         return switch (funcion) {
-            case CREAR_PRODUCTO -> plan + " permite hasta " + p.getMaxProductos() + " productos. " + MEJORA_TU_PLAN;
+            case CREAR_PRODUCTO -> plan + " permite hasta " + p.getMaxProductos()
+                    + (p.getMaxProductos() != null && p.getMaxProductos() == 1 ? " producto. " : " productos. ") + MEJORA_TU_PLAN;
             case PERSONALIZAR -> plan + " no incluye logo ni color propios. " + MEJORA_TU_PLAN;
             case PLANTILLAS -> plan + " no incluye elegir plantilla. " + MEJORA_TU_PLAN;
             case ENVIO_INTERNACIONAL -> plan + " no incluye envios internacionales. " + MEJORA_TU_PLAN;
