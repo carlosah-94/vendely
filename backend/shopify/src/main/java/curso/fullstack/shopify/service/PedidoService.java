@@ -1,5 +1,6 @@
 package curso.fullstack.shopify.service;
 
+import curso.fullstack.shopify.dto.EnvioPedidoRequest;
 import curso.fullstack.shopify.dto.LineaVentaRequest;
 import curso.fullstack.shopify.dto.LineaVentaResponse;
 import curso.fullstack.shopify.dto.PedidoClienteRequest;
@@ -8,6 +9,7 @@ import curso.fullstack.shopify.dto.VentaRequest;
 import curso.fullstack.shopify.dto.VentaResponse;
 import curso.fullstack.shopify.entity.*;
 import curso.fullstack.shopify.evento.PedidoCreadoEvent;
+import curso.fullstack.shopify.evento.PedidoEstadoCambiadoEvent;
 import curso.fullstack.shopify.evento.StockCambiadoEvent;
 import curso.fullstack.shopify.exception.ApiException;
 import curso.fullstack.shopify.repository.*;
@@ -16,6 +18,7 @@ import curso.fullstack.shopify.security.VerificadorTienda;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -236,6 +239,93 @@ public class PedidoService {
         pedidoRepository.flush();
         log.info("Venta eliminada y stock devuelto: tienda={}, pedido #{} (id={})",
                 idTienda, p.getNumeroPedido(), idPedido);
+    }
+
+    // =====================================================================
+    // Issue #3 · Seguimiento del envio
+    // =====================================================================
+
+    /**
+     * Marca el pedido como ENVIADO, con su empresa y su número de seguimiento.
+     *
+     * Solo un pedido ya pagado puede enviarse: despachar mercadería sin haber cobrado es una
+     * pérdida, y es la misma razón por la que la base no deja borrar un pedido pagado.
+     */
+    @Transactional
+    public VentaResponse enviar(UsuarioAutenticado yo, Long idTienda, Long idPedido, EnvioPedidoRequest r) {
+        verificadorTienda.delDueno(yo, idTienda);
+        Pedido p = buscarEnTienda(idPedido, idTienda);
+        exigirEstado(p, (short) 0, "Solo un pedido sin enviar puede marcarse como enviado");
+        if (!pedidoRepository.tienePagoAprobado(idPedido)) {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    "El pedido #" + p.getNumeroPedido() + " todavía no tiene un pago aprobado");
+        }
+        p.setEmpresaEnvio(r.empresaEnvio().trim());
+        p.setNumeroSeguimiento(r.numeroSeguimiento().trim());
+        p.setFechaEnvio(OffsetDateTime.now());
+        return cambiarEstado(p, (short) 1);
+    }
+
+    /** De ENVIADO a ENTREGADO: el cliente ya recibió su paquete. */
+    @Transactional
+    public VentaResponse entregar(UsuarioAutenticado yo, Long idTienda, Long idPedido) {
+        verificadorTienda.delDueno(yo, idTienda);
+        Pedido p = buscarEnTienda(idPedido, idTienda);
+        exigirEstado(p, (short) 1, "Solo un pedido enviado puede marcarse como entregado");
+        p.setFechaEntrega(OffsetDateTime.now());
+        return cambiarEstado(p, (short) 2);
+    }
+
+    /**
+     * Cancela un pedido que todavía no salió: el stock vuelve al inventario y, si ya se había
+     * cobrado, el pago queda como REEMBOLSADO (el dinero lo devuelve el dueño en la pasarela;
+     * Vendely solo lo registra). Un pedido ya enviado no se cancela: la mercadería está en camino.
+     *
+     * Todo en UNA transacción: nunca queda un pedido cancelado con el stock sin devolver.
+     */
+    @Transactional
+    public VentaResponse cancelar(UsuarioAutenticado yo, Long idTienda, Long idPedido) {
+        verificadorTienda.delDueno(yo, idTienda);
+        Pedido p = buscarEnTienda(idPedido, idTienda);
+        exigirEstado(p, (short) 0, "Un pedido que ya se envió no se puede cancelar");
+
+        inventarioRepository.devolverStock(idPedido);
+        for (DetallePedido d : detallePedidoRepository.findByIdPedido(idPedido)) {
+            Integer quedan = inventarioRepository.cantidadDe(d.getIdVariante());
+            eventos.publishEvent(new StockCambiadoEvent(idTienda, d.getIdVariante(), quedan == null ? 0 : quedan));
+        }
+        pagoRepository.findFirstByIdPedidoAndEstadoOrderByIdPagoDesc(idPedido, Pago.APROBADO)
+                .ifPresent(pago -> {
+                    pago.setEstado(Pago.REEMBOLSADO);
+                    pagoRepository.save(pago);
+                    log.info("Pago marcado como reembolsado: pedido #{} (id={})", p.getNumeroPedido(), idPedido);
+                });
+
+        p.setFechaCancelacion(OffsetDateTime.now());
+        return cambiarEstado(p, (short) 3);
+    }
+
+    /** 409 si el pedido no está en el estado que exige la acción, diciendo en cuál está. */
+    private void exigirEstado(Pedido p, short esperado, String mensaje) {
+        if (!Short.valueOf(esperado).equals(p.getEstado())) {
+            throw new ApiException(HttpStatus.CONFLICT, mensaje + ". El pedido #" + p.getNumeroPedido()
+                    + " está " + PedidoResumenResponse.nombreEstado(p.getEstado()));
+        }
+    }
+
+    /**
+     * Guarda el estado nuevo y publica PedidoEstadoCambiadoEvent. El evento se publica DENTRO
+     * de la transacción pero los oyentes son @TransactionalEventListener: si algo falla y se
+     * deshace el cambio, no se envía ningún correo de un envío que no ocurrió.
+     */
+    private VentaResponse cambiarEstado(Pedido p, short nuevo) {
+        Short anterior = p.getEstado();
+        p.setEstado(nuevo);
+        pedidoRepository.saveAndFlush(p);
+        eventos.publishEvent(new PedidoEstadoCambiadoEvent(p.getIdTienda(), p.getIdPedido(), anterior, nuevo));
+        log.info("Pedido #{} (id={}): {} -> {}", p.getNumeroPedido(), p.getIdPedido(),
+                PedidoResumenResponse.nombreEstado(anterior), PedidoResumenResponse.nombreEstado(nuevo));
+        return conLineas(p);
     }
 
     // =====================================================================

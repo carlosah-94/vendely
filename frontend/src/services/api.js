@@ -66,6 +66,31 @@ export function esErrorDePlan(error) {
   );
 }
 
+/**
+ * Descarga un PDF que devuelve el backend y lo guarda en la computadora.
+ *
+ * responseType blob: axios no intenta leerlo como JSON. El nombre del archivo lo manda el
+ * backend en Content-Disposition; si no llega (por ejemplo, si un proxy lo quita), se usa
+ * el que pase la pantalla.
+ */
+export async function descargarPdf(url, nombrePorDefecto) {
+  const respuesta = await api.get(url, { responseType: "blob" });
+  const enlace = document.createElement("a");
+  const direccion = URL.createObjectURL(respuesta.data);
+  enlace.href = direccion;
+  enlace.download = nombreDelArchivo(respuesta.headers, nombrePorDefecto);
+  document.body.appendChild(enlace);
+  enlace.click();
+  enlace.remove();
+  URL.revokeObjectURL(direccion);
+}
+
+function nombreDelArchivo(cabeceras, porDefecto) {
+  const disposicion = cabeceras?.["content-disposition"] ?? "";
+  const encontrado = /filename\*?="?([^";]+)"?/.exec(disposicion);
+  return encontrado ? encontrado[1] : porDefecto;
+}
+
 /** Texto para mostrar al usuario cuando una petición falla. */
 export function mensajeDeError(error) {
   return error.response?.data?.mensaje ?? "No se pudo conectar con el servidor";

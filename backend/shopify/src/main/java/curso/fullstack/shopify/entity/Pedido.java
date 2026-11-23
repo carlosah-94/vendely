@@ -38,9 +38,36 @@ public class Pedido {
     @Column(name = "subtotal", nullable = false, precision = 12, scale = 2)
     private BigDecimal subtotal;
 
-    /** 0 sin enviar · 1 enviado · 2 entregado · 3 cancelado */
+    /** 0 sin enviar · 1 enviado · 2 entregado · 3 cancelado. Lo cambia PedidoService. */
+    @Setter
     @Column(name = "estado", nullable = false)
     private Short estado = 0;
+
+    // ---- Seguimiento del envio (issue #3). Las fechas marcan cada paso del pedido.
+    @Setter
+    @Column(name = "empresa_envio", length = 60)
+    private String empresaEnvio;
+
+    @Setter
+    @Column(name = "numero_seguimiento", length = 60)
+    private String numeroSeguimiento;
+
+    @Setter
+    @Column(name = "fecha_envio")
+    private OffsetDateTime fechaEnvio;
+
+    @Setter
+    @Column(name = "fecha_entrega")
+    private OffsetDateTime fechaEntrega;
+
+    @Setter
+    @Column(name = "fecha_cancelacion")
+    private OffsetDateTime fechaCancelacion;
+
+    /** Lo que Vendely cobra por esta venta. Se guarda al aprobarse el pago, con el plan de ese momento. */
+    @Setter
+    @Column(name = "comision_plataforma", precision = 12, scale = 2)
+    private BigDecimal comisionPlataforma;
 
     // ---- Las llena la base (trigger T2). Java solo las lee.
     @Column(name = "numero_pedido", insertable = false, updatable = false)

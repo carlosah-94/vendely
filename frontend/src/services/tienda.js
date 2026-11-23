@@ -1,4 +1,4 @@
-import { api } from './api';
+import { api, descargarPdf } from './api';
 
 /**
  * Llamadas de la tienda pública y de la cuenta del cliente. Devuelven directamente los datos
@@ -50,4 +50,10 @@ export async function listarMisPedidos() {
 
 export async function verMiPedido(idPedido) {
   return (await api.get(`/cliente/pedidos/${idPedido}`)).data;
+}
+
+/** Descarga el comprobante de compra de uno de mis pedidos (issue #3). */
+export async function descargarMiComprobante(idPedido, numeroPedido) {
+  return descargarPdf(`/cliente/pedidos/${idPedido}/comprobante`,
+    `comprobante-${numeroPedido ?? idPedido}.pdf`);
 }

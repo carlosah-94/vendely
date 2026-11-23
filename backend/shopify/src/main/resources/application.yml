@@ -73,6 +73,12 @@ app:
     webhook-id: ${PAYPAL_WEBHOOK_ID:}
     # PayPal no cobra en soles: los pedidos en PEN se cobran en USD con este tipo de cambio fijo
     tipo-cambio-pen-usd: ${PAYPAL_TIPO_CAMBIO:3.75}
+  resend:
+    # Clave de resend.com para enviar los correos. Sin ella, NotificacionService los registra
+    # como "simulado" y no envía nada: el proyecto corre completo sin crear ninguna cuenta.
+    api-key: ${RESEND_API_KEY:}
+    # Remitente. El de por defecto es el de pruebas de Resend, que no necesita dominio propio.
+    remitente: ${RESEND_REMITENTE:Vendely <onboarding@resend.dev>}
   pagos:
     # Conciliación: cada cuánto se revisan los pagos que quedaron pendientes y cuánto tiempo
     # tienen que llevar así para tocarlos (un pago recién iniciado está pendiente porque el

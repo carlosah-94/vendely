@@ -46,6 +46,7 @@ public class PagoService {
     private final TiendaRepository tiendaRepository;
     private final MercadoPagoClient mercadoPago;
     private final PayPalClient payPal;
+    private final PlanService planService;
     private final ApplicationEventPublisher eventos;
     private final BigDecimal tipoCambioPenUsd;
     private final BigDecimal tipoCambioClpUsd;
@@ -53,7 +54,7 @@ public class PagoService {
 
     public PagoService(PedidoRepository pedidoRepository, PagoRepository pagoRepository,
                        TiendaRepository tiendaRepository, MercadoPagoClient mercadoPago, PayPalClient payPal,
-                       ApplicationEventPublisher eventos,
+                       PlanService planService, ApplicationEventPublisher eventos,
                        @Value("${app.paypal.tipo-cambio-pen-usd:3.75}") BigDecimal tipoCambioPenUsd,
                        @Value("${app.paypal.tipo-cambio-clp-usd:950}") BigDecimal tipoCambioClpUsd,
                        @Value("${app.frontend-url:http://localhost:5173}") String frontendUrl) {
@@ -62,6 +63,7 @@ public class PagoService {
         this.tiendaRepository = tiendaRepository;
         this.mercadoPago = mercadoPago;
         this.payPal = payPal;
+        this.planService = planService;
         this.eventos = eventos;
         this.tipoCambioPenUsd = tipoCambioPenUsd;
         this.tipoCambioClpUsd = tipoCambioClpUsd;
@@ -241,6 +243,7 @@ public class PagoService {
             pago.setFechaPago(OffsetDateTime.now());
             pago.setReferenciaTransaccion(paymentId);
             guardar(pago);
+            guardarComision(p);
             eventos.publishEvent(new PagoAprobadoEvent(p.getIdTienda(), p.getIdPedido()));
             log.info("Pago aprobado: pedido #{}, monto {}", p.getNumeroPedido(), p.getTotal());
             return resultado(p, Pago.APROBADO);
@@ -255,6 +258,27 @@ public class PagoService {
         // pending, in_process, authorized…: todavía no hay resultado; se deja pendiente.
         log.info("Pago pendiente: pedido #{}, estado en Mercado Pago {}", p.getNumeroPedido(), estadoMp);
         return resultado(p, Pago.PENDIENTE);
+    }
+
+    /**
+     * Guarda en el pedido la comisión que Vendely cobra por esta venta (issue #3).
+     *
+     * Se calcula al aprobarse el pago y con el plan que la tienda tiene EN ESE momento: si
+     * después sube o baja de plan, lo que ya se cobró no cambia. Va en la misma transacción
+     * que la aprobación del pago, así que o quedan las dos cosas o no queda ninguna.
+     */
+    private void guardarComision(Pedido p) {
+        if (p.getComisionPlataforma() != null) {
+            return;   // ya estaba calculada: el aviso de la pasarela y el regreso del navegador coincidieron
+        }
+        BigDecimal porcentaje = planService.comision(p.getIdTienda());
+        BigDecimal comision = p.getTotal()
+                .multiply(porcentaje)
+                .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+        p.setComisionPlataforma(comision);
+        pedidoRepository.save(p);
+        log.info("Comisión de Vendely: pedido #{}, {} % de {} {} = {}", p.getNumeroPedido(),
+                porcentaje, p.getTotal(), p.getMoneda(), comision);
     }
 
     // ------------------------------------------------------------------ avisos de la pasarela (webhook)
@@ -541,6 +565,7 @@ public class PagoService {
         pago.setEstado(Pago.APROBADO);
         pago.setFechaPago(OffsetDateTime.now());
         guardar(pago);
+        guardarComision(p);
         eventos.publishEvent(new PagoAprobadoEvent(p.getIdTienda(), p.getIdPedido()));
         log.info("Pago aprobado con PayPal: pedido #{}, monto {} {}", p.getNumeroPedido(), p.getTotal(), p.getMoneda());
         return resultado(p, Pago.APROBADO);
