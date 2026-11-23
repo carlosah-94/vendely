@@ -2,6 +2,8 @@ package curso.fullstack.shopify.service;
 
 import curso.fullstack.shopify.dto.OpcionRequest;
 import curso.fullstack.shopify.dto.OpcionResponse;
+import curso.fullstack.shopify.dto.FiltroCatalogo;
+import curso.fullstack.shopify.dto.PaginaResponse;
 import curso.fullstack.shopify.dto.ProductoPublicoResponse;
 import curso.fullstack.shopify.dto.ProductoRequest;
 import curso.fullstack.shopify.dto.ProductoResponse;
@@ -230,16 +232,31 @@ public class ProductoService {
     /**
      * Catálogo de una tienda para visitantes (sin token). Solo si la tienda está activa y solo
      * productos activos: una tienda suspendida o un borrador no deben verse.
+     *
+     * Devuelve una página, no la lista entera (issue #4): con los filtros aplicados en la base,
+     * la tienda recibe los doce que va a mostrar y el total para dibujar el paginador.
      */
     @Transactional(readOnly = true)
-    public List<ProductoPublicoResponse> catalogo(String subdominio) {
+    public PaginaResponse<ProductoPublicoResponse> catalogo(String subdominio, FiltroCatalogo filtros) {
         Tienda t = tiendaRepository.findBySubdominio(subdominio.trim().toLowerCase(Locale.ROOT))
                 .filter(Tienda::estaActiva)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "La tienda no existe"));
-        List<ProductoRepository.Fila> filas = productoRepository.filasPublicas(t.getIdTienda());
+        FiltroCatalogo f = filtros.normalizado();
+
+        // Primero el conteo: si ningún producto pasa los filtros, se ahorra la consulta grande.
+        long total = productoRepository.contarPublicos(t.getIdTienda(), f.q(), f.categoria(),
+                f.min(), f.max(), f.stock());
+        if (total == 0) {
+            return PaginaResponse.de(List.of(), f.pagina(), f.tamano(), 0);
+        }
+        List<ProductoRepository.Fila> filas = productoRepository.buscarPublicos(t.getIdTienda(), f.q(),
+                f.categoria(), f.min(), f.max(), f.stock(), f.orden(), f.tamano(), f.desplazamiento());
         Detalle d = detalle(filas.stream().map(ProductoRepository.Fila::getIdProducto).toList());
-        return filas.stream().map(f -> ProductoPublicoResponse.desde(f, d.opciones(f.getIdProducto()),
-                d.variantesPublicas(f.getIdProducto()))).toList();
+        List<ProductoPublicoResponse> contenido = filas.stream()
+                .map(x -> ProductoPublicoResponse.desde(x, d.opciones(x.getIdProducto()),
+                        d.variantesPublicas(x.getIdProducto())))
+                .toList();
+        return PaginaResponse.de(contenido, f.pagina(), f.tamano(), total);
     }
 
     /** Detalle público de un producto: 404 si la tienda o el producto no existen o no están activos. */

@@ -2,6 +2,8 @@ import { Link } from 'react-router-dom';
 import { enOferta, formatoMoneda } from '../../utils/formato';
 import ImagenProducto from '../ImagenProducto';
 import Mensaje from '../Mensaje';
+import FiltrosCatalogo from './FiltrosCatalogo';
+import Paginador from './Paginador';
 import { BotonComprar, tieneVariosPrecios } from './comprar';
 
 /**
@@ -10,7 +12,8 @@ import { BotonComprar, tieneVariosPrecios } from './comprar';
  * una serifa fina y grande. El resto es silencioso: fondo blanco, mucho aire, fotos verticales
  * (4:5, como en moda), nombres en serifa y el color de la tienda solo en detalles.
  */
-export default function VitrinaBoutique({ tienda, subdominio, todos, productos, categorias, elegida, cargando, error, elegirCategoria, agregarAlCarrito }) {
+export default function VitrinaBoutique({ tienda, subdominio, todos, productos, categorias, elegida,
+  cargando, error, elegirCategoria, agregarAlCarrito, filtros, total, paginas, cambiarFiltro, irAPagina }) {
   const portada = todos.find((p) => p.imagenUrl);
   const base = `/tienda/${subdominio}`;
 
@@ -102,12 +105,18 @@ export default function VitrinaBoutique({ tienda, subdominio, todos, productos, 
           )}
         </div>
 
+        <FiltrosCatalogo filtros={filtros} total={cargando ? null : total} onCambiar={cambiarFiltro} />
         {error && <Mensaje tipo="error" texto={error} />}
         {cargando ? (
           <p className="text-[#6b6b6b]">Cargando la colección...</p>
         ) : productos.length === 0 && !error ? (
-          <p className="text-[#6b6b6b]">{elegida ? 'Todavía no hay piezas en esta categoría.' : 'La colección se está preparando.'}</p>
+          <p className="text-[#6b6b6b]">
+            {elegida || filtros.q || filtros.min || filtros.max || filtros.stock
+              ? 'Ninguna pieza coincide con esos filtros.'
+              : 'La colección se está preparando.'}
+          </p>
         ) : (
+          <>
           <div className="grid grid-cols-2 gap-x-6 gap-y-14 md:grid-cols-3">
             {productos.map((p) => (
               <article key={p.idProducto} className="group flex flex-col">
@@ -139,7 +148,9 @@ export default function VitrinaBoutique({ tienda, subdominio, todos, productos, 
                 />
               </article>
             ))}
-          </div>
+            </div>
+            <Paginador pagina={filtros.pagina} paginas={paginas} onIr={irAPagina} />
+          </>
         )}
       </section>
     </div>

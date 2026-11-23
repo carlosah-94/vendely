@@ -18,6 +18,7 @@ public record ProductoResponse(
         Long idVariante,
         BigDecimal precio,
         Long stock,
+        Long stockMinimo,       // suma del minimo de sus variantes: con el se marca "stock bajo"
         BigDecimal precioComparacion,   // precio "antes" (tachado), o null
         String sku,                     // código interno, o null
         String imagenUrl,               // foto principal, o null
@@ -34,8 +35,8 @@ public record ProductoResponse(
                                          List<VarianteResponse> variantes) {
         return new ProductoResponse(f.getIdProducto(), f.getNombre(), f.getSlug(), f.getDescripcion(),
                 f.getMarca(), nombreEstado(f.getEstado()), f.getIdVariante(), f.getPrecio(), f.getStock(),
-                f.getPrecioComparacion(), f.getSku(), f.getImagenUrl(), separarImagenes(f.getImagenes()),
-                separarIds(f.getCategorias()), opciones, variantes);
+                f.getStockMinimo(), f.getPrecioComparacion(), f.getSku(), f.getImagenUrl(),
+                separarImagenes(f.getImagenes()), separarIds(f.getCategorias()), opciones, variantes);
     }
 
     // La base guarda el estado como número (CHECK 0..2); al frontend se le envía un texto legible.

@@ -99,7 +99,7 @@ Paquete base: `curso.fullstack.shopify`
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/api/public/tiendas/{subdominio}` | Datos de la tienda |
-| GET | `/api/public/tiendas/{subdominio}/productos` | Catálogo |
+| GET | `/api/public/tiendas/{subdominio}/productos` | Catálogo, con filtros y paginación |
 | GET | `/api/public/tiendas/{subdominio}/productos/{idProducto}` | Detalle de un producto |
 | GET | `/api/public/paises/{idPais}/distritos` | Distritos para las direcciones |
 | POST | `/api/public/pagos/webhook/mercadopago` | Aviso de Mercado Pago (firmado) |
@@ -115,6 +115,32 @@ Paquete base: `curso.fullstack.shopify`
 | POST | `/api/cliente/pedidos/{idPedido}/pago` | Inicia el pago en Mercado Pago |
 | POST | `/api/cliente/pedidos/{idPedido}/pago/confirmar` | Confirma el resultado del pago |
 | GET | `/api/cliente/pedidos/{idPedido}/comprobante` | Su comprobante de compra en PDF |
+
+## Catálogo: filtros y paginación
+
+`GET /api/public/tiendas/{subdominio}/productos` acepta estos parámetros, todos opcionales:
+
+| Parámetro | Qué hace |
+|---|---|
+| `q` | Busca en nombre, marca y descripción (sin distinguir mayúsculas) |
+| `categoria` | Id de la categoría |
+| `min` / `max` | Rango del precio vigente |
+| `stock` | `1` deja solo los que tienen stock |
+| `orden` | `nombre` (por defecto), `precio_asc`, `precio_desc`, `novedades` |
+| `pagina` | Empieza en 1 |
+| `tamano` | 12 por defecto, 48 como máximo |
+
+Responde una página, no un arreglo:
+
+```json
+{ "contenido": [...], "pagina": 1, "tamano": 12, "total": 18, "paginas": 2, "hayMas": true }
+```
+
+Tres decisiones que vale la pena conocer antes de tocar esto:
+
+1. **El precio y el stock se filtran en `HAVING`, no en `WHERE`.** Un producto puede tener varias variantes: su precio es el menor (`min`) y su stock la suma. Son agregados, y `WHERE` se evalúa antes de agrupar.
+2. **Cada parámetro opcional va con `CAST(:x AS tipo)`.** En una consulta nativa, PostgreSQL no puede deducir el tipo de un parámetro que llega nulo y la consulta falla con *could not determine data type*.
+3. **El orden se elige con un `CASE` por parámetro**, no pegando texto al SQL: lo que llega del navegador nunca se concatena a la consulta. Y `FiltroCatalogo.normalizado()` descarta un orden inventado, ignora un rango de precios al revés y limita el tamaño de la página, así que nadie puede pedir cien mil productos de una vez.
 
 ## Pedidos: envío, correos y comprobante
 
@@ -238,6 +264,6 @@ Hibernate sigue en `ddl-auto: validate`: solo comprueba que las entidades coinci
 - [ ] **Rol `SUPERADMIN`:** la ruta `/api/admin/**` existe pero no tiene endpoints.
 - [ ] **Categorías de productos:** la tabla `categorias` existe, pero la API aún no las expone.
 - [ ] **Tablas sin API todavía:** imágenes de producto, variantes y opciones, ofertas, carritos, tarifas de envío y tipos de cambio.
-- [ ] **Paginación y filtros** en los listados (productos, clientes, pedidos).
+- [ ] **Paginación** en los listados del panel (productos, clientes, pedidos): el catálogo público ya la tiene, el panel todavía trae la lista completa y filtra en la pantalla.
 - [ ] **Documentación de la API** con Swagger/OpenAPI.
 - [ ] **Despliegue:** configuración de producción (secretos, CORS, HTTPS) y revisión del Dockerfile.

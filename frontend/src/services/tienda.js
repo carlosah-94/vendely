@@ -10,8 +10,21 @@ export async function obtenerTienda(subdominio) {
   return (await api.get(`/public/tiendas/${subdominio}`)).data;
 }
 
-export async function listarProductos(subdominio) {
-  return (await api.get(`/public/tiendas/${subdominio}/productos`)).data;
+/**
+ * Catalogo de la tienda. Devuelve una pagina: { contenido, pagina, tamano, total, paginas, hayMas }.
+ *
+ * Solo se mandan los filtros con valor: una URL con ?q=&min= no filtra nada y ensucia el enlace
+ * que el visitante puede copiar.
+ */
+export async function listarProductos(subdominio, filtros = {}) {
+  const parametros = new URLSearchParams();
+  for (const [clave, valor] of Object.entries(filtros)) {
+    if (valor !== undefined && valor !== null && valor !== '' && valor !== false) {
+      parametros.set(clave, valor);
+    }
+  }
+  const cadena = parametros.toString();
+  return (await api.get(`/public/tiendas/${subdominio}/productos${cadena ? `?${cadena}` : ''}`)).data;
 }
 
 export async function obtenerProducto(subdominio, idProducto) {

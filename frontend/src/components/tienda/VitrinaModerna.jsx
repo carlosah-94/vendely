@@ -3,6 +3,8 @@ import { BotonComprar, tieneVariosPrecios } from './comprar';
 import { enOferta, formatoMoneda } from '../../utils/formato';
 import ImagenProducto from '../ImagenProducto';
 import Mensaje from '../Mensaje';
+import FiltrosCatalogo from './FiltrosCatalogo';
+import Paginador from './Paginador';
 
 /** Fotos reales de la tienda: las primeras que tengan imagen. */
 function conFoto(productos, cuantas) {
@@ -23,7 +25,8 @@ function textoEnvio(paises) {
  * el catálogo con el primer producto destacado en grande y una franja con datos reales
  * de la tienda (a dónde envía, cómo se paga).
  */
-export default function VitrinaModerna({ tienda, subdominio, paises, todos, productos, categorias, elegida, cargando, error, elegirCategoria, agregarAlCarrito }) {
+export default function VitrinaModerna({ tienda, subdominio, paises, todos, productos, categorias, elegida,
+  cargando, error, elegirCategoria, agregarAlCarrito, filtros, total, paginas, cambiarFiltro, irAPagina }) {
   const collage = conFoto(todos, 3);
   const base = `/tienda/${subdominio}`;
 
@@ -141,12 +144,18 @@ export default function VitrinaModerna({ tienda, subdominio, paises, todos, prod
             </button>
           )}
         </div>
+        <FiltrosCatalogo filtros={filtros} total={cargando ? null : total} onCambiar={cambiarFiltro} />
         {error && <Mensaje tipo="error" texto={error} />}
         {cargando ? (
           <p className="text-[#616161]">Cargando productos...</p>
         ) : productos.length === 0 && !error ? (
-          <p className="text-[#616161]">{elegida ? 'No hay productos en esta categoría.' : 'Esta tienda todavía no tiene productos.'}</p>
+          <p className="text-[#616161]">
+            {elegida || filtros.q || filtros.min || filtros.max || filtros.stock
+              ? 'Ningún producto coincide con esos filtros.'
+              : 'Esta tienda todavía no tiene productos.'}
+          </p>
         ) : (
+          <>
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             {productos.map((p, i) => (
               <article
@@ -179,7 +188,9 @@ export default function VitrinaModerna({ tienda, subdominio, paises, todos, prod
                 </div>
               </article>
             ))}
-          </div>
+            </div>
+            <Paginador pagina={filtros.pagina} paginas={paginas} onIr={irAPagina} />
+          </>
         )}
       </section>
     </div>

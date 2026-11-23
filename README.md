@@ -48,6 +48,7 @@ shopity/
 | Envíos nacionales (por región) e internacionales (por país) | Sí | Sí (`/panel/envios`) |
 | Ventas (registro, consulta y eliminación con stock) | Sí | Sí (`/panel/ventas`) |
 | Tienda pública: vitrina con filtros por categoría, detalle con variantes y carrito | Sí | Sí (`/tienda/:subdominio`) |
+| Catálogo con filtros (texto, categoría, precio, disponibilidad), orden y paginación | Sí | Sí (barra de filtros en la tienda; los filtros quedan en la URL) |
 | Cliente: ingreso, direcciones (también en otros países), costo de envío, checkout y "Mis pedidos" | Sí | Sí (`/tienda/:subdominio/checkout`, `/mis-pedidos`) |
 | Pago en modo de prueba: PayPal Sandbox o Mercado Pago | Sí | Sí (`/tienda/:subdominio/pago/resultado`) |
 | Seguimiento del envío: enviado (con empresa y número), entregado y cancelado | Sí | Sí (en el detalle de la venta y en "Mis pedidos") |
@@ -552,6 +553,7 @@ Cada tienda tiene su vitrina en `/tienda/{subdominio}` (por ejemplo `/tienda/mod
 | `POST /api/cliente/pedidos/{idPedido}/pago/confirmar` | CLIENTE | Confirmar el resultado del pago |
 | `POST /api/public/pagos/webhook/mercadopago` | Mercado Pago | Aviso de la pasarela (firmado; no lo llama el navegador) |
 | `POST /api/public/pagos/webhook/paypal` | PayPal | Aviso de la pasarela (firmado; no lo llama el navegador) |
+| `GET /api/public/tiendas/{subdominio}/productos` | Todos | Catálogo, con filtros y paginación (ver abajo) |
 | `GET /api/cliente/pedidos/{idPedido}/comprobante` | CLIENTE | Descarga su comprobante en PDF |
 | `PATCH /api/panel/tiendas/{idTienda}/pedidos/{idPedido}/envio` | ADMIN_TIENDA | Marca el pedido como enviado (empresa y número) |
 | `PATCH /api/panel/tiendas/{idTienda}/pedidos/{idPedido}/entrega` | ADMIN_TIENDA | Marca el pedido como entregado |
@@ -562,6 +564,7 @@ Cada tienda tiene su vitrina en `/tienda/{subdominio}` (por ejemplo `/tienda/mod
 **Flujo de compra:** vitrina → carrito → ingresar → checkout (dirección y costo de envío) → pedido → pago → vuelve a `/tienda/{subdominio}/pago/resultado` (usa `FRONTEND_URL`) → "Mis pedidos".
 
 - La tienda del cliente sale de su token, no de la petición: un cliente no puede ver ni pagar pedidos de otra tienda.
+- **Catálogo:** el filtrado y la paginación los hace la base, no el navegador: la tienda pide solo los doce productos que va a mostrar. Los filtros viajan en la URL (`?q=polo&categoria=3&min=20&max=80&stock=1&orden=precio_asc&pagina=2`), así que un enlace con filtros abierto en otra pestaña muestra exactamente lo mismo.
 - **Direcciones:** en un país con lista oficial (Perú, Chile) el distrito o la comuna se elige de la lista; en otros países se escriben región, ciudad y código postal. Si la tienda no tiene tarifa para ese destino, el checkout lo avisa y no deja crear el pedido.
 - **Pago en modo de prueba:** se usa **PayPal Sandbox** si están `PAYPAL_CLIENT_ID` y `PAYPAL_CLIENT_SECRET`; si no, **Mercado Pago Checkout Pro** si está `MERCADOPAGO_ACCESS_TOKEN`. PayPal cobra en dólares, así que el monto en soles se convierte con `PAYPAL_TIPO_CAMBIO` (3.75 soles por dólar por defecto). Sin credenciales, iniciar el pago responde 503 "El pago en línea no está disponible por ahora".
 - Al confirmar, el backend consulta el pago en la pasarela y compara estado, pedido y monto: nunca confía en lo que diga el navegador.
