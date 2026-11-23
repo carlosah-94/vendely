@@ -141,7 +141,9 @@ export default function MisPedidos() {
                           Pagar con Mercado Pago
                         </button>
                       )}
-                      {!sinPagar && (
+                      {/* En un pedido cancelado no se ofrece: el comprobante no dice que se
+                          canceló, así que entregarlo confundiría más de lo que ayuda. */}
+                      {!sinPagar && p.estado !== 'CANCELADO' && (
                         <button
                           type="button"
                           onClick={() => descargar(p.idPedido, p.numeroPedido)}

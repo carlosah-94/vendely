@@ -105,12 +105,25 @@ export default function DetalleVenta() {
       const venta = await ejecutar();
       setDatos((d) => ({ ...d, venta }));
       setAviso(mensajeDeExito);
-      setCorreos(await listarNotificaciones(idTienda, idPedido).catch(() => correos));
+      // El correo se manda en segundo plano, asi que normalmente todavia no esta registrado
+      // cuando el backend responde: se vuelve a mirar un momento despues para que aparezca
+      // sin tener que recargar la pagina.
+      await refrescarCorreos();
+      setTimeout(refrescarCorreos, 2000);
     } catch (e) {
       setErrorAccion(mensajeDeError(e));
     } finally {
       setTrabajando(false);
       setConfirmandoCancelar(false);
+    }
+  }
+
+  /** Vuelve a pedir los correos del pedido. Si falla, se deja la lista como estaba. */
+  async function refrescarCorreos() {
+    try {
+      setCorreos(await listarNotificaciones(idTienda, idPedido));
+    } catch {
+      // La venta ya se actualizó; que no se pueda leer la lista de correos no es motivo de error.
     }
   }
 
@@ -158,12 +171,15 @@ export default function DetalleVenta() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={descargar}
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
-          >
-            Descargar comprobante
-          </button>
+          {/* En un pedido cancelado no se ofrece: el comprobante no dice que se canceló. */}
+          {venta.estado !== 'CANCELADO' && (
+            <button
+              onClick={descargar}
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
+            >
+              Descargar comprobante
+            </button>
+          )}
           {confirmando ? (
             <div className="flex items-center gap-2 text-sm">
               <span className="text-slate-700">¿Eliminar esta venta? El stock vuelve al inventario.</span>
