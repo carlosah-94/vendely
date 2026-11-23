@@ -11,10 +11,12 @@ public record UsuarioResponse(
         String primerApellido,
         String segundoApellido,
         String rol,
-        Long idTienda
+        Long idTienda,
+        boolean dobleFactor     // si el login le pide el codigo de 6 digitos (nunca el secreto)
 ) {
     public static UsuarioResponse desde(Login l) {
         return new UsuarioResponse(l.getIdLogin(), l.getUsuario(), l.getCorreo(), l.getNombres(),
-                l.getPrimerApellido(), l.getSegundoApellido(), l.getRol().name(), l.getIdTienda());
+                l.getPrimerApellido(), l.getSegundoApellido(), l.getRol().name(), l.getIdTienda(),
+                Boolean.TRUE.equals(l.getTotpActivo()));
     }
 }

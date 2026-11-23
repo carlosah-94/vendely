@@ -12,6 +12,8 @@ import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import curso.fullstack.shopify.service.DobleFactorService;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,6 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
  * PATCH /api/admin/tiendas/{id}/estado      suspender o reactivar una tienda  {"activa": false}
  * GET   /api/admin/cuentas                  todas las cuentas (dueños, clientes y superadmins)
  * PATCH /api/admin/cuentas/{id}/estado      desactivar o activar una cuenta   {"activa": false}
+ * DELETE /api/admin/cuentas/{id}/doble-factor quitar la doble autenticacion (telefono perdido)
  * GET   /api/admin/planes                   los planes de Vendely
  * PUT   /api/admin/planes/{id}              cambiar precio, limites y beneficios de un plan
  */
@@ -37,9 +40,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminController {
 
     private final AdminService adminService;
+    private final DobleFactorService dobleFactorService;
 
-    public AdminController(AdminService adminService) {
+    public AdminController(AdminService adminService, DobleFactorService dobleFactorService) {
         this.adminService = adminService;
+        this.dobleFactorService = dobleFactorService;
     }
 
     @GetMapping("/resumen")
@@ -83,5 +88,15 @@ public class AdminController {
                                     @PathVariable Long idLogin,
                                     @Valid @RequestBody CambioEstadoRequest request) {
         adminService.cambiarEstadoCuenta(yo, idLogin, request.activa());
+    }
+
+    /**
+     * Quita la doble autenticacion de una cuenta: es la salida cuando alguien pierde el
+     * telefono. /api/admin/** ya exige SUPERADMIN (SecurityConfig). Queda en el log quien lo hizo.
+     */
+    @DeleteMapping("/cuentas/{idLogin}/doble-factor")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void quitarDobleFactor(@AuthenticationPrincipal UsuarioAutenticado yo, @PathVariable Long idLogin) {
+        dobleFactorService.quitarComoAdmin(yo, idLogin);
     }
 }

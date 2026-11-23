@@ -50,6 +50,7 @@ shopity/
 | Tienda pública: vitrina con filtros por categoría, detalle con variantes y carrito | Sí | Sí (`/tienda/:subdominio`) |
 | Catálogo con filtros (texto, categoría, precio, disponibilidad), orden y paginación | Sí | Sí (barra de filtros en la tienda; los filtros quedan en la URL) |
 | Fotos de los productos y logo: subirlas desde el equipo (Cloudinary) | Sí | Sí (arrastrar o elegir, en el producto y en Personalizar) |
+| Doble autenticación (código de 6 dígitos) y cambio de contraseña | Sí | Sí (`/cuenta/seguridad`, en el menú de dueños y superadmin) |
 | Cliente: ingreso, direcciones (también en otros países), costo de envío, checkout y "Mis pedidos" | Sí | Sí (`/tienda/:subdominio/checkout`, `/mis-pedidos`) |
 | Pago en modo de prueba: PayPal Sandbox o Mercado Pago | Sí | Sí (`/tienda/:subdominio/pago/resultado`) |
 | Seguimiento del envío: enviado (con empresa y número), entregado y cancelado | Sí | Sí (en el detalle de la venta y en "Mis pedidos") |
@@ -63,7 +64,7 @@ shopity/
 
 - Probar de punta a punta el pago en producción (necesita las credenciales de prueba de PayPal o Mercado Pago en Render; sin ellas la API responde 503). Con ese pago real quedan por comprobar las dos cosas que cuelgan de él: la comisión que se guarda en el pedido y los correos de confirmación.
 - Enviar correos de verdad: sin `RESEND_API_KEY` se registran como "simulado" y no salen.
-- Pruebas automatizadas del backend (JUnit y MockMvc).
+- Pruebas automatizadas del backend (JUnit y MockMvc). Hay un primer test, `TotpTest`, que corre en el CI; falta el resto de la suite.
 - Ofertas (tablas `ofertas` y `oferta_productos`): existen en la base, pero aún no tienen API ni pantalla.
 - Habilitar más países (México, Colombia, Argentina y Ecuador ya tienen su primer nivel territorial; falta cargar su lista completa, como `04_habilitar_chile.sql`).
 - Paginación en los listados y documentación Swagger/OpenAPI.
@@ -557,6 +558,10 @@ Cada tienda tiene su vitrina en `/tienda/{subdominio}` (por ejemplo `/tienda/mod
 | `POST /api/public/pagos/webhook/paypal` | PayPal | Aviso de la pasarela (firmado; no lo llama el navegador) |
 | `GET /api/public/tiendas/{subdominio}/productos` | Todos | Catálogo, con filtros y paginación (ver abajo) |
 | `POST /api/panel/tiendas/{idTienda}/imagenes` | ADMIN_TIENDA | Sube una foto (JPG, PNG o WEBP, hasta 2 MB) |
+| `POST /api/auth/doble-factor/iniciar` | Con token | Genera el secreto y el enlace del QR |
+| `POST /api/auth/doble-factor/confirmar` | Con token | Con un código correcto, queda activa |
+| `POST /api/auth/doble-factor/desactivar` | Con token | Pide contraseña y código |
+| `DELETE /api/admin/cuentas/{idLogin}/doble-factor` | SUPERADMIN | Quita la doble autenticación (teléfono perdido) |
 | `GET /api/cliente/pedidos/{idPedido}/comprobante` | CLIENTE | Descarga su comprobante en PDF |
 | `PATCH /api/panel/tiendas/{idTienda}/pedidos/{idPedido}/envio` | ADMIN_TIENDA | Marca el pedido como enviado (empresa y número) |
 | `PATCH /api/panel/tiendas/{idTienda}/pedidos/{idPedido}/entrega` | ADMIN_TIENDA | Marca el pedido como entregado |

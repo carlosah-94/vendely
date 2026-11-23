@@ -7,7 +7,11 @@ import curso.fullstack.shopify.dto.RegistroClienteRequest;
 import curso.fullstack.shopify.dto.RegistroDuenoRequest;
 import curso.fullstack.shopify.dto.UsuarioResponse;
 import curso.fullstack.shopify.security.UsuarioAutenticado;
+import curso.fullstack.shopify.dto.CodigoRequest;
+import curso.fullstack.shopify.dto.DesactivarDobleFactorRequest;
+import curso.fullstack.shopify.dto.DobleFactorInicioResponse;
 import curso.fullstack.shopify.service.AuthService;
+import curso.fullstack.shopify.service.DobleFactorService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -24,15 +28,22 @@ import org.springframework.web.bind.annotation.RestController;
  * POST /api/auth/login              iniciar sesión → token               (abierto)
  * GET  /api/auth/yo                 datos de quien inició sesión         (con token)
  * POST /api/auth/cambiar-contrasena cambiar la contraseña → token nuevo  (con token)
+ *
+ * Doble autenticación (issue #4), todas con token:
+ * POST /api/auth/doble-factor/iniciar      genera el secreto y el enlace del QR
+ * POST /api/auth/doble-factor/confirmar    con un código correcto, queda activa
+ * POST /api/auth/doble-factor/desactivar   pide contraseña y código
  */
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
 
     private final AuthService authService;
+    private final DobleFactorService dobleFactorService;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, DobleFactorService dobleFactorService) {
         this.authService = authService;
+        this.dobleFactorService = dobleFactorService;
     }
 
     @PostMapping("/registro/dueno")
@@ -61,5 +72,25 @@ public class AuthController {
     public AuthResponse cambiarContrasena(@AuthenticationPrincipal UsuarioAutenticado yo,
                                           @Valid @RequestBody CambioContrasenaRequest request) {
         return authService.cambiarContrasena(yo, request);
+    }
+
+    // ---- Doble autenticacion. Estas rutas no estan en el permitAll de SecurityConfig:
+    // ---- sin token responden 401, como cualquier ruta que no sea de registro o login.
+
+    @PostMapping("/doble-factor/iniciar")
+    public DobleFactorInicioResponse iniciarDobleFactor(@AuthenticationPrincipal UsuarioAutenticado yo) {
+        return dobleFactorService.iniciarActivacion(yo);
+    }
+
+    @PostMapping("/doble-factor/confirmar")
+    public UsuarioResponse confirmarDobleFactor(@AuthenticationPrincipal UsuarioAutenticado yo,
+                                                @Valid @RequestBody CodigoRequest request) {
+        return dobleFactorService.confirmarActivacion(yo, request.codigo());
+    }
+
+    @PostMapping("/doble-factor/desactivar")
+    public UsuarioResponse desactivarDobleFactor(@AuthenticationPrincipal UsuarioAutenticado yo,
+                                                 @Valid @RequestBody DesactivarDobleFactorRequest request) {
+        return dobleFactorService.desactivar(yo, request.contrasena(), request.codigo());
     }
 }

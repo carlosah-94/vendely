@@ -143,6 +143,7 @@ public interface AdminRepository extends Repository<Tienda, Long> {
         Long getTiendasPropias();
         Short getEstado();
         Long getFechaCreacion();     // segundos desde 1970 (el DTO la convierte en fecha)
+        Boolean getDobleFactor();
     }
 
     @Query(value = """
@@ -151,7 +152,8 @@ public interface AdminRepository extends Repository<Tienda, Long> {
                    t.nombre AS "tienda",
                    (SELECT count(*) FROM tiendas tp JOIN propietarios pro ON pro.id_propietario = tp.id_propietario
                      WHERE pro.id_login = l.id_login) AS "tiendasPropias",
-                   l.estado AS "estado", CAST(extract(epoch FROM l.fecha_creacion) AS bigint) AS "fechaCreacion"
+                   l.estado AS "estado", CAST(extract(epoch FROM l.fecha_creacion) AS bigint) AS "fechaCreacion",
+                   l.totp_activo AS "dobleFactor"
               FROM login l
               LEFT JOIN tiendas t ON t.id_tienda = l.id_tienda
              ORDER BY l.fecha_creacion DESC

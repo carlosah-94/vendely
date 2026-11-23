@@ -13,11 +13,13 @@ public record AdminCuentaResponse(
         String tienda,              // solo clientes: la tienda donde se registró
         long tiendasPropias,        // solo dueños: cuántas tiendas tiene
         String estado,              // "ACTIVO" o "INACTIVO"
-        String fechaCreacion        // ISO 8601 en UTC, por ejemplo 2026-11-11T08:30:00Z
+        String fechaCreacion,       // ISO 8601 en UTC, por ejemplo 2026-11-11T08:30:00Z
+        boolean dobleFactor         // si tiene la doble autenticacion activa
 ) {
     public static AdminCuentaResponse desde(AdminRepository.FilaCuenta f) {
         return new AdminCuentaResponse(f.getIdLogin(), RolUsuario.desdeId(f.getIdRol()).name(), f.getNombre(),
                 f.getCorreo(), f.getTienda(), f.getTiendasPropias() == null ? 0 : f.getTiendasPropias(),
-                f.getEstado() != null && f.getEstado() == 1 ? "ACTIVO" : "INACTIVO", Instant.ofEpochSecond(f.getFechaCreacion()).toString());
+                f.getEstado() != null && f.getEstado() == 1 ? "ACTIVO" : "INACTIVO", Instant.ofEpochSecond(f.getFechaCreacion()).toString(),
+                Boolean.TRUE.equals(f.getDobleFactor()));
     }
 }

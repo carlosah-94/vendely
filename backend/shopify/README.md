@@ -117,6 +117,32 @@ Paquete base: `curso.fullstack.shopify`
 | POST | `/api/cliente/pedidos/{idPedido}/pago/confirmar` | Confirma el resultado del pago |
 | GET | `/api/cliente/pedidos/{idPedido}/comprobante` | Su comprobante de compra en PDF |
 
+## Doble autenticación
+
+Con la doble autenticación activa, la contraseña sola no basta: además hay que escribir el código de 6 dígitos que muestra una app como Google Authenticator, y que cambia cada 30 segundos. Quien robe una contraseña no puede entrar sin el teléfono.
+
+| Método | Ruta | Qué hace |
+|---|---|---|
+| POST | `/api/auth/doble-factor/iniciar` | Genera el secreto. Devuelve `{ secreto, enlace }`; el enlace va en el QR |
+| POST | `/api/auth/doble-factor/confirmar` | `{ codigo }`: con un código correcto queda activa |
+| POST | `/api/auth/doble-factor/desactivar` | `{ contrasena, codigo }` |
+| DELETE | `/api/admin/cuentas/{idLogin}/doble-factor` | El superadmin la quita (teléfono perdido) |
+
+**En el login** (`POST /api/auth/login`) se manda además `codigo`. Si la cuenta lo necesita y no viene, responde **401 con `campos.codigo = "requerido"`**; si viene mal, 401 con `"incorrecto"`. El formulario lee ese campo, no el texto del mensaje. El código se pide *después* de comprobar la contraseña: pedirlo antes le diría a cualquiera qué correos tienen la doble autenticación activa.
+
+Cómo está hecho, y por qué:
+
+- **El código lo calcula `security/Totp`, sin librería** (RFC 6238: HMAC-SHA1 del intervalo de 30 s, reducido a 6 dígitos). Son unas 40 líneas, y `TotpTest` las compara con los valores de ejemplo del propio RFC: si coinciden, coincide con cualquier app que siga el estándar.
+- **La activación tiene dos pasos.** Recién queda activa cuando la persona escribe un código correcto. Si se activara al mostrar el QR, alguien que lo escanea mal quedaría fuera de su propia cuenta.
+- **Un código no sirve dos veces** (`login.totp_ultimo_paso`). Se acepta el intervalo anterior y el siguiente, porque el reloj del teléfono nunca coincide exacto con el del servidor.
+- **Freno de intentos:** tras 5 códigos incorrectos seguidos, la cuenta espera 10 minutos (429). Un código tiene un millón de combinaciones: sin freno se podrían probar todas. El contador vive en memoria; si el backend se reinicia vuelve a cero, lo que es aceptable porque la contraseña sigue haciendo falta.
+- **El secreto nunca se escribe en el log** y solo sale del servidor una vez, al iniciar la activación. El QR se dibuja en el navegador (con la librería `qrcode`), no en un servicio externo: mandarle el secreto a un tercero para convertirlo en imagen sería entregarle la llave.
+- **Quitarla pide contraseña y código**, para que quien encuentre una sesión abierta no pueda desactivarla. El superadmin la puede quitar sin código (la persona justamente perdió el teléfono) y queda en el log quién lo hizo.
+
+**Cambiar la contraseña cierra las demás sesiones**: el backend entrega un token nuevo y `JwtAuthFilter` rechaza los emitidos antes del cambio (`login.contrasena_cambiada_en`).
+
+**Pendiente, y conviene saberlo:** el secreto se guarda en la base tal cual, sin cifrar. Para este proyecto es aceptable, pero quien lea la tabla `login` podría generar los códigos.
+
 ## Fotos (Cloudinary)
 
 Las fotos de los productos y el logo de la tienda se suben a Cloudinary, no al servidor. En Render el disco es temporal: se borra en cada despliegue y cada vez que el contenedor se duerme, así que una foto guardada ahí desaparecería sola a los días.
@@ -248,6 +274,7 @@ La base la construye **Flyway** al arrancar, antes de que Hibernate valide las e
 | `migration/V5__planes_plantillas.sql` | Planes, suscripciones y plantillas |
 | `migration/V6__pedidos_notificaciones_envio.sql` | Seguimiento del envío, comisión y tabla `notificaciones` |
 | `migration/V7__imagenes_public_id.sql` | `public_id` de la foto en Cloudinary, para poder borrarla |
+| `migration/V8__doble_autenticacion.sql` | Secreto y estado de la doble autenticación en `login` |
 
 Flyway aplica cada una una sola vez y guarda su huella en `flyway_schema_history`. De ahí salen dos reglas:
 
@@ -281,7 +308,7 @@ Hibernate sigue en `ddl-auto: validate`: solo comprueba que las entidades coinci
 
 - [ ] **Pago:** el último intento respondió 503 (`El pago en línea no está disponible por ahora`). Revisar `MERCADOPAGO_ACCESS_TOKEN` y probar el flujo completo, incluida la confirmación y el aviso de la pasarela con una dirección pública. De ese pago real cuelgan dos cosas que todavía no se pudieron comprobar: la `comision_plataforma` que se guarda en el pedido y los dos correos de pago aprobado.
 - [ ] **Correos de verdad:** con `RESEND_API_KEY`, comprobar que llegan y que el PDF viaja como adjunto. Sin la clave quedan registrados como `SIMULADO`.
-- [ ] **Pruebas automatizadas:** no hay tests Java (JUnit y MockMvc para `AuthService`, `PedidoService`, `PagoService`).
+- [ ] **Pruebas automatizadas:** hay un primer test, `TotpTest` (el generador de códigos contra los ejemplos del RFC 6238), que corre en el CI. Falta el resto: JUnit y MockMvc para `AuthService`, `PedidoService`, `PagoService`.
 - [ ] **Rol `SUPERADMIN`:** la ruta `/api/admin/**` existe pero no tiene endpoints.
 - [ ] **Categorías de productos:** la tabla `categorias` existe, pero la API aún no las expone.
 - [ ] **Tablas sin API todavía:** ofertas, carritos y tipos de cambio.

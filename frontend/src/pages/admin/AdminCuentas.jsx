@@ -3,7 +3,7 @@ import ConfirmarAccion from '../../components/ConfirmarAccion';
 import { IconoBuscar, IconoClientes } from '../../components/Iconos';
 import Mensaje from '../../components/Mensaje';
 import { useToast } from '../../context/ToastContext';
-import { cambiarEstadoCuenta, listarCuentasAdmin } from '../../services/admin';
+import { cambiarEstadoCuenta, listarCuentasAdmin, quitarDobleFactor } from '../../services/admin';
 import { mensajeDeError } from '../../services/api';
 import { formatoFecha } from '../../utils/formato';
 
@@ -34,6 +34,7 @@ export default function AdminCuentas() {
   const [pestana, setPestana] = useState('TODAS');
   const [busqueda, setBusqueda] = useState('');
   const [porCambiar, setPorCambiar] = useState(null);
+  const [porQuitar2fa, setPorQuitar2fa] = useState(null);
   const [enviando, setEnviando] = useState(false);
   const [errorAccion, setErrorAccion] = useState('');
 
@@ -61,6 +62,22 @@ export default function AdminCuentas() {
     } finally {
       setEnviando(false);
       setPorCambiar(null);
+    }
+  }
+
+  async function confirmarQuitar2fa() {
+    const c = porQuitar2fa;
+    setEnviando(true);
+    setErrorAccion('');
+    try {
+      await quitarDobleFactor(c.idLogin);
+      avisar(`Doble autenticación quitada: ${c.nombre}`);
+      setVersion((v) => v + 1);
+    } catch (e) {
+      setErrorAccion(mensajeDeError(e));
+    } finally {
+      setEnviando(false);
+      setPorQuitar2fa(null);
     }
   }
 
@@ -138,7 +155,14 @@ export default function AdminCuentas() {
               {!datos.cargando && visibles.map((c) => (
                 <tr key={c.idLogin} className="hover:bg-[#f7f7f7]">
                   <td className="px-4 py-3">
-                    <p className="font-medium text-[#101010]">{c.nombre}</p>
+                    <p className="font-medium text-[#101010]">
+                      {c.nombre}
+                      {c.dobleFactor && (
+                        <span className="ml-2 rounded-full bg-[#eaf4ff] px-1.5 py-0.5 align-middle text-[11px] font-semibold text-[#00527c]">
+                          2FA
+                        </span>
+                      )}
+                    </p>
                     <p className="text-xs text-[#616161]">{c.correo}</p>
                   </td>
                   <td className="px-4 py-3">
@@ -162,6 +186,14 @@ export default function AdminCuentas() {
                     </span>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">
+                    {c.dobleFactor && (
+                      <button
+                        onClick={() => setPorQuitar2fa(c)}
+                        className="mr-1 rounded-lg px-2 py-1 font-medium hover:bg-[#f1f1f1]"
+                      >
+                        Quitar 2FA
+                      </button>
+                    )}
                     {c.rol !== 'SUPERADMIN' && (
                       <button
                         onClick={() => setPorCambiar(c)}
@@ -184,6 +216,18 @@ export default function AdminCuentas() {
           </p>
         )}
       </div>
+
+      {porQuitar2fa && (
+        <ConfirmarAccion
+          titulo={`¿Quitar la doble autenticación de ${porQuitar2fa.nombre}?`}
+          texto="Hazlo solo si la persona perdió el teléfono y te lo pidió. Podrá entrar solo con su contraseña hasta que la vuelva a activar en Seguridad. Queda registrado que fuiste tú."
+          boton="Quitar doble autenticación"
+          peligro
+          enviando={enviando}
+          onConfirmar={confirmarQuitar2fa}
+          onCancelar={() => setPorQuitar2fa(null)}
+        />
+      )}
 
       {porCambiar && (
         <ConfirmarAccion

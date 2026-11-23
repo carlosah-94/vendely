@@ -17,5 +17,9 @@ public record LoginRequest(
         @NotBlank(message = "La contraseña es obligatoria")
         String contrasena,
 
-        String subdominio
+        String subdominio,
+
+        // Solo si la cuenta tiene la doble autenticacion activa: el codigo de 6 digitos de la app.
+        // Sin el, esas cuentas reciben 401 con campos.codigo = "requerido".
+        String codigo
 ) {}
