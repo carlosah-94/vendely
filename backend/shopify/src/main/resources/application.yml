@@ -73,12 +73,24 @@ app:
     webhook-id: ${PAYPAL_WEBHOOK_ID:}
     # PayPal no cobra en soles: los pedidos en PEN se cobran en USD con este tipo de cambio fijo
     tipo-cambio-pen-usd: ${PAYPAL_TIPO_CAMBIO:3.75}
+  servlet:
+    multipart:
+      # Las fotos de los productos. ImagenService rechaza mas de 2 MB con un mensaje claro;
+      # este limite es la red de seguridad del servidor, un poco mas alto para que el mensaje
+      # lo de la aplicacion y no el servidor.
+      max-file-size: 3MB
+      max-request-size: 4MB
   resend:
     # Clave de resend.com para enviar los correos. Sin ella, NotificacionService los registra
     # como "simulado" y no envía nada: el proyecto corre completo sin crear ninguna cuenta.
     api-key: ${RESEND_API_KEY:}
     # Remitente. El de por defecto es el de pruebas de Resend, que no necesita dominio propio.
     remitente: ${RESEND_REMITENTE:Vendely <onboarding@resend.dev>}
+  cloudinary:
+    # Donde se guardan las fotos de los productos y los logos. Formato:
+    # cloudinary://<api_key>:<api_secret>@<nombre_de_la_nube>  (panel de cloudinary.com)
+    # Sin esto, subir una foto responde 503 y solo se pueden pegar enlaces.
+    url: ${CLOUDINARY_URL:}
   pagos:
     # Conciliación: cada cuánto se revisan los pagos que quedaron pendientes y cuánto tiempo
     # tienen que llevar así para tocarlos (un pago recién iniciado está pendiente porque el

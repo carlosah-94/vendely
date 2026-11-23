@@ -26,6 +26,14 @@ public class ImagenProducto {
     @Column(name = "url", nullable = false, length = 500)
     private String url;
 
+    /**
+     * Identificador de la foto en Cloudinary: es lo unico con lo que se puede pedir que se
+     * borre. NULL cuando la foto es solo un enlace pegado de otra pagina (no es nuestra).
+     */
+    @Setter
+    @Column(name = "public_id", length = 255)
+    private String publicId;
+
     /** Texto para lectores de pantalla. Se usa el nombre del producto. */
     @Setter
     @Column(name = "texto_alternativo", length = 200)

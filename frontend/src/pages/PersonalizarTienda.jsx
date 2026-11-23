@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import CampoPanel from '../components/CampoPanel';
 import { IconoCarrito, IconoEnlaceExterno } from '../components/Iconos';
@@ -7,6 +7,7 @@ import SelectorTienda from '../components/SelectorTienda';
 import { useToast } from '../context/ToastContext';
 import { useTiendaActual } from '../hooks/useTiendaActual';
 import { api, mensajeDeError } from '../services/api';
+import { revisarArchivo, subirImagen } from '../services/imagenes';
 import { colorTextoSobre } from '../utils/formato';
 import { PLANTILLAS } from '../utils/plantillas';
 import { BOTON, TARJETA, inputPanel } from '../utils/panel';
@@ -55,11 +56,36 @@ function Editor({ tienda, tiendas, idTienda, onCambiarTienda }) {
   const [error, setError] = useState('');
   const [guardando, setGuardando] = useState(false);
   const [logoRoto, setLogoRoto] = useState(false);
+  const [subiendoLogo, setSubiendoLogo] = useState(false);
+  const campoLogo = useRef(null);
 
   function cambiar(campo, valor) {
     setV((actual) => ({ ...actual, [campo]: valor }));
     setErrores((e) => ({ ...e, [campo]: undefined }));
     if (campo === 'logoUrl') setLogoRoto(false);
+  }
+
+  /**
+   * Sube el logo y lo deja en el campo. No se guarda la tienda todavía: el dueño lo ve en la
+   * vista previa y decide. Si nunca guarda, la foto queda en Cloudinary sin usarse; es el
+   * mismo caso que una foto de producto que no se guarda, y pesa poco.
+   */
+  async function subirLogo(archivo) {
+    const problema = revisarArchivo(archivo);
+    if (problema) {
+      setErrores((er) => ({ ...er, logoUrl: problema }));
+      return;
+    }
+    setSubiendoLogo(true);
+    setErrores((er) => ({ ...er, logoUrl: undefined }));
+    try {
+      const { url } = await subirImagen(idTienda, archivo);
+      cambiar('logoUrl', url);
+    } catch (err) {
+      setErrores((er) => ({ ...er, logoUrl: mensajeDeError(err) }));
+    } finally {
+      setSubiendoLogo(false);
+    }
   }
 
   async function guardar(e) {
@@ -147,13 +173,39 @@ function Editor({ tienda, tiendas, idTienda, onCambiarTienda }) {
             </p>
           )}
           <fieldset disabled={!personaliza} className={`space-y-4 ${personaliza ? '' : 'opacity-50'}`}>
-          <CampoPanel etiqueta="Logo (enlace de la imagen)" error={errores.logoUrl} ayuda={logoRoto ? 'No se pudo cargar esa imagen: revisa el enlace' : 'Opcional. Una imagen cuadrada se ve mejor'}>
-            <input
-              value={v.logoUrl}
-              onChange={(e) => cambiar('logoUrl', e.target.value)}
-              placeholder="https://..."
-              className={inputPanel(errores.logoUrl)}
-            />
+          <CampoPanel
+            etiqueta="Logo"
+            error={errores.logoUrl}
+            ayuda={logoRoto
+              ? 'No se pudo cargar esa imagen: revisa el enlace'
+              : 'Opcional. Una imagen cuadrada se ve mejor. JPG, PNG o WEBP, hasta 2 MB'}
+          >
+            <div className="flex gap-2">
+              <input
+                value={v.logoUrl}
+                onChange={(e) => cambiar('logoUrl', e.target.value)}
+                placeholder="https://... o sube una imagen"
+                className={inputPanel(errores.logoUrl)}
+              />
+              <button
+                type="button"
+                onClick={() => campoLogo.current?.click()}
+                disabled={subiendoLogo}
+                className="shrink-0 rounded-lg border border-[#ddd] bg-white px-3 text-[13px] font-medium hover:bg-[#f7f7f7] disabled:opacity-50"
+              >
+                {subiendoLogo ? 'Subiendo...' : 'Subir'}
+              </button>
+              <input
+                ref={campoLogo}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                hidden
+                onChange={(e) => {
+                  if (e.target.files?.[0]) subirLogo(e.target.files[0]);
+                  e.target.value = '';
+                }}
+              />
+            </div>
           </CampoPanel>
           <div>
             <span className="text-[13px] text-[#303030]">Color principal</span>

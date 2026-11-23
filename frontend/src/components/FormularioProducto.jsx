@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { mensajeDeError } from '../services/api';
 import { listarCategorias } from '../services/categorias';
+import { borrarImagen, revisarArchivo, subirImagen } from '../services/imagenes';
 import { actualizarProducto, crearProducto } from '../services/productos';
 import { ejemploMonto, esMontoValido, montoVacio, simboloMoneda } from '../utils/formato';
 import { claveVariante, combinaciones, MAX_VARIANTES } from '../utils/variantes';
@@ -116,6 +117,15 @@ export default function FormularioProducto({ idTienda, impuesto = 'IGV', product
   const conVariantes = opciones.length > 0;
   const [todasCategorias, setTodasCategorias] = useState(null);   // null = cargando
   const [nuevaImagen, setNuevaImagen] = useState('');
+  const [subiendo, setSubiendo] = useState(false);
+  const [arrastrando, setArrastrando] = useState(false);
+  const campoArchivo = useRef(null);
+  /**
+   * Fotos subidas en este formulario que todavía no se guardaron (url → public_id).
+   * Si el dueño quita una antes de guardar, hay que pedir que se borre: si no, queda
+   * ocupando espacio en Cloudinary sin que ningún producto la use.
+   */
+  const subidasSinGuardar = useRef(new Map());
   const [errores, setErrores] = useState({});
   const [errorGeneral, setErrorGeneral] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -167,12 +177,45 @@ export default function FormularioProducto({ idTienda, impuesto = 'IGV', product
     setErrores((e) => ({ ...e, imagenes: undefined }));
   }
 
+  /** Sube los archivos elegidos (o arrastrados) y los agrega a la lista, en orden. */
+  async function subirArchivos(archivos) {
+    const elegidos = Array.from(archivos ?? []).slice(0, MAX_IMAGENES - imagenes.length);
+    if (elegidos.length === 0) {
+      return;
+    }
+    setSubiendo(true);
+    setErrores((e) => ({ ...e, imagenes: undefined }));
+    for (const archivo of elegidos) {
+      const problema = revisarArchivo(archivo);
+      if (problema) {
+        setErrores((e) => ({ ...e, imagenes: problema }));
+        continue;
+      }
+      try {
+        const { url, publicId } = await subirImagen(idTienda, archivo);
+        subidasSinGuardar.current.set(url, publicId);
+        setImagenes((lista) => (lista.includes(url) ? lista : [...lista, url]));
+      } catch (e) {
+        setErrores((er) => ({ ...er, imagenes: mensajeDeError(e) }));
+      }
+    }
+    setSubiendo(false);
+  }
+
   // La primera foto es la principal: este botón pasa una foto al primer lugar.
   function hacerPrincipal(indice) {
     setImagenes((lista) => [lista[indice], ...lista.filter((_, i) => i !== indice)]);
   }
 
   function quitarImagen(indice) {
+    const url = imagenes[indice];
+    const publicId = subidasSinGuardar.current.get(url);
+    if (publicId) {
+      // Se subió hace un momento y no se llegó a guardar: se pide borrarla. Si falla, no se
+      // le dice nada al dueño (él solo quitó una foto; la limpieza es cosa nuestra).
+      subidasSinGuardar.current.delete(url);
+      borrarImagen(idTienda, publicId).catch(() => {});
+    }
     setImagenes((lista) => lista.filter((_, i) => i !== indice));
   }
 
@@ -328,7 +371,52 @@ export default function FormularioProducto({ idTienda, impuesto = 'IGV', product
                 </ul>
               )}
               {imagenes.length < MAX_IMAGENES ? (
-                <div className="rounded-lg border border-dashed border-[#b5b5b5] p-3">
+                <div className="space-y-2">
+                  {/* Subir desde la computadora: arrastrando o eligiendo el archivo. */}
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setArrastrando(true);
+                    }}
+                    onDragLeave={() => setArrastrando(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setArrastrando(false);
+                      subirArchivos(e.dataTransfer.files);
+                    }}
+                    className={`rounded-lg border-2 border-dashed p-4 text-center text-[13px] transition ${
+                      arrastrando ? 'border-[#1650d0] bg-[#eaf0ff]' : 'border-[#ddd] bg-[#fafafa]'
+                    }`}
+                  >
+                    {subiendo ? (
+                      <p className="text-[#616161]">Subiendo...</p>
+                    ) : (
+                      <>
+                        <p className="text-[#303030]">Arrastra tus fotos aquí</p>
+                        <button
+                          type="button"
+                          onClick={() => campoArchivo.current?.click()}
+                          className="mt-1.5 rounded-lg border border-[#ddd] bg-white px-3 py-1.5 font-medium hover:bg-[#f7f7f7]"
+                        >
+                          Elegir del equipo
+                        </button>
+                        <p className="mt-1.5 text-[12px] text-[#616161]">JPG, PNG o WEBP · hasta 2 MB</p>
+                      </>
+                    )}
+                    <input
+                      ref={campoArchivo}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      multiple
+                      hidden
+                      onChange={(e) => {
+                        subirArchivos(e.target.files);
+                        e.target.value = '';   // permite volver a elegir el mismo archivo
+                      }}
+                    />
+                  </div>
+
+                  <div className="rounded-lg border border-dashed border-[#b5b5b5] p-3">
                   <div className="flex gap-2">
                     <input
                       value={nuevaImagen}
@@ -355,8 +443,9 @@ export default function FormularioProducto({ idTienda, impuesto = 'IGV', product
                     </button>
                   </div>
                   <p className={`mt-1.5 text-[12px] ${errores.imagenes ? 'text-[#8e1f0b]' : 'text-[#616161]'}`}>
-                    {errores.imagenes ?? `Pega el enlace de una foto (hasta ${MAX_IMAGENES}). La primera es la principal.`}
+                    {errores.imagenes ?? `O pega el enlace de una foto (hasta ${MAX_IMAGENES}). La primera es la principal.`}
                   </p>
+                  </div>
                 </div>
               ) : (
                 <p className="text-[12px] text-[#616161]">Llegaste al máximo de {MAX_IMAGENES} imágenes.</p>

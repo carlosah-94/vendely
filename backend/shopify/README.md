@@ -31,6 +31,7 @@ La API queda en `http://localhost:8080/api`.
 | `MERCADOPAGO_WEBHOOK_SECRET` | Clave con la que Mercado Pago firma sus avisos. Sin ella, su webhook responde 503 | vacío |
 | `PAYPAL_WEBHOOK_ID` | Id del webhook de PayPal, para preguntarle si un aviso es auténtico | vacío |
 | `RESEND_API_KEY` | Clave de resend.com. Sin ella los correos se registran como "simulado" | vacío |
+| `CLOUDINARY_URL` | `cloudinary://clave:secreto@nube`. Sin ella, subir fotos responde 503 | vacío |
 | `RESEND_REMITENTE` | Remitente de los correos | `Vendely <onboarding@resend.dev>` |
 | `FRONTEND_URL` | Adonde vuelve el cliente tras pagar | `http://localhost:5173` |
 | `FLYWAY_LOCATIONS` | Carpetas de migraciones. En el servidor: `classpath:db/migration` (sin los usuarios de prueba) | las dos carpetas |
@@ -116,6 +117,23 @@ Paquete base: `curso.fullstack.shopify`
 | POST | `/api/cliente/pedidos/{idPedido}/pago/confirmar` | Confirma el resultado del pago |
 | GET | `/api/cliente/pedidos/{idPedido}/comprobante` | Su comprobante de compra en PDF |
 
+## Fotos (Cloudinary)
+
+Las fotos de los productos y el logo de la tienda se suben a Cloudinary, no al servidor. En Render el disco es temporal: se borra en cada despliegue y cada vez que el contenedor se duerme, así que una foto guardada ahí desaparecería sola a los días.
+
+| Método | Ruta | Qué hace |
+|---|---|---|
+| POST | `/api/panel/tiendas/{idTienda}/imagenes` | Sube una foto y devuelve `{ url, publicId }` |
+| DELETE | `/api/panel/tiendas/{idTienda}/imagenes?publicId=…` | Borra una foto que se subió y no se guardó |
+
+La foto se sube apenas se elige, antes de guardar el producto: así el dueño la ve, la ordena o la quita. Lo que se guarda en el producto es el enlace.
+
+**Qué se rechaza** (`ImagenService`): lo que no sea JPG, PNG o WEBP y lo que pase de 2 MB. El tipo no se cree solo porque lo diga el navegador: se miran los primeros bytes del archivo, así que un `.exe` renombrado a `.jpg` no pasa. El límite de Spring (`spring.servlet.multipart`) está un poco más arriba, en 3 MB, para que el mensaje lo dé la aplicación y no el servidor.
+
+**El borrado.** Una foto que se quita del producto hay que pedir que se borre en Cloudinary; si no, queda ocupando espacio de la cuenta para siempre. Para eso está la columna `imagenes_producto.public_id`: es el identificador de la foto allá. Se calcula del enlace al guardar (`CloudinaryClient.publicIdDe`) y queda **NULL en los enlaces pegados de otra página**, que no son nuestros y no se tocan. `ProductoService` compara las fotos que había con las que quedan y pide borrar la diferencia; al eliminar un producto, pide borrar todas las suyas. Si Cloudinary falla, se registra y nada más: la venta o el producto ya se guardaron y eso no se deshace por una limpieza.
+
+**Sin `CLOUDINARY_URL`** el cliente queda apagado: subir responde 503 con un mensaje que lo explica, y pegar enlaces sigue funcionando. El proyecto corre completo sin crear la cuenta.
+
 ## Catálogo: filtros y paginación
 
 `GET /api/public/tiendas/{subdominio}/productos` acepta estos parámetros, todos opcionales:
@@ -153,6 +171,8 @@ Tres decisiones que vale la pena conocer antes de tocar esto:
 | PATCH | `/api/panel/tiendas/{idTienda}/pedidos/{idPedido}/cancelacion` | Cancela y devuelve el stock |
 | GET | `/api/panel/tiendas/{idTienda}/pedidos/{idPedido}/comprobante` | El comprobante de la venta en PDF |
 | GET | `/api/panel/tiendas/{idTienda}/pedidos/{idPedido}/notificaciones` | Los correos de ese pedido |
+| POST | `/api/panel/tiendas/{idTienda}/imagenes` | Sube una foto y devuelve su enlace |
+| DELETE | `/api/panel/tiendas/{idTienda}/imagenes?publicId=…` | Borra una foto que no se llegó a guardar |
 
 Los estados son los de la columna `pedidos.estado`: 0 sin enviar, 1 enviado, 2 entregado, 3 cancelado. Las reglas las aplica `PedidoService` y son tres:
 
@@ -227,6 +247,7 @@ La base la construye **Flyway** al arrancar, antes de que Hibernate valide las e
 | `migration/V4__habilitar_chile.sql` | Provincias y comunas de Chile; lo habilita |
 | `migration/V5__planes_plantillas.sql` | Planes, suscripciones y plantillas |
 | `migration/V6__pedidos_notificaciones_envio.sql` | Seguimiento del envío, comisión y tabla `notificaciones` |
+| `migration/V7__imagenes_public_id.sql` | `public_id` de la foto en Cloudinary, para poder borrarla |
 
 Flyway aplica cada una una sola vez y guarda su huella en `flyway_schema_history`. De ahí salen dos reglas:
 
@@ -263,7 +284,7 @@ Hibernate sigue en `ddl-auto: validate`: solo comprueba que las entidades coinci
 - [ ] **Pruebas automatizadas:** no hay tests Java (JUnit y MockMvc para `AuthService`, `PedidoService`, `PagoService`).
 - [ ] **Rol `SUPERADMIN`:** la ruta `/api/admin/**` existe pero no tiene endpoints.
 - [ ] **Categorías de productos:** la tabla `categorias` existe, pero la API aún no las expone.
-- [ ] **Tablas sin API todavía:** imágenes de producto, variantes y opciones, ofertas, carritos, tarifas de envío y tipos de cambio.
+- [ ] **Tablas sin API todavía:** ofertas, carritos y tipos de cambio.
 - [ ] **Paginación** en los listados del panel (productos, clientes, pedidos): el catálogo público ya la tiene, el panel todavía trae la lista completa y filtra en la pantalla.
 - [ ] **Documentación de la API** con Swagger/OpenAPI.
 - [ ] **Despliegue:** configuración de producción (secretos, CORS, HTTPS) y revisión del Dockerfile.
