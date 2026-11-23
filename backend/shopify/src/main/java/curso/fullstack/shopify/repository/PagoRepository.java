@@ -1,6 +1,7 @@
 package curso.fullstack.shopify.repository;
 
 import curso.fullstack.shopify.entity.Pago;
+import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -16,6 +17,12 @@ public interface PagoRepository extends JpaRepository<Pago, Long> {
 
     /** El último intento con ese estado (por ejemplo, el pendiente) de un pedido. */
     Optional<Pago> findFirstByIdPedidoAndEstadoOrderByIdPagoDesc(Long idPedido, Short estado);
+
+    /**
+     * Intentos de pago que llevan un rato pendientes: los que revisa la conciliación.
+     * Se piden de a 50 para que una cola larga no bloquee la tarea programada.
+     */
+    List<Pago> findTop50ByEstadoAndFechaCreacionBeforeOrderByIdPagoAsc(Short estado, OffsetDateTime limite);
 
     /** Estado de pago de un pedido para mostrarlo en las listas. */
     interface EstadoPedido {

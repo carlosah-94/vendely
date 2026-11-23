@@ -173,7 +173,21 @@ public class PagoService {
      */
     @Transactional
     public ResultadoPagoResponse confirmar(UsuarioAutenticado yo, Long idPedido, String paymentId) {
-        Pedido p = pedidoDelCliente(yo, idPedido);
+        return aplicarPago(pedidoDelCliente(yo, idPedido), paymentId, null);
+    }
+
+    /**
+     * El núcleo que comparten las DOS entradas: el regreso del navegador (confirmar) y el aviso
+     * de la pasarela (aplicarAvisoMercadoPago). Tener un solo camino es lo que mantiene la
+     * idempotencia: un pedido que ya tiene pago aprobado no se vuelve a tocar, venga el aviso
+     * dos veces o vuelva el cliente a recargar la pantalla.
+     *
+     * pagoEnMp llega ya consultado cuando el aviso tuvo que leerlo antes para saber de qué pedido
+     * es; si viene null, se consulta aquí. En ningún caso se cree lo que diga el navegador o el
+     * aviso: lo que vale es el pago consultado en Mercado Pago.
+     */
+    private ResultadoPagoResponse aplicarPago(Pedido p, String paymentId, Map<String, Object> pagoEnMp) {
+        Long idPedido = p.getIdPedido();
 
         // Ya aprobado antes (por ejemplo, el cliente recargó la página): no se cobra ni se cambia nada.
         if (pagoRepository.existsByIdPedidoAndEstado(idPedido, Pago.APROBADO)) {
@@ -200,7 +214,7 @@ public class PagoService {
             throw new ApiException(HttpStatus.NOT_FOUND, "No se encontró ese pago");
         }
 
-        Map<String, Object> mp = consultarPago(paymentId);
+        Map<String, Object> mp = pagoEnMp != null ? pagoEnMp : consultarPago(paymentId);
 
         // El pago debe ser de ESTE pedido y por EL monto del pedido (nunca confiar en el navegador).
         String referencia = texto(mp.get("external_reference"));
@@ -241,6 +255,136 @@ public class PagoService {
         // pending, in_process, authorized…: todavía no hay resultado; se deja pendiente.
         log.info("Pago pendiente: pedido #{}, estado en Mercado Pago {}", p.getNumeroPedido(), estadoMp);
         return resultado(p, Pago.PENDIENTE);
+    }
+
+    // ------------------------------------------------------------------ avisos de la pasarela (webhook)
+
+    /**
+     * Aviso de Mercado Pago. Aquí no hay cliente con sesión, así que el pedido se ubica por el
+     * external_reference; y ese dato no se lee del aviso (que trae solo un id), sino del pago
+     * consultado en Mercado Pago.
+     *
+     * Si el aviso no corresponde a un pedido de Vendely se registra y se ignora: la pasarela
+     * manda avisos de prueba y de otros recursos, y ninguno debe hacer fallar la petición.
+     */
+    @Transactional
+    public void aplicarAvisoMercadoPago(String paymentId) {
+        Map<String, Object> mp = consultarPago(paymentId);
+        Long idPedido = aLong(texto(mp.get("external_reference")));
+        if (idPedido == null) {
+            log.info("Aviso de Mercado Pago del pago {} sin external_reference: no es de un pedido", paymentId);
+            return;
+        }
+        Pedido p = pedidoRepository.findById(idPedido).orElse(null);
+        if (p == null) {
+            log.warn("Aviso de Mercado Pago del pago {}: el pedido {} no existe", paymentId, idPedido);
+            return;
+        }
+        aplicarPago(p, paymentId, mp);
+    }
+
+    /**
+     * Aviso de PayPal. Al iniciar el pago, el id de la orden quedó guardado como referencia del
+     * intento, así que de ahí sale el pedido. Después se verifica y se cobra la orden EN PayPal,
+     * por el mismo camino que usa el regreso del navegador (confirmarPayPal).
+     *
+     * @param idOrden   id de la orden de PayPal; puede ser null en los avisos de cobro
+     * @param idPedido  custom_id del aviso: el respaldo cuando no viene el id de la orden
+     */
+    @Transactional
+    public void aplicarAvisoPayPal(String idOrden, Long idPedido) {
+        Pago pago = idOrden == null ? null : pagoRepository.findByReferenciaTransaccion(idOrden).orElse(null);
+        if (pago == null && idPedido != null) {
+            pago = pagoRepository.findFirstByIdPedidoAndEstadoOrderByIdPagoDesc(idPedido, Pago.PENDIENTE)
+                    .filter(x -> Pago.PAYPAL == x.getProveedor())
+                    .orElse(null);
+        }
+        if (pago == null) {
+            log.info("Aviso de PayPal (orden {}) que no corresponde a ningún pago de Vendely", idOrden);
+            return;
+        }
+        if (Pago.APROBADO == pago.getEstado()) {
+            return;   // el mismo aviso llegó dos veces: no se cobra de nuevo
+        }
+        Pedido p = pedidoRepository.findById(pago.getIdPedido()).orElse(null);
+        if (p == null) {
+            log.warn("Aviso de PayPal (orden {}): el pedido {} no existe", idOrden, pago.getIdPedido());
+            return;
+        }
+        confirmarPayPal(p, pago);
+    }
+
+    // ------------------------------------------------------------------ conciliación de pagos huérfanos
+
+    /**
+     * Red de seguridad por si el aviso nunca llega: le pregunta a la pasarela por un intento de
+     * pago que quedó pendiente. En local, sin una URL pública donde recibir avisos, es el único
+     * camino para que un pedido pagado deje de estar pendiente.
+     *
+     * Devuelve true si el pago cambió de estado. La llama ConciliacionPagosService cada 15 minutos.
+     */
+    @Transactional
+    public boolean conciliar(Long idPago) {
+        Pago pago = pagoRepository.findById(idPago).orElse(null);
+        if (pago == null || Pago.PENDIENTE != pago.getEstado()) {
+            return false;
+        }
+        if (pagoRepository.existsByIdPedidoAndEstado(pago.getIdPedido(), Pago.APROBADO)) {
+            return false;   // otro intento del mismo pedido ya quedó aprobado
+        }
+        Pedido p = pedidoRepository.findById(pago.getIdPedido()).orElse(null);
+        if (p == null) {
+            return false;
+        }
+        Short antes = pago.getEstado();
+
+        if (Pago.PAYPAL == pago.getProveedor()) {
+            if (pago.getReferenciaTransaccion() == null || !payPal.estaConfigurado()) {
+                return false;
+            }
+            confirmarPayPal(p, pago);
+            return !antes.equals(pago.getEstado());
+        }
+
+        // Mercado Pago: el intento pendiente no guardó ningún id (se conoce al confirmar),
+        // así que el pago se busca en la pasarela por el número de pedido.
+        if (!mercadoPago.estaConfigurado()) {
+            return false;
+        }
+        Map<String, Object> mp = buscarEnMercadoPago(p.getIdPedido());
+        String paymentId = mp == null ? null : texto(mp.get("id"));
+        if (paymentId == null) {
+            return false;
+        }
+        aplicarPago(p, paymentId, mp);
+        return !antes.equals(pago.getEstado());
+    }
+
+    /**
+     * El pago que Mercado Pago tiene registrado para ese pedido: el aprobado si existe y, si no,
+     * el más reciente. Un error de red no interrumpe la conciliación de los demás pagos.
+     */
+    private Map<String, Object> buscarEnMercadoPago(Long idPedido) {
+        try {
+            Map<String, Object> r = mercadoPago.buscarPagosDelPedido(String.valueOf(idPedido));
+            if (r == null || !(r.get("results") instanceof List<?> resultados) || resultados.isEmpty()) {
+                return null;
+            }
+            Map<String, Object> masReciente = null;
+            for (Object o : resultados) {
+                Map<String, Object> pago = mapa(o);
+                if ("approved".equals(texto(pago.get("status")))) {
+                    return pago;
+                }
+                if (masReciente == null) {
+                    masReciente = pago;
+                }
+            }
+            return masReciente;
+        } catch (RestClientException e) {
+            log.warn("No se pudo buscar en Mercado Pago el pago del pedido {}: {}", idPedido, e.getMessage());
+            return null;
+        }
     }
 
     private void guardar(Pago pago) {
@@ -509,6 +653,14 @@ public class PagoService {
 
     private static String texto(Object o) {
         return (o == null || o.toString().isBlank()) ? null : o.toString();
+    }
+
+    private static Long aLong(String s) {
+        try {
+            return s == null ? null : Long.valueOf(s.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private static BigDecimal numero(Object o) {

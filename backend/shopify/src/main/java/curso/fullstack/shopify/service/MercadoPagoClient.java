@@ -46,4 +46,21 @@ public class MercadoPagoClient {
                 .retrieve()
                 .body(new ParameterizedTypeReference<Map<String, Object>>() {});
     }
+
+    /**
+     * Los pagos que Mercado Pago tiene registrados para un pedido (su external_reference),
+     * del más reciente al más antiguo. Lo usa la conciliación: cuando el cliente no volvió a la
+     * pantalla, el intento pendiente de Vendely no guardó ningún id y el pedido es lo único que
+     * se puede preguntar.
+     */
+    public Map<String, Object> buscarPagosDelPedido(String referenciaExterna) {
+        return http.get()
+                .uri(b -> b.path("/v1/payments/search")
+                        .queryParam("external_reference", referenciaExterna)
+                        .queryParam("sort", "date_created")
+                        .queryParam("criteria", "desc")
+                        .build())
+                .retrieve()
+                .body(new ParameterizedTypeReference<Map<String, Object>>() {});
+    }
 }

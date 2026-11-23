@@ -70,6 +70,10 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/api/auth/registro/**", "/api/auth/login").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/public/**").permitAll()
+                // Avisos de las pasarelas: los manda Mercado Pago o PayPal, no un navegador con
+                // sesión, así que no pueden exigir token. A cambio, el propio aviso trae su firma
+                // y PagoWebhookService la comprueba antes de tocar un pago (401 si no cuadra).
+                .requestMatchers(HttpMethod.POST, "/api/public/pagos/webhook/*").permitAll()
                 .requestMatchers("/error").permitAll()
                 .requestMatchers("/api/panel/**").hasRole("ADMIN_TIENDA")
                 .requestMatchers("/api/cliente/**").hasRole("CLIENTE")
