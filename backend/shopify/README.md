@@ -28,6 +28,8 @@ La API queda en `http://localhost:8080/api`.
 | `JWT_EXPIRATION` | Vigencia del token en milisegundos | 86400000 (24 h) |
 | `CORS_ORIGENES` | Frontends autorizados, separados por coma | `localhost:5173,5174` |
 | `MERCADOPAGO_ACCESS_TOKEN` | Token de **prueba** (`TEST-...`). Sin él, el pago responde 503 | vacío |
+| `MERCADOPAGO_WEBHOOK_SECRET` | Clave con la que Mercado Pago firma sus avisos. Sin ella, su webhook responde 503 | vacío |
+| `PAYPAL_WEBHOOK_ID` | Id del webhook de PayPal, para preguntarle si un aviso es auténtico | vacío |
 | `FRONTEND_URL` | Adonde vuelve el cliente tras pagar | `http://localhost:5173` |
 | `FLYWAY_LOCATIONS` | Carpetas de migraciones. En el servidor: `classpath:db/migration` (sin los usuarios de prueba) | las dos carpetas |
 | `SERVER_PORT` | Puerto de la API | 8080 |
@@ -40,7 +42,7 @@ Paquete base: `curso.fullstack.shopify`
 | Capa | Qué hace |
 |---|---|
 | `controller` | Recibe las peticiones HTTP |
-| `service` | Reglas del negocio y transacciones (`AuthService`, `ClienteService`, `ProductoService`, `PedidoService`, `PagoService`, `TiendaService`, `MercadoPagoClient`) |
+| `service` | Reglas del negocio y transacciones (`AuthService`, `ClienteService`, `ProductoService`, `PedidoService`, `PagoService`, `PagoWebhookService`, `ConciliacionPagosService`, `TiendaService`, `MercadoPagoClient`, `PayPalClient`) |
 | `repository` | Acceso a la base con Spring Data JPA |
 | `entity` | Clases que representan las tablas |
 | `dto` | Datos que entran y salen de la API, con sus validaciones |
@@ -53,6 +55,7 @@ Paquete base: `curso.fullstack.shopify`
 |---|---|
 | `/api/auth/registro/**` y `/api/auth/login` | Todos |
 | `GET /api/public/**` | Todos |
+| `POST /api/public/pagos/webhook/*` | Las pasarelas (lo que autoriza es la firma del aviso, no un token) |
 | `/api/panel/**` | `ADMIN_TIENDA` (dueño) |
 | `/api/cliente/**` | `CLIENTE` |
 | `/api/admin/**` | `SUPERADMIN` (reservado, sin endpoints todavía) |
@@ -97,6 +100,8 @@ Paquete base: `curso.fullstack.shopify`
 | GET | `/api/public/tiendas/{subdominio}/productos` | Catálogo |
 | GET | `/api/public/tiendas/{subdominio}/productos/{idProducto}` | Detalle de un producto |
 | GET | `/api/public/paises/{idPais}/distritos` | Distritos para las direcciones |
+| POST | `/api/public/pagos/webhook/mercadopago` | Aviso de Mercado Pago (firmado) |
+| POST | `/api/public/pagos/webhook/paypal` | Aviso de PayPal (firmado) |
 
 ### Cliente (`CLIENTE`)
 
@@ -107,6 +112,34 @@ Paquete base: `curso.fullstack.shopify`
 | GET | `/api/cliente/pedidos/{idPedido}` | Detalle de un pedido |
 | POST | `/api/cliente/pedidos/{idPedido}/pago` | Inicia el pago en Mercado Pago |
 | POST | `/api/cliente/pedidos/{idPedido}/pago/confirmar` | Confirma el resultado del pago |
+
+## Avisos de pago (webhook)
+
+Un pago no puede depender de que el comprador vuelva a la pantalla: si cierra la pestaña en la pasarela, el pedido se quedaría pendiente con el dinero ya cobrado. Hay dos respaldos para eso.
+
+**1. El aviso de la pasarela.** Mercado Pago y PayPal llaman a su propia ruta en cuanto el pago cambia de estado:
+
+| Ruta | Quién la llama | Qué la protege |
+|---|---|---|
+| `POST /api/public/pagos/webhook/mercadopago` | Mercado Pago | Cabecera `x-signature`: un HMAC-SHA256 que se recalcula con `MERCADOPAGO_WEBHOOK_SECRET` |
+| `POST /api/public/pagos/webhook/paypal` | PayPal | Se le pregunta a PayPal con las cabeceras `paypal-*` y `PAYPAL_WEBHOOK_ID` |
+
+Del aviso solo se toma un identificador. El estado y el monto se consultan **en la pasarela**, y el pago se aplica por el mismo método que usa el regreso del navegador (`PagoService.aplicarPago`), así que las dos entradas comparten la verificación y la idempotencia: un pedido que ya tiene pago aprobado no se vuelve a tocar, llegue el aviso una vez o diez.
+
+Qué responde y por qué (las pasarelas reintentan cuando reciben un 5xx):
+
+| Respuesta | Cuándo |
+|---|---|
+| `200` | El aviso se recibió; también cuando no corresponde a un pedido de Vendely o el monto no cuadra (reintentarlo daría lo mismo) |
+| `401` | La firma no coincide. No se toca ningún pago |
+| `503` | Falta la clave del webhook: sin ella no se puede saber si el aviso es auténtico |
+| `502` | No se pudo consultar la pasarela. Que lo reintente |
+
+En el log nunca se escribe el cuerpo del aviso, solo el motivo del rechazo.
+
+**2. La revisión periódica** (`ConciliacionPagosService`). Cada 15 minutos busca los intentos de pago que llevan más de 30 minutos pendientes y le pregunta a la pasarela cómo terminaron. Es la red de seguridad si el aviso nunca llega, y en local es el único camino: sin una dirección pública, las pasarelas no pueden avisar. Se ajusta con `PAGOS_CONCILIACION_CADA_MS` y `PAGOS_CONCILIACION_EDAD_MINUTOS`.
+
+**Probarlo en local.** Hay que exponer el backend con `ngrok http 8080` (o similar) y registrar esa dirección en el panel de la pasarela. Sin eso, lo que sí se puede probar es la firma (un aviso con firma inválida responde 401) y la revisión periódica.
 
 ## Base de datos
 
@@ -150,7 +183,7 @@ Hibernate sigue en `ddl-auto: validate`: solo comprueba que las entidades coinci
 
 ### Pendiente
 
-- [ ] **Pago:** el último intento respondió 503 (`El pago en línea no está disponible por ahora`). Revisar `MERCADOPAGO_ACCESS_TOKEN` y probar el flujo completo, incluida la confirmación.
+- [ ] **Pago:** el último intento respondió 503 (`El pago en línea no está disponible por ahora`). Revisar `MERCADOPAGO_ACCESS_TOKEN` y probar el flujo completo, incluida la confirmación y el aviso de la pasarela con una dirección pública.
 - [ ] **Pruebas automatizadas:** no hay tests Java (JUnit y MockMvc para `AuthService`, `PedidoService`, `PagoService`).
 - [ ] **Rol `SUPERADMIN`:** la ruta `/api/admin/**` existe pero no tiene endpoints.
 - [ ] **Categorías de productos:** la tabla `categorias` existe, pero la API aún no las expone.

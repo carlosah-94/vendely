@@ -200,8 +200,19 @@ Variables de entorno (las lee `application.yml`):
 | `CORS_ORIGENES` | `https://shopity-7zya.vercel.app` |
 | `FRONTEND_URL` | `https://shopity-7zya.vercel.app` (adonde vuelve el comprador después de pagar) |
 | `MERCADOPAGO_ACCESS_TOKEN`, `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` | opcionales, credenciales **de prueba** |
+| `MERCADOPAGO_WEBHOOK_SECRET`, `PAYPAL_WEBHOOK_ID` | opcionales, para recibir los avisos de pago |
+| `FLYWAY_LOCATIONS` | `classpath:db/migration` (sin los usuarios de prueba) |
 
 `CORS_ORIGENES` se compara letra por letra: va sin `/` al final y, si hay varias direcciones, separadas solo por comas, sin espacios. Si no coincide, el navegador bloquea las peticiones con un error de CORS.
+
+**Avisos de pago.** Para que un pedido quede aprobado aunque el comprador cierre la pestaña al pagar, las pasarelas tienen que poder avisarle al backend. Hay que registrar estas dos direcciones, cada una en el panel de su pasarela, y guardar en Render la clave que cada panel entrega:
+
+| Pasarela | Dirección que se registra | Variable con su clave |
+|---|---|---|
+| Mercado Pago (Webhooks) | `https://vendely-api.onrender.com/api/public/pagos/webhook/mercadopago` | `MERCADOPAGO_WEBHOOK_SECRET` |
+| PayPal (Webhooks) | `https://vendely-api.onrender.com/api/public/pagos/webhook/paypal` | `PAYPAL_WEBHOOK_ID` |
+
+En Mercado Pago se suscribe el evento de **pagos**; en PayPal, `CHECKOUT.ORDER.APPROVED` y `PAYMENT.CAPTURE.COMPLETED`. Sin esas variables las dos rutas responden 503 y el pago sigue funcionando por el camino del navegador.
 
 Para comprobar que el backend responde: https://vendely-api.onrender.com/api/public/paises/PE/distritos?buscar=mira
 
@@ -533,6 +544,8 @@ Cada tienda tiene su vitrina en `/tienda/{subdominio}` (por ejemplo `/tienda/mod
 | `POST /api/cliente/pedidos` | CLIENTE | Crear un pedido desde el carrito |
 | `POST /api/cliente/pedidos/{idPedido}/pago` | CLIENTE | Iniciar el pago (PayPal o Mercado Pago) |
 | `POST /api/cliente/pedidos/{idPedido}/pago/confirmar` | CLIENTE | Confirmar el resultado del pago |
+| `POST /api/public/pagos/webhook/mercadopago` | Mercado Pago | Aviso de la pasarela (firmado; no lo llama el navegador) |
+| `POST /api/public/pagos/webhook/paypal` | PayPal | Aviso de la pasarela (firmado; no lo llama el navegador) |
 
 **Flujo de compra:** vitrina → carrito → ingresar → checkout (dirección y costo de envío) → pedido → pago → vuelve a `/tienda/{subdominio}/pago/resultado` (usa `FRONTEND_URL`) → "Mis pedidos".
 
@@ -540,6 +553,7 @@ Cada tienda tiene su vitrina en `/tienda/{subdominio}` (por ejemplo `/tienda/mod
 - **Direcciones:** en un país con lista oficial (Perú, Chile) el distrito o la comuna se elige de la lista; en otros países se escriben región, ciudad y código postal. Si la tienda no tiene tarifa para ese destino, el checkout lo avisa y no deja crear el pedido.
 - **Pago en modo de prueba:** se usa **PayPal Sandbox** si están `PAYPAL_CLIENT_ID` y `PAYPAL_CLIENT_SECRET`; si no, **Mercado Pago Checkout Pro** si está `MERCADOPAGO_ACCESS_TOKEN`. PayPal cobra en dólares, así que el monto en soles se convierte con `PAYPAL_TIPO_CAMBIO` (3.75 soles por dólar por defecto). Sin credenciales, iniciar el pago responde 503 "El pago en línea no está disponible por ahora".
 - Al confirmar, el backend consulta el pago en la pasarela y compara estado, pedido y monto: nunca confía en lo que diga el navegador.
+- **El pago no depende de que el comprador vuelva.** Si cierra la pestaña o se le corta el internet en la pasarela, el pedido quedaría pagado y pendiente. Para eso hay dos respaldos: el **aviso** que manda la pasarela (webhook), que entra por su propia ruta y pasa por la misma verificación que el regreso del navegador, y una **revisión cada 15 minutos** que le pregunta a la pasarela por los pagos que llevan más de 30 minutos pendientes. En local, sin una dirección pública donde recibir avisos, esa revisión es la que cierra los pagos.
 
 ## Manejo de errores y logs
 

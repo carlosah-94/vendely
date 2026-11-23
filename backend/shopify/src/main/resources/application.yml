@@ -59,13 +59,27 @@ app:
   mercadopago:
     # Access Token de PRUEBA (TEST-...). Nunca se escribe aquí: viene de la variable de entorno.
     access-token: ${MERCADOPAGO_ACCESS_TOKEN:}
+    # Clave de la firma de los avisos (panel de Mercado Pago > Webhooks > Configurar notificaciones).
+    # Sin ella, /api/public/pagos/webhook/mercadopago responde 503 y no toca ningún pago.
+    webhook-secret: ${MERCADOPAGO_WEBHOOK_SECRET:}
   paypal:
     # Credenciales de PRUEBA (Sandbox) de developer.paypal.com. Nunca se escriben aquí: vienen del entorno.
     # Si están, se paga con PayPal; si no, con Mercado Pago (si está su token).
     client-id: ${PAYPAL_CLIENT_ID:}
     client-secret: ${PAYPAL_CLIENT_SECRET:}
     base-url: ${PAYPAL_BASE_URL:https://api-m.sandbox.paypal.com}
+    # Id del webhook (developer.paypal.com > Apps & Credentials > tu app > Webhooks).
+    # Con él se le pregunta a PayPal si un aviso es auténtico; sin él, el endpoint responde 503.
+    webhook-id: ${PAYPAL_WEBHOOK_ID:}
     # PayPal no cobra en soles: los pedidos en PEN se cobran en USD con este tipo de cambio fijo
     tipo-cambio-pen-usd: ${PAYPAL_TIPO_CAMBIO:3.75}
+  pagos:
+    # Conciliación: cada cuánto se revisan los pagos que quedaron pendientes y cuánto tiempo
+    # tienen que llevar así para tocarlos (un pago recién iniciado está pendiente porque el
+    # cliente todavía está en la pasarela). Es la red de seguridad si el aviso nunca llega.
+    conciliacion-cada-ms: ${PAGOS_CONCILIACION_CADA_MS:900000}
+    conciliacion-edad-minutos: ${PAGOS_CONCILIACION_EDAD_MINUTOS:30}
+    # La primera revisión espera dos minutos, para no competir con el arranque.
+    conciliacion-espera-inicial-ms: ${PAGOS_CONCILIACION_ESPERA_INICIAL_MS:120000}
   # Dirección del frontend: a ella vuelve el cliente después de pagar en la pasarela
   frontend-url: ${FRONTEND_URL:http://localhost:5173}
