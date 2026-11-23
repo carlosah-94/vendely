@@ -43,8 +43,8 @@ jobs:
           # Guarda ~/.m2 entre corridas: la primera tarda, las siguientes no.
           cache: maven
 
-      # package compila y, cuando exista la suite de la issue #9, tambien
-      # ejecuta los tests (fase test). Hoy no hay tests y pasa igual.
+      # package compila y ejecuta los tests (fase test, issue #9). Las pruebas de
+      # integracion levantan un Postgres con Testcontainers: el runner ya trae Docker.
       - name: Compilar y empaquetar
         working-directory: backend/shopify
         run: mvn -B -ntp package
