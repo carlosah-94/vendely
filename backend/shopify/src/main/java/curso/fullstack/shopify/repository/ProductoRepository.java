@@ -28,12 +28,23 @@ public interface ProductoRepository extends JpaRepository<Producto, Long> {
         BigDecimal getPrecioComparacion();
         String getSku();
         Long getStock();
+        /** Suma del stock minimo de sus variantes: con el se sabe si al producto le queda poco. */
+        Long getStockMinimo();
         String getImagenUrl();
         /** Todas las fotos en orden, separadas por espacios (los enlaces no llevan espacios). */
         String getImagenes();
         /** Ids de sus categorías separados por espacios ("3 7"). */
         String getCategorias();
     }
+
+    /** El FROM del producto con su precio vigente y su stock. Se reutiliza en el conteo del catálogo. */
+    String DESDE_PRODUCTOS = """
+              FROM productos p
+              LEFT JOIN variantes v   ON v.id_producto = p.id_producto
+              LEFT JOIN precios pr    ON pr.id_variante = v.id_variante
+                                     AND pr.fecha_inicio <= now() AND (pr.fecha_fin IS NULL OR pr.fecha_fin > now())
+              LEFT JOIN inventario i  ON i.id_variante = v.id_variante
+            """;
 
     // Los alias van entre comillas para que PostgreSQL respete las mayúsculas (si no, la proyección da null).
     String SELECT_FILA = """
@@ -42,18 +53,14 @@ public interface ProductoRepository extends JpaRepository<Producto, Long> {
                    min(v.id_variante) AS "idVariante", count(v.id_variante) AS "variantes",
                    min(pr.monto) AS "precio", min(pr.monto_comparacion) AS "precioComparacion",
                    min(v.sku) AS "sku", coalesce(sum(i.cantidad_disponible), 0) AS "stock",
+                   coalesce(sum(i.stock_minimo), 0) AS "stockMinimo",
                    (SELECT im.url FROM imagenes_producto im
                      WHERE im.id_producto = p.id_producto ORDER BY im.posicion LIMIT 1) AS "imagenUrl",
                    (SELECT string_agg(im.url, ' ' ORDER BY im.posicion) FROM imagenes_producto im
                      WHERE im.id_producto = p.id_producto) AS "imagenes",
                    (SELECT string_agg(CAST(pc.id_categoria AS text), ' ' ORDER BY pc.id_categoria)
                       FROM producto_categorias pc WHERE pc.id_producto = p.id_producto) AS "categorias"
-              FROM productos p
-              LEFT JOIN variantes v   ON v.id_producto = p.id_producto
-              LEFT JOIN precios pr    ON pr.id_variante = v.id_variante
-                                     AND pr.fecha_inicio <= now() AND (pr.fecha_fin IS NULL OR pr.fecha_fin > now())
-              LEFT JOIN inventario i  ON i.id_variante = v.id_variante
-            """;
+            """ + DESDE_PRODUCTOS;
 
     // Panel: todos los productos de la tienda (activos, borradores y archivados).
     @Query(value = SELECT_FILA + """
@@ -77,6 +84,70 @@ public interface ProductoRepository extends JpaRepository<Producto, Long> {
              ORDER BY p.nombre
             """, nativeQuery = true)
     List<Fila> filasPublicas(@Param("idTienda") Long idTienda);
+
+    /**
+     * Los filtros del catálogo (issue #4), compartidos por la búsqueda y por el conteo.
+     *
+     * El precio y el stock se filtran en HAVING y no en WHERE: son agregados de las variantes
+     * (el precio es el menor, el stock la suma) y WHERE se evalúa antes de agrupar.
+     *
+     * Cada parámetro opcional va con CAST(... AS tipo): en una consulta nativa, PostgreSQL no
+     * puede deducir el tipo de un parámetro que llega nulo y la consulta fallaría.
+     */
+    String FILTROS_PUBLICOS = """
+             WHERE p.id_tienda = :idTienda AND p.estado = 1
+               AND (CAST(:texto AS text) IS NULL
+                    OR p.nombre ILIKE '%' || CAST(:texto AS text) || '%'
+                    OR p.marca ILIKE '%' || CAST(:texto AS text) || '%'
+                    OR p.descripcion ILIKE '%' || CAST(:texto AS text) || '%')
+               AND (CAST(:idCategoria AS bigint) IS NULL
+                    OR EXISTS (SELECT 1 FROM producto_categorias pc
+                                WHERE pc.id_producto = p.id_producto
+                                  AND pc.id_categoria = CAST(:idCategoria AS bigint)))
+             GROUP BY p.id_producto
+            HAVING (CAST(:precioMinimo AS numeric) IS NULL OR min(pr.monto) >= CAST(:precioMinimo AS numeric))
+               AND (CAST(:precioMaximo AS numeric) IS NULL OR min(pr.monto) <= CAST(:precioMaximo AS numeric))
+               AND (CAST(:soloConStock AS boolean) = false OR coalesce(sum(i.cantidad_disponible), 0) > 0)
+            """;
+
+    /**
+     * Una página del catálogo, ya filtrada y ordenada.
+     *
+     * El orden se elige con un CASE por parámetro y no pegando texto a la consulta: así el valor
+     * viaja como parámetro (nada que llegue del navegador se concatena al SQL) y la consulta
+     * sigue siendo una sola. NULLS LAST deja al final los productos sin precio vigente.
+     */
+    @Query(value = SELECT_FILA + FILTROS_PUBLICOS + """
+             ORDER BY
+               CASE WHEN CAST(:orden AS text) = 'precio_asc'  THEN min(pr.monto) END ASC  NULLS LAST,
+               CASE WHEN CAST(:orden AS text) = 'precio_desc' THEN min(pr.monto) END DESC NULLS LAST,
+               CASE WHEN CAST(:orden AS text) = 'novedades'   THEN p.fecha_creacion END DESC NULLS LAST,
+               p.nombre
+             LIMIT :tamano OFFSET :desplazamiento
+            """, nativeQuery = true)
+    List<Fila> buscarPublicos(@Param("idTienda") Long idTienda,
+                              @Param("texto") String texto,
+                              @Param("idCategoria") Long idCategoria,
+                              @Param("precioMinimo") BigDecimal precioMinimo,
+                              @Param("precioMaximo") BigDecimal precioMaximo,
+                              @Param("soloConStock") boolean soloConStock,
+                              @Param("orden") String orden,
+                              @Param("tamano") int tamano,
+                              @Param("desplazamiento") int desplazamiento);
+
+    /**
+     * Cuántos productos pasan los filtros, para el paginador. Va envuelto en una subconsulta
+     * porque con GROUP BY + HAVING cada fila es un producto: hay que contar las filas del
+     * resultado, no las de la tabla.
+     */
+    @Query(value = "SELECT count(*) FROM (SELECT p.id_producto " + DESDE_PRODUCTOS + FILTROS_PUBLICOS
+            + ") AS filtrados", nativeQuery = true)
+    long contarPublicos(@Param("idTienda") Long idTienda,
+                        @Param("texto") String texto,
+                        @Param("idCategoria") Long idCategoria,
+                        @Param("precioMinimo") BigDecimal precioMinimo,
+                        @Param("precioMaximo") BigDecimal precioMaximo,
+                        @Param("soloConStock") boolean soloConStock);
 
     // Detalle público: un producto ACTIVO de la tienda (borrador, archivado o de otra tienda → vacío → 404).
     @Query(value = SELECT_FILA + """

@@ -1,6 +1,8 @@
 package curso.fullstack.shopify.controller;
 
 import curso.fullstack.shopify.dto.CategoriaResponse;
+import curso.fullstack.shopify.dto.FiltroCatalogo;
+import curso.fullstack.shopify.dto.PaginaResponse;
 import curso.fullstack.shopify.dto.PaisEnvioResponse;
 import curso.fullstack.shopify.dto.ProductoPublicoResponse;
 import curso.fullstack.shopify.dto.TiendaPublicaResponse;
@@ -8,10 +10,12 @@ import curso.fullstack.shopify.service.CategoriaService;
 import curso.fullstack.shopify.service.EnvioService;
 import curso.fullstack.shopify.service.ProductoService;
 import curso.fullstack.shopify.service.TiendaService;
+import java.math.BigDecimal;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -56,10 +60,28 @@ public class TiendaPublicaController {
         return tiendaService.publica(subdominio);
     }
 
-    /** Catálogo público: productos activos de una tienda activa, con precio y disponibilidad. */
+    /**
+     * Catálogo público: productos activos de una tienda activa, con precio y disponibilidad.
+     *
+     * Acepta filtros por la URL (issue #4), todos opcionales:
+     *   ?q=polo&categoria=3&min=20&max=80&stock=1&orden=precio_asc&pagina=2&tamano=12
+     *
+     * Van en la URL a propósito: así un filtro se puede compartir o abrir en otra pestaña y
+     * muestra exactamente lo mismo. Los valores raros los descarta FiltroCatalogo, no el SQL.
+     */
     @GetMapping("/{subdominio}/productos")
-    public List<ProductoPublicoResponse> catalogo(@PathVariable String subdominio) {
-        return productoService.catalogo(subdominio);
+    public PaginaResponse<ProductoPublicoResponse> catalogo(
+            @PathVariable String subdominio,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) Long categoria,
+            @RequestParam(required = false) BigDecimal min,
+            @RequestParam(required = false) BigDecimal max,
+            @RequestParam(defaultValue = "false") boolean stock,
+            @RequestParam(required = false) String orden,
+            @RequestParam(defaultValue = "1") int pagina,
+            @RequestParam(defaultValue = "0") int tamano) {
+        return productoService.catalogo(subdominio,
+                new FiltroCatalogo(q, categoria, min, max, stock, orden, pagina, tamano));
     }
 
     /** Detalle de un producto activo (404 si no existe, está inactivo o es de otra tienda). */

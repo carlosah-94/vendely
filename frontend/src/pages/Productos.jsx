@@ -43,6 +43,7 @@ export default function Productos() {
   const [porEliminar, setPorEliminar] = useState(null);
   const [pestana, setPestana] = useState('TODOS');
   const [categoria, setCategoria] = useState('');      // '' = todas
+  const [stock, setStock] = useState('');              // '' = cualquiera · 'agotado' · 'bajo'
   const [categorias, setCategorias] = useState({ idTienda: null, lista: [] });
   // El texto puede venir de la búsqueda de la barra superior (?buscar=polo).
   const [parametros, setParametros] = useSearchParams();
@@ -85,10 +86,25 @@ export default function Productos() {
   const cargando = cargandoTiendas || (idTienda !== null && datos.idTienda !== idTienda);
 
   const texto = busqueda.trim().toLowerCase();
+
+  /**
+   * Filtro de stock (issue #4). "Bajo" es lo que ya quedo por debajo del minimo configurado de
+   * sus variantes (lo mismo que dispara el aviso por correo), no un numero inventado aqui.
+   * Un producto sin minimo configurado nunca sale como bajo: su minimo es 0.
+   */
+  function pasaStock(p) {
+    const cantidad = p.stock ?? 0;
+    const minimo = p.stockMinimo ?? 0;
+    if (stock === 'agotado') return cantidad === 0;
+    if (stock === 'bajo') return cantidad > 0 && minimo > 0 && cantidad <= minimo;
+    return true;
+  }
+
   const visibles = datos.productos.filter(
     (p) =>
       (pestana === 'TODOS' || p.estado === pestana) &&
       (!categoria || (p.categorias ?? []).includes(Number(categoria))) &&
+      pasaStock(p) &&
       (!texto || p.nombre.toLowerCase().includes(texto) || (p.marca ?? '').toLowerCase().includes(texto) || (p.sku ?? '').toLowerCase().includes(texto)),
   );
 
@@ -200,7 +216,17 @@ export default function Productos() {
                 ))}
               </select>
             )}
-            <label className={`${listaCategorias.length > 0 ? '' : 'ml-auto '}flex w-full items-center gap-2 rounded-lg border border-[#ddd] px-2.5 py-1 text-[#8a8a8a] focus-within:border-[#1650d0] sm:w-64`}>
+            <select
+              value={stock}
+              onChange={(e) => setStock(e.target.value)}
+              aria-label="Filtrar por stock"
+              className={`${listaCategorias.length > 0 ? '' : 'ml-auto '}rounded-lg border border-[#ddd] bg-white px-2 py-1 text-[13px] text-[#303030]`}
+            >
+              <option value="">Cualquier stock</option>
+              <option value="agotado">Agotados</option>
+              <option value="bajo">Stock bajo</option>
+            </select>
+            <label className={`flex w-full items-center gap-2 rounded-lg border border-[#ddd] px-2.5 py-1 text-[#8a8a8a] focus-within:border-[#1650d0] sm:w-64`}>
               <IconoBuscar tamano={15} />
               <input
                 value={busqueda}
