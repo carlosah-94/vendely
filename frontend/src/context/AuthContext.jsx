@@ -40,11 +40,18 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener(EVENTO_ACCESO_DENEGADO, alDenegar);
   }, [navigate]);
 
-  /** Sin subdominio inicia sesión en el panel; con subdominio, como cliente de esa tienda. */
-  async function iniciarSesion({ correo, contrasena, subdominio }) {
+  /**
+   * Sin subdominio inicia sesión en el panel; con subdominio, como cliente de esa tienda.
+   * codigo: el de 6 dígitos, solo para las cuentas con doble autenticación. Si hace falta y no
+   * viene, el backend responde 401 con campos.codigo = "requerido" y el formulario lo pide.
+   */
+  async function iniciarSesion({ correo, contrasena, subdominio, codigo }) {
     const cuerpo = { correo, contrasena };
     if (subdominio) {
       cuerpo.subdominio = subdominio;
+    }
+    if (codigo) {
+      cuerpo.codigo = codigo;
     }
     const { data } = await api.post('/auth/login', cuerpo);
     tokenStorage.set(data.token);
@@ -60,13 +67,29 @@ export function AuthProvider({ children }) {
     return data.usuario;
   }
 
+  /**
+   * Después de cambiar la contraseña el backend entrega un token nuevo (el anterior ya no
+   * sirve): se guarda para que esta sesión siga abierta.
+   */
+  function guardarSesion(respuesta) {
+    tokenStorage.set(respuesta.token);
+    setUsuario(respuesta.usuario);
+  }
+
+  /** Activar o quitar la doble autenticación cambia la cuenta, pero no el token. */
+  function actualizarUsuario(datos) {
+    setUsuario(datos);
+  }
+
   function cerrarSesion() {
     tokenStorage.clear();
     setUsuario(null);
   }
 
   return (
-    <AuthContext.Provider value={{ usuario, cargando, iniciarSesion, registrarDueno, cerrarSesion }}>
+    <AuthContext.Provider
+      value={{ usuario, cargando, iniciarSesion, registrarDueno, cerrarSesion, guardarSesion, actualizarUsuario }}
+    >
       {children}
     </AuthContext.Provider>
   );

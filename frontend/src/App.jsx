@@ -20,6 +20,7 @@ import Plan from './pages/Plan';
 import Portada from './pages/Portada';
 import Productos from './pages/Productos';
 import Registro from './pages/Registro';
+import Seguridad from './pages/Seguridad';
 import Ventas from './pages/Ventas';
 import LayoutTienda from './components/tienda/LayoutTienda';
 import RequiereCliente from './components/tienda/RequiereCliente';
@@ -70,6 +71,13 @@ export default function App() {
           <Route path="/panel/ventas" element={<Ventas />} />
           <Route path="/panel/ventas/nueva" element={<NuevaVenta />} />
           <Route path="/panel/ventas/:idPedido" element={<DetalleVenta />} />
+        </Route>
+      </Route>
+
+      {/* Mi cuenta: la usan los dos roles del panel (issue #4) */}
+      <Route element={<RutaProtegida roles={['ADMIN_TIENDA', 'SUPERADMIN']} />}>
+        <Route element={<LayoutPanel />}>
+          <Route path="/cuenta/seguridad" element={<Seguridad />} />
         </Route>
       </Route>
 

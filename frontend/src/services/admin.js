@@ -1,5 +1,10 @@
 import { api } from './api';
 
+/** Quita la doble autenticación de una cuenta (cuando la persona perdió el teléfono). */
+export async function quitarDobleFactor(idLogin) {
+  await api.delete(`/admin/cuentas/${idLogin}/doble-factor`);
+}
+
 /** Llamadas al backend del panel del superadmin (/api/admin/**, solo rol SUPERADMIN). */
 
 export async function obtenerResumen() {

@@ -76,6 +76,23 @@ public class Login {
     @Column(name = "contrasena_cambiada_en")
     private OffsetDateTime contrasenaCambiadaEn;
 
+    // ---- Doble autenticacion (issue #4). El secreto nunca sale en los logs ni en las respuestas.
+
+    /** Secreto TOTP en base32. Se guarda al iniciar la activacion, antes de confirmarla. */
+    @Setter
+    @Column(name = "totp_secreto", length = 64)
+    private String totpSecreto;
+
+    /** true = el login pide el codigo de 6 digitos. */
+    @Setter
+    @Column(name = "totp_activo", nullable = false)
+    private Boolean totpActivo = false;
+
+    /** Ultimo intervalo de 30 s ya usado: un mismo codigo no sirve dos veces. */
+    @Setter
+    @Column(name = "totp_ultimo_paso")
+    private Long totpUltimoPaso;
+
     // Las fechas las pone la base de datos (DEFAULT now() y el trigger T1).
     @Column(name = "fecha_creacion", insertable = false, updatable = false)
     private OffsetDateTime fechaCreacion;

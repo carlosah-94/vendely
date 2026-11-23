@@ -47,10 +47,13 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
+    private final DobleFactorService dobleFactor;
 
     public AuthService(LoginRepository loginRepository, PropietarioRepository propietarioRepository,
             TiendaRepository tiendaRepository, PasswordEncoder passwordEncoder,
-            JwtService jwtService, AuthenticationManager authenticationManager) {
+            JwtService jwtService, AuthenticationManager authenticationManager,
+            DobleFactorService dobleFactor) {
+        this.dobleFactor = dobleFactor;
         this.loginRepository = loginRepository;
         this.propietarioRepository = propietarioRepository;
         this.tiendaRepository = tiendaRepository;
@@ -117,8 +120,13 @@ public class AuthService {
     /**
      * El AuthenticationManager busca la cuenta con UsuarioDetailsService,
      * compara la contraseña con BCrypt y revisa si la cuenta está activa.
+     *
+     * Si la cuenta tiene doble autenticación, después de la contraseña se exige el código
+     * (issue #4). Va en ese orden a propósito: pedir el código antes diría a cualquiera qué
+     * correos tienen la doble autenticación activa, sin saber su contraseña.
+     * No es readOnly porque al aceptar un código se guarda su intervalo (no sirve dos veces).
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public AuthResponse iniciarSesion(LoginRequest r) {
         String correo = normalizarCorreo(r.correo());
         Long idTienda = null;
@@ -131,8 +139,9 @@ public class AuthService {
                     new UsernamePasswordAuthenticationToken(
                             UsuarioDetailsService.clave(correo, idTienda), r.contrasena()));
             Login login = ((CuentaUserDetails) autenticacion.getPrincipal()).getLogin();
+            dobleFactor.exigirEnLogin(login.getIdLogin(), r.codigo());
             log.info("Inicio de sesión: idLogin={}, rol={}", login.getIdLogin(), login.getRol());
-            return respuesta(login);
+            return respuesta(loginRepository.findById(login.getIdLogin()).orElse(login));
         } catch (DisabledException e) {
             log.warn("Inicio de sesión rechazado, cuenta desactivada: {}", ocultar(correo));
             throw new ApiException(HttpStatus.FORBIDDEN, "La cuenta está desactivada");
