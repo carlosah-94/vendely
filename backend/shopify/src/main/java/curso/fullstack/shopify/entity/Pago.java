@@ -22,6 +22,7 @@ public class Pago {
     public static final short PENDIENTE = 0;
     public static final short APROBADO = 1;
     public static final short RECHAZADO = 2;
+    public static final short REEMBOLSADO = 3;   // el pedido se cancelo despues de cobrarlo
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

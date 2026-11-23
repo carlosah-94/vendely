@@ -4,7 +4,28 @@ import EtiquetaPago from '../components/EtiquetaPago';
 import Mensaje from '../components/Mensaje';
 import { useTiendaActual } from '../hooks/useTiendaActual';
 import { api, mensajeDeError } from '../services/api';
+import {
+  cancelarPedido,
+  descargarComprobanteVenta,
+  listarNotificaciones,
+  marcarEntregado,
+  marcarEnviado,
+} from '../services/pedidos';
 import { formatoFecha, formatoMoneda } from '../utils/formato';
+
+const NOMBRE_ESTADO = {
+  SIN_ENVIAR: 'Sin enviar',
+  ENVIADO: 'Enviado',
+  ENTREGADO: 'Entregado',
+  CANCELADO: 'Cancelado',
+};
+
+const NOMBRE_CORREO = {
+  PAGO_APROBADO: 'Confirmación al cliente',
+  NUEVO_PEDIDO: 'Aviso de venta nueva',
+  PEDIDO_ENVIADO: 'Aviso de envío al cliente',
+  STOCK_BAJO: 'Aviso de stock bajo',
+};
 
 /** Detalle de una venta con todos sus productos (RF3.2), y eliminarla (RF3.4). */
 export default function DetalleVenta() {
@@ -18,6 +39,12 @@ export default function DetalleVenta() {
   const [confirmando, setConfirmando] = useState(false);
   const [eliminando, setEliminando] = useState(false);
   const [errorAccion, setErrorAccion] = useState('');
+
+  // Issue #3: seguimiento del envío y correos del pedido.
+  const [correos, setCorreos] = useState([]);
+  const [envio, setEnvio] = useState({ empresaEnvio: '', numeroSeguimiento: '' });
+  const [trabajando, setTrabajando] = useState(false);
+  const [confirmandoCancelar, setConfirmandoCancelar] = useState(false);
 
   const clave = `${idTienda}-${idPedido}`;
 
@@ -41,6 +68,10 @@ export default function DetalleVenta() {
       .catch((e) => {
         if (vigente) setDatos({ clave: actual, venta: null, cliente: null, error: mensajeDeError(e) });
       });
+    // Los correos se piden aparte: si eso falla, la venta se muestra igual.
+    listarNotificaciones(idTienda, idPedido)
+      .then((lista) => vigente && setCorreos(lista))
+      .catch(() => vigente && setCorreos([]));
     return () => {
       vigente = false;
     };
@@ -62,6 +93,36 @@ export default function DetalleVenta() {
     }
   }
 
+  /**
+   * Las tres acciones del envío comparten el mismo trato: el backend responde con el pedido ya
+   * actualizado, así que se reemplaza en pantalla sin recargar, y los correos se vuelven a pedir
+   * porque el cambio pudo generar uno nuevo.
+   */
+  async function accion(ejecutar, mensajeDeExito) {
+    setTrabajando(true);
+    setErrorAccion('');
+    try {
+      const venta = await ejecutar();
+      setDatos((d) => ({ ...d, venta }));
+      setAviso(mensajeDeExito);
+      setCorreos(await listarNotificaciones(idTienda, idPedido).catch(() => correos));
+    } catch (e) {
+      setErrorAccion(mensajeDeError(e));
+    } finally {
+      setTrabajando(false);
+      setConfirmandoCancelar(false);
+    }
+  }
+
+  async function descargar() {
+    setErrorAccion('');
+    try {
+      await descargarComprobanteVenta(idTienda, idPedido, datos.venta?.numeroPedido);
+    } catch {
+      setErrorAccion('No se pudo descargar el comprobante');
+    }
+  }
+
   if (errorTiendas) {
     return <Mensaje tipo="error" texto={errorTiendas} />;
   }
@@ -78,6 +139,8 @@ export default function DetalleVenta() {
   }
 
   const { venta, cliente } = datos;
+  const pagado = venta.estadoPago === 'APROBADO';
+  const sinEnviar = venta.estado === 'SIN_ENVIAR';
 
   return (
     <section className="max-w-4xl space-y-4">
@@ -89,34 +152,45 @@ export default function DetalleVenta() {
           <h1 className="text-xl font-bold text-[#101010]">Pedido #{venta.numeroPedido}</h1>
           <p className="flex items-center gap-2 text-sm text-slate-600">
             {formatoFecha(venta.fechaCreacion)} <EtiquetaPago estado={venta.estadoPago} />
+            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs text-slate-700">
+              {NOMBRE_ESTADO[venta.estado] ?? venta.estado}
+            </span>
           </p>
         </div>
-        {confirmando ? (
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-slate-700">¿Eliminar esta venta? El stock vuelve al inventario.</span>
-            <button
-              onClick={eliminar}
-              disabled={eliminando}
-              className="rounded-md bg-red-600 px-3 py-2 text-white hover:bg-red-700 disabled:opacity-50"
-            >
-              Sí, eliminar
-            </button>
-            <button
-              onClick={() => setConfirmando(false)}
-              disabled={eliminando}
-              className="rounded-md border border-slate-300 px-3 py-2 text-slate-700 hover:bg-slate-100"
-            >
-              No
-            </button>
-          </div>
-        ) : (
+        <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => setConfirmando(true)}
-            className="rounded-md border border-red-300 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+            onClick={descargar}
+            className="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
           >
-            Eliminar venta
+            Descargar comprobante
           </button>
-        )}
+          {confirmando ? (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-slate-700">¿Eliminar esta venta? El stock vuelve al inventario.</span>
+              <button
+                onClick={eliminar}
+                disabled={eliminando}
+                className="rounded-md bg-red-600 px-3 py-2 text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                Sí, eliminar
+              </button>
+              <button
+                onClick={() => setConfirmando(false)}
+                disabled={eliminando}
+                className="rounded-md border border-slate-300 px-3 py-2 text-slate-700 hover:bg-slate-100"
+              >
+                No
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmando(true)}
+              className="rounded-md border border-red-300 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+            >
+              Eliminar venta
+            </button>
+          )}
+        </div>
       </div>
 
       {aviso && <Mensaje tipo="exito" texto={aviso} onCerrar={() => setAviso('')} />}
@@ -136,6 +210,121 @@ export default function DetalleVenta() {
         ) : (
           <p className="text-slate-600">Cliente #{venta.idLogin}</p>
         )}
+      </div>
+
+      {/* Envío (issue #3). Qué se puede hacer depende del estado del pedido:
+          sin enviar y pagado → enviar; sin enviar → cancelar; enviado → entregado. */}
+      <div className="space-y-3 rounded-lg bg-white p-5 text-sm shadow-sm">
+        <h2 className="font-semibold text-slate-800">Envío</h2>
+
+        {venta.empresaEnvio && (
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-slate-700">
+            <dt className="text-slate-500">Empresa</dt><dd>{venta.empresaEnvio}</dd>
+            <dt className="text-slate-500">Seguimiento</dt><dd className="font-medium">{venta.numeroSeguimiento}</dd>
+            <dt className="text-slate-500">Enviado el</dt><dd>{formatoFecha(venta.fechaEnvio)}</dd>
+            {venta.fechaEntrega && (
+              <>
+                <dt className="text-slate-500">Entregado el</dt><dd>{formatoFecha(venta.fechaEntrega)}</dd>
+              </>
+            )}
+          </dl>
+        )}
+
+        {venta.estado === 'CANCELADO' && (
+          <p className="text-slate-600">
+            Pedido cancelado el {formatoFecha(venta.fechaCancelacion)}. El stock volvió al inventario.
+          </p>
+        )}
+
+        {sinEnviar && !pagado && (
+          <Mensaje tipo="info" texto="Para marcar el pedido como enviado, primero tiene que estar pagado." />
+        )}
+
+        {sinEnviar && pagado && (
+          <form
+            className="flex flex-wrap items-end gap-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              accion(() => marcarEnviado(idTienda, idPedido, envio),
+                `Pedido #${venta.numeroPedido} marcado como enviado. Se le avisó al cliente.`);
+            }}
+          >
+            <label className="block">
+              <span className="block text-slate-600">Empresa de envío</span>
+              <input
+                value={envio.empresaEnvio}
+                onChange={(e) => setEnvio({ ...envio, empresaEnvio: e.target.value })}
+                required
+                maxLength={60}
+                placeholder="Olva, Shalom..."
+                className="mt-1 rounded-md border border-slate-300 px-3 py-2"
+              />
+            </label>
+            <label className="block">
+              <span className="block text-slate-600">Número de seguimiento</span>
+              <input
+                value={envio.numeroSeguimiento}
+                onChange={(e) => setEnvio({ ...envio, numeroSeguimiento: e.target.value })}
+                required
+                maxLength={60}
+                placeholder="ABC123456"
+                className="mt-1 rounded-md border border-slate-300 px-3 py-2"
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={trabajando}
+              className="rounded-md bg-violet-600 px-4 py-2 font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+            >
+              Marcar como enviado
+            </button>
+          </form>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2">
+          {venta.estado === 'ENVIADO' && (
+            <button
+              onClick={() => accion(() => marcarEntregado(idTienda, idPedido),
+                `Pedido #${venta.numeroPedido} marcado como entregado.`)}
+              disabled={trabajando}
+              className="rounded-md bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+            >
+              Marcar como entregado
+            </button>
+          )}
+          {sinEnviar && (
+            confirmandoCancelar ? (
+              <span className="flex flex-wrap items-center gap-2">
+                <span className="text-slate-700">
+                  ¿Cancelar el pedido? El stock vuelve al inventario
+                  {pagado && ' y el pago queda como reembolsado'}.
+                </span>
+                <button
+                  onClick={() => accion(() => cancelarPedido(idTienda, idPedido),
+                    `Pedido #${venta.numeroPedido} cancelado. Su stock volvió al inventario.`)}
+                  disabled={trabajando}
+                  className="rounded-md bg-red-600 px-3 py-2 text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  Sí, cancelar
+                </button>
+                <button
+                  onClick={() => setConfirmandoCancelar(false)}
+                  disabled={trabajando}
+                  className="rounded-md border border-slate-300 px-3 py-2 text-slate-700 hover:bg-slate-100"
+                >
+                  No
+                </button>
+              </span>
+            ) : (
+              <button
+                onClick={() => setConfirmandoCancelar(true)}
+                className="rounded-md border border-red-300 px-4 py-2 text-red-600 hover:bg-red-50"
+              >
+                Cancelar pedido
+              </button>
+            )
+          )}
+        </div>
       </div>
 
       {/* Productos de la venta (detalle_pedido) */}
@@ -183,6 +372,39 @@ export default function DetalleVenta() {
             <dd>{formatoMoneda(venta.total, venta.moneda)}</dd>
           </div>
         </dl>
+      </div>
+
+      {/* Correos de este pedido (issue #3). SIMULADO = no hay RESEND_API_KEY configurada. */}
+      <div className="rounded-lg bg-white p-5 text-sm shadow-sm">
+        <h2 className="mb-2 font-semibold text-slate-800">Correos enviados</h2>
+        {correos.length === 0 ? (
+          <p className="text-slate-500">Todavía no se envió ningún correo por este pedido.</p>
+        ) : (
+          <ul className="divide-y divide-slate-100">
+            {correos.map((c) => (
+              <li key={c.idNotificacion} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                <div>
+                  <p className="text-slate-800">{NOMBRE_CORREO[c.tipo] ?? c.tipo}</p>
+                  <p className="text-xs text-slate-500">
+                    {c.destinatario} · {formatoFecha(c.fechaEnvio ?? c.fechaCreacion)}
+                  </p>
+                  {c.error && <p className="text-xs text-red-600">{c.error}</p>}
+                </div>
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-xs ${
+                    c.estado === 'ENVIADO'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : c.estado === 'FALLIDO'
+                        ? 'bg-red-100 text-red-800'
+                        : 'bg-slate-100 text-slate-700'
+                  }`}
+                >
+                  {c.estado === 'SIMULADO' ? 'Simulado' : c.estado === 'FALLIDO' ? 'Falló' : 'Enviado'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </section>
   );

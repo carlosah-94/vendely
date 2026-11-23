@@ -25,6 +25,9 @@ export default function Ventas() {
   const [errorAccion, setErrorAccion] = useState('');
   const [porEliminar, setPorEliminar] = useState(null);
   const [eliminando, setEliminando] = useState(false);
+  // Filtro por estado del pedido (issue #3). Se filtra en la pantalla y no en el backend:
+  // la lista ya esta completa en memoria, asi que cambiar el filtro no cuesta una peticion.
+  const [filtro, setFiltro] = useState('TODOS');
 
   useEffect(() => {
     if (!idTienda) {
@@ -44,6 +47,7 @@ export default function Ventas() {
   }, [idTienda]);
 
   const cargando = cargandoTiendas || (idTienda !== null && datos.idTienda !== idTienda);
+  const ventas = filtro === 'TODOS' ? datos.ventas : datos.ventas.filter((v) => v.estado === filtro);
 
   async function eliminar(venta) {
     setEliminando(true);
@@ -76,12 +80,27 @@ export default function Ventas() {
             <SelectorTienda tiendas={tiendas} idTienda={idTienda} onCambiar={cambiarTienda} />
           )}
         </div>
-        <Link
-          to="/panel/ventas/nueva"
-          className="rounded-md bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
-        >
-          Registrar venta
-        </Link>
+        <div className="flex items-center gap-3">
+          <label className="text-sm text-slate-600">
+            Estado{' '}
+            <select
+              value={filtro}
+              onChange={(e) => setFiltro(e.target.value)}
+              className="rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-800"
+            >
+              <option value="TODOS">Todos</option>
+              {Object.entries(NOMBRE_ESTADO).map(([clave, nombre]) => (
+                <option key={clave} value={clave}>{nombre}</option>
+              ))}
+            </select>
+          </label>
+          <Link
+            to="/panel/ventas/nueva"
+            className="rounded-md bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
+          >
+            Registrar venta
+          </Link>
+        </div>
       </div>
 
       {aviso && <Mensaje tipo="exito" texto={aviso} onCerrar={() => setAviso('')} />}
@@ -91,13 +110,26 @@ export default function Ventas() {
       <div className="overflow-x-auto rounded-lg bg-white shadow-sm">
         {cargando ? (
           <p className="p-6 text-slate-500">Cargando ventas...</p>
-        ) : datos.ventas.length === 0 ? (
+        ) : ventas.length === 0 ? (
           <div className="p-10 text-center space-y-3">
-            <p className="text-lg font-medium text-slate-800">Aún no hay ventas</p>
-            <p className="text-slate-500">Cuando registres una venta, aparecerá aquí.</p>
-            <Link to="/panel/ventas/nueva" className="inline-block text-violet-600 hover:underline">
-              Registrar la primera venta
-            </Link>
+            {filtro === 'TODOS' ? (
+              <>
+                <p className="text-lg font-medium text-slate-800">Aún no hay ventas</p>
+                <p className="text-slate-500">Cuando registres una venta, aparecerá aquí.</p>
+                <Link to="/panel/ventas/nueva" className="inline-block text-violet-600 hover:underline">
+                  Registrar la primera venta
+                </Link>
+              </>
+            ) : (
+              <>
+                <p className="text-lg font-medium text-slate-800">
+                  Ningún pedido está {NOMBRE_ESTADO[filtro].toLowerCase()}
+                </p>
+                <button onClick={() => setFiltro('TODOS')} className="text-violet-600 hover:underline">
+                  Ver todos los pedidos
+                </button>
+              </>
+            )}
           </div>
         ) : (
           <table className="w-full text-left text-sm">
@@ -113,7 +145,7 @@ export default function Ventas() {
               </tr>
             </thead>
             <tbody>
-              {datos.ventas.map((v) => (
+              {ventas.map((v) => (
                 <tr key={v.idPedido} className="border-b border-slate-100 last:border-0">
                   <td className="px-4 py-3 font-medium text-slate-800">#{v.numeroPedido}</td>
                   <td className="px-4 py-3 text-slate-600">{formatoFecha(v.fechaCreacion)}</td>

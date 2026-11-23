@@ -50,13 +50,17 @@ shopity/
 | Tienda pública: vitrina con filtros por categoría, detalle con variantes y carrito | Sí | Sí (`/tienda/:subdominio`) |
 | Cliente: ingreso, direcciones (también en otros países), costo de envío, checkout y "Mis pedidos" | Sí | Sí (`/tienda/:subdominio/checkout`, `/mis-pedidos`) |
 | Pago en modo de prueba: PayPal Sandbox o Mercado Pago | Sí | Sí (`/tienda/:subdominio/pago/resultado`) |
+| Seguimiento del envío: enviado (con empresa y número), entregado y cancelado | Sí | Sí (en el detalle de la venta y en "Mis pedidos") |
+| Correos de confirmación, de envío y de stock bajo, con su registro | Sí | Sí (los correos del pedido, en el detalle de la venta) |
+| Comprobante de compra en PDF | Sí | Sí (se descarga desde el panel y desde "Mis pedidos") |
 | Panel del superadmin: resumen, tiendas y cuentas (suspender y reactivar) | Sí | Sí (`/admin/tiendas`, `/admin/cuentas`) |
 | Manejo de errores y logs | Sí | Mensajes de error en cada pantalla |
 | Despliegue (Neon, Render y Vercel) | Sí | https://shopity-7zya.vercel.app |
 
 ### Pendiente
 
-- Probar de punta a punta el pago en producción (necesita las credenciales de prueba de PayPal o Mercado Pago en Render; sin ellas la API responde 503).
+- Probar de punta a punta el pago en producción (necesita las credenciales de prueba de PayPal o Mercado Pago en Render; sin ellas la API responde 503). Con ese pago real quedan por comprobar las dos cosas que cuelgan de él: la comisión que se guarda en el pedido y los correos de confirmación.
+- Enviar correos de verdad: sin `RESEND_API_KEY` se registran como "simulado" y no salen.
 - Pruebas automatizadas del backend (JUnit y MockMvc).
 - Ofertas (tablas `ofertas` y `oferta_productos`): existen en la base, pero aún no tienen API ni pantalla.
 - Habilitar más países (México, Colombia, Argentina y Ecuador ya tienen su primer nivel territorial; falta cargar su lista completa, como `04_habilitar_chile.sql`).
@@ -201,6 +205,8 @@ Variables de entorno (las lee `application.yml`):
 | `FRONTEND_URL` | `https://shopity-7zya.vercel.app` (adonde vuelve el comprador después de pagar) |
 | `MERCADOPAGO_ACCESS_TOKEN`, `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` | opcionales, credenciales **de prueba** |
 | `MERCADOPAGO_WEBHOOK_SECRET`, `PAYPAL_WEBHOOK_ID` | opcionales, para recibir los avisos de pago |
+| `RESEND_API_KEY` | opcional; sin ella los correos se registran como "simulado" y no se envían |
+| `RESEND_REMITENTE` | opcional, `Vendely <onboarding@resend.dev>` por defecto |
 | `FLYWAY_LOCATIONS` | `classpath:db/migration` (sin los usuarios de prueba) |
 
 `CORS_ORIGENES` se compara letra por letra: va sin `/` al final y, si hay varias direcciones, separadas solo por comas, sin espacios. Si no coincide, el navegador bloquea las peticiones con un error de CORS.
@@ -546,6 +552,12 @@ Cada tienda tiene su vitrina en `/tienda/{subdominio}` (por ejemplo `/tienda/mod
 | `POST /api/cliente/pedidos/{idPedido}/pago/confirmar` | CLIENTE | Confirmar el resultado del pago |
 | `POST /api/public/pagos/webhook/mercadopago` | Mercado Pago | Aviso de la pasarela (firmado; no lo llama el navegador) |
 | `POST /api/public/pagos/webhook/paypal` | PayPal | Aviso de la pasarela (firmado; no lo llama el navegador) |
+| `GET /api/cliente/pedidos/{idPedido}/comprobante` | CLIENTE | Descarga su comprobante en PDF |
+| `PATCH /api/panel/tiendas/{idTienda}/pedidos/{idPedido}/envio` | ADMIN_TIENDA | Marca el pedido como enviado (empresa y número) |
+| `PATCH /api/panel/tiendas/{idTienda}/pedidos/{idPedido}/entrega` | ADMIN_TIENDA | Marca el pedido como entregado |
+| `PATCH /api/panel/tiendas/{idTienda}/pedidos/{idPedido}/cancelacion` | ADMIN_TIENDA | Cancela el pedido y devuelve el stock |
+| `GET /api/panel/tiendas/{idTienda}/pedidos/{idPedido}/comprobante` | ADMIN_TIENDA | Descarga el comprobante de la venta |
+| `GET /api/panel/tiendas/{idTienda}/pedidos/{idPedido}/notificaciones` | ADMIN_TIENDA | Los correos enviados por ese pedido |
 
 **Flujo de compra:** vitrina → carrito → ingresar → checkout (dirección y costo de envío) → pedido → pago → vuelve a `/tienda/{subdominio}/pago/resultado` (usa `FRONTEND_URL`) → "Mis pedidos".
 
@@ -553,6 +565,8 @@ Cada tienda tiene su vitrina en `/tienda/{subdominio}` (por ejemplo `/tienda/mod
 - **Direcciones:** en un país con lista oficial (Perú, Chile) el distrito o la comuna se elige de la lista; en otros países se escriben región, ciudad y código postal. Si la tienda no tiene tarifa para ese destino, el checkout lo avisa y no deja crear el pedido.
 - **Pago en modo de prueba:** se usa **PayPal Sandbox** si están `PAYPAL_CLIENT_ID` y `PAYPAL_CLIENT_SECRET`; si no, **Mercado Pago Checkout Pro** si está `MERCADOPAGO_ACCESS_TOKEN`. PayPal cobra en dólares, así que el monto en soles se convierte con `PAYPAL_TIPO_CAMBIO` (3.75 soles por dólar por defecto). Sin credenciales, iniciar el pago responde 503 "El pago en línea no está disponible por ahora".
 - Al confirmar, el backend consulta el pago en la pasarela y compara estado, pedido y monto: nunca confía en lo que diga el navegador.
+- **Después del pago:** el pedido pasa de *sin enviar* a *enviado* (el dueño escribe la empresa y el número de seguimiento) y de ahí a *entregado*. Cancelar solo se puede antes de enviar: devuelve el stock al inventario y, si ya se había cobrado, deja el pago como reembolsado. Cada cambio queda con su fecha, y el cliente ve esa línea de tiempo en "Mis pedidos".
+- **Correos:** al aprobarse el pago salen dos (la confirmación al cliente, con el comprobante en PDF adjunto, y el aviso de venta nueva al dueño); al marcar el envío, uno al cliente con el número de seguimiento; y cuando a un producto le queda menos que su stock mínimo, un aviso al dueño. Se envían en segundo plano y cada intento queda registrado (enviado, fallido con su motivo, o simulado si no hay `RESEND_API_KEY`): un correo que no sale no afecta a la venta.
 - **El pago no depende de que el comprador vuelva.** Si cierra la pestaña o se le corta el internet en la pasarela, el pedido quedaría pagado y pendiente. Para eso hay dos respaldos: el **aviso** que manda la pasarela (webhook), que entra por su propia ruta y pasa por la misma verificación que el regreso del navegador, y una **revisión cada 15 minutos** que le pregunta a la pasarela por los pagos que llevan más de 30 minutos pendientes. En local, sin una dirección pública donde recibir avisos, esa revisión es la que cierra los pagos.
 
 ## Manejo de errores y logs

@@ -9,6 +9,7 @@ import curso.fullstack.shopify.dto.VentaResponse;
 import curso.fullstack.shopify.security.UsuarioAutenticado;
 import curso.fullstack.shopify.service.PagoService;
 import curso.fullstack.shopify.service.PedidoService;
+import curso.fullstack.shopify.service.ComprobanteService;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -30,10 +31,13 @@ public class ClientePedidoController {
 
     private final PedidoService pedidoService;
     private final PagoService pagoService;
+    private final ComprobanteService comprobanteService;
 
-    public ClientePedidoController(PedidoService pedidoService, PagoService pagoService) {
+    public ClientePedidoController(PedidoService pedidoService, PagoService pagoService,
+                                   ComprobanteService comprobanteService) {
         this.pedidoService = pedidoService;
         this.pagoService = pagoService;
+        this.comprobanteService = comprobanteService;
     }
 
     /** Mis pedidos en la tienda donde estoy registrado. */
@@ -54,6 +58,16 @@ public class ClientePedidoController {
     public VentaResponse crear(@AuthenticationPrincipal UsuarioAutenticado yo,
                                @Valid @RequestBody PedidoClienteRequest r) {
         return pedidoService.registrarDesdeTienda(yo, r);
+    }
+
+    /**
+     * Descarga el comprobante de uno de mis pedidos (issue #3). El pedido se busca con el
+     * idLogin del token: pedir el comprobante de otro cliente responde 404.
+     */
+    @GetMapping("/{idPedido}/comprobante")
+    public org.springframework.http.ResponseEntity<byte[]> comprobante(
+            @AuthenticationPrincipal UsuarioAutenticado yo, @PathVariable Long idPedido) {
+        return PedidoController.comoPdf(comprobanteService.miComprobante(yo, idPedido));
     }
 
     /** Inicia el pago con Mercado Pago: responde la URL a donde enviar al cliente. */

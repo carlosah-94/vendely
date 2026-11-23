@@ -30,6 +30,8 @@ La API queda en `http://localhost:8080/api`.
 | `MERCADOPAGO_ACCESS_TOKEN` | Token de **prueba** (`TEST-...`). Sin él, el pago responde 503 | vacío |
 | `MERCADOPAGO_WEBHOOK_SECRET` | Clave con la que Mercado Pago firma sus avisos. Sin ella, su webhook responde 503 | vacío |
 | `PAYPAL_WEBHOOK_ID` | Id del webhook de PayPal, para preguntarle si un aviso es auténtico | vacío |
+| `RESEND_API_KEY` | Clave de resend.com. Sin ella los correos se registran como "simulado" | vacío |
+| `RESEND_REMITENTE` | Remitente de los correos | `Vendely <onboarding@resend.dev>` |
 | `FRONTEND_URL` | Adonde vuelve el cliente tras pagar | `http://localhost:5173` |
 | `FLYWAY_LOCATIONS` | Carpetas de migraciones. En el servidor: `classpath:db/migration` (sin los usuarios de prueba) | las dos carpetas |
 | `SERVER_PORT` | Puerto de la API | 8080 |
@@ -112,6 +114,52 @@ Paquete base: `curso.fullstack.shopify`
 | GET | `/api/cliente/pedidos/{idPedido}` | Detalle de un pedido |
 | POST | `/api/cliente/pedidos/{idPedido}/pago` | Inicia el pago en Mercado Pago |
 | POST | `/api/cliente/pedidos/{idPedido}/pago/confirmar` | Confirma el resultado del pago |
+| GET | `/api/cliente/pedidos/{idPedido}/comprobante` | Su comprobante de compra en PDF |
+
+## Pedidos: envío, correos y comprobante
+
+### Seguimiento del envío
+
+| Método | Ruta | Qué hace |
+|---|---|---|
+| PATCH | `/api/panel/tiendas/{idTienda}/pedidos/{idPedido}/envio` | Marca como enviado (pide empresa y número) |
+| PATCH | `/api/panel/tiendas/{idTienda}/pedidos/{idPedido}/entrega` | Marca como entregado |
+| PATCH | `/api/panel/tiendas/{idTienda}/pedidos/{idPedido}/cancelacion` | Cancela y devuelve el stock |
+| GET | `/api/panel/tiendas/{idTienda}/pedidos/{idPedido}/comprobante` | El comprobante de la venta en PDF |
+| GET | `/api/panel/tiendas/{idTienda}/pedidos/{idPedido}/notificaciones` | Los correos de ese pedido |
+
+Los estados son los de la columna `pedidos.estado`: 0 sin enviar, 1 enviado, 2 entregado, 3 cancelado. Las reglas las aplica `PedidoService` y son tres:
+
+1. **Solo un pedido pagado puede enviarse.** Despachar mercadería sin haber cobrado es una pérdida; es la misma razón por la que un pedido pagado tampoco se puede eliminar.
+2. **Solo un pedido enviado puede entregarse.**
+3. **Cancelar solo antes de enviar.** Devuelve el stock al inventario y, si ya se había cobrado, deja el pago como `REEMBOLSADO` (el dinero lo devuelve el dueño en la pasarela; Vendely solo lo registra). Todo en una transacción: nunca queda un pedido cancelado con el stock sin devolver.
+
+Una acción en el estado equivocado responde 409 diciendo en qué estado está el pedido. Cada cambio publica `PedidoEstadoCambiadoEvent` y guarda su fecha (`fecha_envio`, `fecha_entrega`, `fecha_cancelacion`), que es lo que el cliente ve como línea de tiempo.
+
+Al aprobarse el pago, `PagoService` guarda además `comision_plataforma`: el total por la comisión del plan que la tienda tiene **en ese momento**, para que un cambio de plan posterior no altere lo ya cobrado.
+
+### Correos (`NotificacionService`)
+
+| Cuándo | A quién | Qué lleva |
+|---|---|---|
+| Pago aprobado | Al cliente | La confirmación, con el comprobante en PDF adjunto |
+| Pago aprobado | Al dueño | El aviso de venta nueva |
+| Pedido enviado | Al cliente | La empresa y el número de seguimiento |
+| Stock bajo el mínimo | Al dueño | Qué producto y cuánto queda |
+
+Tres decisiones que explican el diseño:
+
+- **En segundo plano** (`@Async`), disparados por `NotificacionListener` desde los eventos del negocio con `@TransactionalEventListener`: el correo sale solo si la transacción se guardó de verdad, y el cliente que acaba de pagar no espera al proveedor de correo. `PedidoService` y `PagoService` no saben que el correo existe.
+- **Cada intento se registra** en la tabla `notificaciones` con su estado: enviado, fallido (con el motivo) o simulado. Un correo que no llegó y no deja rastro es un problema que nadie puede atender. Si Resend falla, el pedido sigue su curso.
+- **Sin `RESEND_API_KEY` no se envía nada**: se registra como `SIMULADO`. Así el proyecto corre completo en cualquier máquina del equipo sin crear una cuenta.
+
+El cuerpo es HTML con estilos en línea (los clientes de correo ignoran las hojas de estilo) y lleva el nombre y el color de la tienda. Todo texto que viene de la base se escapa: un nombre de producto con `<` no puede romper el correo. En el log los correos van enmascarados (`c***@vendely.pe`).
+
+### Comprobante en PDF (`ComprobanteService`)
+
+Se genera con OpenPDF e incluye los datos de la tienda y del cliente, la dirección de envío, los productos con el precio que **se cobró** (se lee por `id_precio`, no el precio actual), el valor sin impuesto, el impuesto incluido con su nombre (IGV o IVA según el país), el total y el método de pago. Lleva impresa la advertencia *"Comprobante interno, no válido como comprobante SUNAT"*: emitir una boleta o factura de verdad exige estar autorizado ante la SUNAT.
+
+Se descarga desde el panel y desde "Mis pedidos", y se adjunta al correo de confirmación. El del cliente se busca con el `idLogin` del token: pedir el comprobante de otro cliente responde 404.
 
 ## Avisos de pago (webhook)
 
@@ -152,6 +200,7 @@ La base la construye **Flyway** al arrancar, antes de que Hibernate valide las e
 | `migration-local/V3__usuarios_prueba.sql` | Una cuenta por rol. **Solo en desarrollo** |
 | `migration/V4__habilitar_chile.sql` | Provincias y comunas de Chile; lo habilita |
 | `migration/V5__planes_plantillas.sql` | Planes, suscripciones y plantillas |
+| `migration/V6__pedidos_notificaciones_envio.sql` | Seguimiento del envío, comisión y tabla `notificaciones` |
 
 Flyway aplica cada una una sola vez y guarda su huella en `flyway_schema_history`. De ahí salen dos reglas:
 
@@ -183,7 +232,8 @@ Hibernate sigue en `ddl-auto: validate`: solo comprueba que las entidades coinci
 
 ### Pendiente
 
-- [ ] **Pago:** el último intento respondió 503 (`El pago en línea no está disponible por ahora`). Revisar `MERCADOPAGO_ACCESS_TOKEN` y probar el flujo completo, incluida la confirmación y el aviso de la pasarela con una dirección pública.
+- [ ] **Pago:** el último intento respondió 503 (`El pago en línea no está disponible por ahora`). Revisar `MERCADOPAGO_ACCESS_TOKEN` y probar el flujo completo, incluida la confirmación y el aviso de la pasarela con una dirección pública. De ese pago real cuelgan dos cosas que todavía no se pudieron comprobar: la `comision_plataforma` que se guarda en el pedido y los dos correos de pago aprobado.
+- [ ] **Correos de verdad:** con `RESEND_API_KEY`, comprobar que llegan y que el PDF viaja como adjunto. Sin la clave quedan registrados como `SIMULADO`.
 - [ ] **Pruebas automatizadas:** no hay tests Java (JUnit y MockMvc para `AuthService`, `PedidoService`, `PagoService`).
 - [ ] **Rol `SUPERADMIN`:** la ruta `/api/admin/**` existe pero no tiene endpoints.
 - [ ] **Categorías de productos:** la tabla `categorias` existe, pero la API aún no las expone.

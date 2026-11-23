@@ -29,6 +29,14 @@ public interface PedidoRepository extends JpaRepository<Pedido, Long> {
      * Regla del issue #8: una venta con pago aprobado (estado 1) no se elimina, porque el cobro
      * ya se hizo. Se consulta con SQL directo para no crear todavía una entidad Pago.
      */
+    /**
+     * El nombre del impuesto del pedido (IGV en Peru, IVA en Chile) para imprimirlo en el
+     * comprobante. Es una consulta directa a impuestos: la tabla no necesita entidad propia,
+     * solo se lee este texto.
+     */
+    @Query(value = "SELECT nombre FROM impuestos WHERE id_impuesto = :idImpuesto", nativeQuery = true)
+    String nombreDelImpuesto(@Param("idImpuesto") Short idImpuesto);
+
     @Query(value = "SELECT EXISTS (SELECT 1 FROM pagos WHERE id_pedido = :idPedido AND estado = 1)",
            nativeQuery = true)
     boolean tienePagoAprobado(@Param("idPedido") Long idPedido);
