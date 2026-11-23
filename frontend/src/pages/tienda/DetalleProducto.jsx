@@ -7,6 +7,8 @@ import { useCarrito } from '../../context/CarritoContext';
 import { mensajeDeError } from '../../services/api';
 import { enOferta } from '../../utils/formato';
 import { obtenerProducto } from '../../services/tienda';
+import { useTiempoReal } from '../../hooks/useTiempoReal';
+import { canales } from '../../services/tiempoReal';
 
 /** Valores iniciales: los de la primera variante con stock (o la primera, si todas están agotadas). */
 function valoresIniciales(p) {
@@ -21,13 +23,22 @@ const mismos = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
  * cantidad y botones a la derecha. Cada combinación es una variante con su precio y su stock.
  */
 export default function DetalleProducto() {
-  const { subdominio } = useOutletContext();
+  const { subdominio, tienda } = useOutletContext();
   const { idProducto } = useParams();
   const { agregar, abrir } = useCarrito();
   const navigate = useNavigate();
 
   const clave = `${subdominio}-${idProducto}`;
   const [estado, setEstado] = useState({ clave: null, producto: null, error: '' });
+  // Tiempo real (issue #4): si cambia el stock de alguna variante de ESTE producto, se recarga.
+  // Asi el limite de cantidad y el "Agotado" estan al dia aunque otro cliente compre mientras tanto.
+  const [version, setVersion] = useState(0);
+  useTiempoReal(tienda?.idTienda ? canales.stockDeTienda(tienda.idTienda) : null, (aviso) => {
+    const p = estado.producto;
+    if (p && (p.idVariante === aviso.idVariante || (p.variantes ?? []).some((v) => v.idVariante === aviso.idVariante))) {
+      setVersion((v) => v + 1);
+    }
+  });
   const [cantidad, setCantidad] = useState(1);
   const [fotoElegida, setFotoElegida] = useState(0);
   // Valores elegidos de cada opción, del producto de esta página: { clave, valores }.
@@ -41,7 +52,7 @@ export default function DetalleProducto() {
     return () => {
       vigente = false;
     };
-  }, [subdominio, idProducto, clave]);
+  }, [subdominio, idProducto, clave, version]);
 
   if (estado.clave !== clave) {
     return <p className="p-10 text-center text-[#616161]">Cargando producto...</p>;

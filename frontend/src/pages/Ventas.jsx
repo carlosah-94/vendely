@@ -5,6 +5,8 @@ import Mensaje from '../components/Mensaje';
 import SelectorTienda from '../components/SelectorTienda';
 import { useTiendaActual } from '../hooks/useTiendaActual';
 import { api, mensajeDeError } from '../services/api';
+import { useTiempoReal } from '../hooks/useTiempoReal';
+import { canales } from '../services/tiempoReal';
 import { formatoFecha, formatoMoneda } from '../utils/formato';
 
 const NOMBRE_ESTADO = {
@@ -21,6 +23,11 @@ export default function Ventas() {
 
   // Se guarda de qué tienda son las ventas: si no coincide con la elegida, todavía se están cargando.
   const [datos, setDatos] = useState({ idTienda: null, ventas: [], error: '' });
+  // Tiempo real (issue #4): cualquier aviso de pedidos de esta tienda (nuevo, pagado, enviado…)
+  // vuelve a pedir la lista. Se pide de nuevo en vez de armarla con el aviso, para que lo que se
+  // ve pase por la misma API y los mismos permisos que al recargar.
+  const [version, setVersion] = useState(0);
+  useTiempoReal(idTienda ? canales.pedidosDeTienda(idTienda) : null, () => setVersion((v) => v + 1));
   const [aviso, setAviso] = useState(location.state?.aviso ?? '');
   const [errorAccion, setErrorAccion] = useState('');
   const [porEliminar, setPorEliminar] = useState(null);
@@ -44,7 +51,7 @@ export default function Ventas() {
     return () => {
       vigente = false;
     };
-  }, [idTienda]);
+  }, [idTienda, version]);
 
   const cargando = cargandoTiendas || (idTienda !== null && datos.idTienda !== idTienda);
   const ventas = filtro === 'TODOS' ? datos.ventas : datos.ventas.filter((v) => v.estado === filtro);

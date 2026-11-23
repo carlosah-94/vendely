@@ -12,6 +12,8 @@ import { useCarrito } from '../../context/CarritoContext';
 import { mensajeDeError } from '../../services/api';
 import { categoriasPublicas } from '../../services/categorias';
 import { listarProductos } from '../../services/tienda';
+import { useTiempoReal } from '../../hooks/useTiempoReal';
+import { canales } from '../../services/tiempoReal';
 import { enOferta } from '../../utils/formato';
 
 /**
@@ -29,6 +31,14 @@ export default function Vitrina() {
   // null = todavía no llegaron; [] = la tienda no tiene categorías.
   const [categorias, setCategorias] = useState(null);
   const [estado, setEstado] = useState({ clave: null, productos: [], total: 0, paginas: 0, error: '' });
+  // Tiempo real (issue #4): si cambia el stock de un producto que se esta mostrando (alguien
+  // compro, o el dueño repuso), se vuelve a pedir la pagina. Los demas avisos se ignoran.
+  const [version, setVersion] = useState(0);
+  useTiempoReal(tienda?.idTienda ? canales.stockDeTienda(tienda.idTienda) : null, (aviso) => {
+    const seMuestra = estado.productos.some((p) =>
+      p.idVariante === aviso.idVariante || (p.variantes ?? []).some((v) => v.idVariante === aviso.idVariante));
+    if (seMuestra) setVersion((v) => v + 1);
+  });
   // Una muestra sin filtrar, solo para la decoración de las plantillas (collage, portada y las
   // fotos de cada categoría): con los filtros puestos, esas imágenes no deben desaparecer.
   const [muestra, setMuestra] = useState([]);
@@ -88,7 +98,7 @@ export default function Vitrina() {
     return () => {
       vigente = false;
     };
-  }, [subdominio, consulta, categorias, elegida?.idCategoria, filtros]);
+  }, [subdominio, consulta, categorias, elegida?.idCategoria, filtros, version]);
 
   /** Cambia filtros en la URL. Cualquier cambio vuelve a la página 1, salvo el de página. */
   function cambiarFiltro(cambios) {

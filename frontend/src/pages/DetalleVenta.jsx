@@ -12,6 +12,8 @@ import {
   marcarEnviado,
 } from '../services/pedidos';
 import { formatoFecha, formatoMoneda } from '../utils/formato';
+import { useTiempoReal } from '../hooks/useTiempoReal';
+import { canales } from '../services/tiempoReal';
 
 const NOMBRE_ESTADO = {
   SIN_ENVIAR: 'Sin enviar',
@@ -35,6 +37,12 @@ export default function DetalleVenta() {
   const navigate = useNavigate();
 
   const [datos, setDatos] = useState({ clave: null, venta: null, cliente: null, error: '' });
+  // Tiempo real (issue #4): si se paga este pedido (por ejemplo, llega el aviso del webhook
+  // mientras el dueño lo mira), se recarga solo. Los avisos de otros pedidos se ignoran.
+  const [version, setVersion] = useState(0);
+  useTiempoReal(idTienda ? canales.pedidosDeTienda(idTienda) : null, (aviso) => {
+    if (String(aviso.idPedido) === String(idPedido)) setVersion((v) => v + 1);
+  });
   const [aviso, setAviso] = useState(location.state?.aviso ?? '');
   const [confirmando, setConfirmando] = useState(false);
   const [eliminando, setEliminando] = useState(false);
@@ -75,7 +83,7 @@ export default function DetalleVenta() {
     return () => {
       vigente = false;
     };
-  }, [idTienda, idPedido]);
+  }, [idTienda, idPedido, version]);
 
   async function eliminar() {
     setEliminando(true);

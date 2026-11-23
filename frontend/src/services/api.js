@@ -2,7 +2,7 @@ import axios from "axios";
 
 // Dirección del backend. En Docker llega por VITE_API_BASE_URL;
 // en desarrollo local usa el backend de NetBeans.
-const URL_API =
+export const URL_API =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080/api";
 
 const CLAVE_TOKEN = "vendely_token";

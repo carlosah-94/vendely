@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import Campanita from './Campanita';
 import { ToastProvider } from '../context/ToastContext';
 import { useTiendaActual } from '../hooks/useTiendaActual';
 import {
@@ -139,6 +140,8 @@ export default function LayoutPanel() {
           )}
 
           <div className="ml-auto flex items-center gap-2.5 sm:ml-0 md:w-52 md:justify-end">
+            {/* Pedidos nuevos en vivo (issue #4). Va dentro del ToastProvider, que muestra el aviso. */}
+            {esDueno && <Campanita />}
             <div className="hidden text-right leading-tight lg:block">
               <p className="text-[13px] font-medium text-white">{usuario.nombres} {usuario.primerApellido}</p>
               <p className="text-[12px] text-[#8a8a8a]">{NOMBRE_ROL[usuario.rol] ?? usuario.rol}</p>
