@@ -1,0 +1,36 @@
+# Configuracion de las pruebas automatizadas (issue #9). Se activa con @ActiveProfiles("test").
+#
+# La base NO se configura aqui: la pone PruebaIntegracion apuntando al Postgres que levanta
+# Testcontainers. Flyway aplica todas las migraciones al arrancar, incluidos los usuarios de
+# prueba de db/migration-local (son los mismos que se usan en local).
+
+app:
+  jwt:
+    # Clave fija solo para las pruebas: nunca es la del servidor.
+    secret: clave-de-las-pruebas-automatizadas-de-vendely-0123456789
+    expiration: 3600000
+  # Ninguna prueba sale a internet: las pasarelas, Resend y Cloudinary se reemplazan con
+  # @MockBean. Se vacian igual por si alguien tiene un secretos-local.properties con claves.
+  mercadopago:
+    access-token: ""
+    webhook-secret: ""
+  paypal:
+    client-id: ""
+    client-secret: ""
+    webhook-id: ""
+  resend:
+    api-key: ""
+  cloudinary:
+    url: ""
+  pagos:
+    # La conciliacion de pagos corre sola cada 15 minutos; en las pruebas no debe arrancar.
+    conciliacion-espera-inicial-ms: 86400000
+    conciliacion-cada-ms: 86400000
+
+logging:
+  file:
+    name: ""          # en las pruebas el log va solo a la consola, no a logs/vendely.log
+  level:
+    root: WARN
+    curso.fullstack.shopify: WARN
+    org.testcontainers: INFO

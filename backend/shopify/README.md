@@ -306,6 +306,29 @@ Hibernate sigue en `ddl-auto: validate`: solo comprueba que las entidades coinci
 
 `db/tests/03_pruebas.sql` (en la raíz del repositorio) tiene casos que la base debe aceptar y rechazar; no es una migración y no lo aplica Flyway.
 
+## Pruebas automatizadas
+
+```bash
+mvn test
+```
+
+Requisito: **Docker encendido** (Docker Desktop en Windows). No hace falta la base de `docker compose` ni ninguna credencial: Testcontainers levanta un Postgres 16 propio, Flyway le aplica las migraciones (incluidos los usuarios de prueba) y al terminar el contenedor se borra solo. Ningún test sale a internet: Mercado Pago, PayPal, Resend y Cloudinary se reemplazan con `@MockBean`. La suite completa tarda menos de un minuto; la primera vez demora un poco más porque descarga la imagen de Postgres.
+
+Para correr una sola clase: `mvn test -Dtest=PagoServiceTest`. Desde NetBeans: clic derecho sobre el proyecto → *Test*.
+
+| Clase | Qué protege |
+|---|---|
+| `security/AislamientoTiendasTest` | Que un dueño no entre a otra tienda: un endpoint de cada controller del panel responde 403 con el token de otro dueño y 404 si la tienda no existe. Si se borra la llamada a `verificadorTienda.delDueno(...)` de cualquiera de ellos, falla. |
+| `service/PagoServiceTest` | Que solo se apruebe un pago consultado en la pasarela, de **este** pedido y por **el** monto exacto; que confirmar dos veces deje un solo pago aprobado y un solo evento; que un cliente no confirme el pedido de otro. |
+| `service/PedidoServiceTest` | Que una venta sea todo o nada: si falta stock en una línea, el inventario queda exactamente como estaba. Líneas repetidas, eliminar con devolución de stock y productos que no están a la venta. |
+| `service/PlanServiceTest` | Los límites de cada plan y el texto "Mejora tu plan" del 403, del que depende `esErrorDePlan()` en el frontend. |
+| `security/SesionTest` | Que un token deje de servir si está firmado con otra clave, vencido, emitido antes del cambio de contraseña o si la cuenta se suspendió; y que el login no revele qué correos existen. |
+| `security/TotpTest`, `tiemporeal/CanalesTest` | El generador de códigos de la doble autenticación y quién escucha cada canal de tiempo real. No levantan Spring. |
+
+**Cómo están armadas.** Las de integración heredan de `PruebaIntegracion`: Spring completo, MockMvc y un solo contenedor para toda la suite. Cada prueba crea sus propias tiendas, productos y clientes con `DatosPrueba` (SQL directo), así no depende del orden ni de lo que dejaron las otras. A propósito **no** se usa `@Transactional` en las clases de prueba: la transacción del service tiene que confirmarse o deshacerse de verdad para poder comprobar, por ejemplo, que el stock vuelve a su valor si la venta falla.
+
+El CI (`.github/workflows/ci.yml`) las corre en cada PR con `mvn package`; el runner de GitHub ya trae Docker. El `Dockerfile` compila con `-DskipTests` porque Render no tiene Docker para Testcontainers.
+
 ## Errores y logs
 
 - Todos los errores salen con el mismo formato JSON (`ApiError`).
@@ -324,12 +347,12 @@ Hibernate sigue en `ddl-auto: validate`: solo comprueba que las entidades coinci
 - Integración con Mercado Pago en modo de prueba
 - Manejo de errores unificado y logs con rotación
 - Colección de Postman en `postman/`
+- Pruebas automatizadas con JUnit, MockMvc y Testcontainers (ver "Pruebas automatizadas")
 
 ### Pendiente
 
 - [ ] **Pago:** el último intento respondió 503 (`El pago en línea no está disponible por ahora`). Revisar `MERCADOPAGO_ACCESS_TOKEN` y probar el flujo completo, incluida la confirmación y el aviso de la pasarela con una dirección pública. De ese pago real cuelgan dos cosas que todavía no se pudieron comprobar: la `comision_plataforma` que se guarda en el pedido y los dos correos de pago aprobado.
 - [ ] **Correos de verdad:** con `RESEND_API_KEY`, comprobar que llegan y que el PDF viaja como adjunto. Sin la clave quedan registrados como `SIMULADO`.
-- [ ] **Pruebas automatizadas:** hay dos tests que corren en el CI: `TotpTest` (el generador de códigos contra los ejemplos del RFC 6238) y `CanalesTest` (quién puede escuchar cada canal de tiempo real). Falta el resto: JUnit y MockMvc para `AuthService`, `PedidoService`, `PagoService`.
 - [ ] **Rol `SUPERADMIN`:** la ruta `/api/admin/**` existe pero no tiene endpoints.
 - [ ] **Categorías de productos:** la tabla `categorias` existe, pero la API aún no las expone.
 - [ ] **Tablas sin API todavía:** ofertas, carritos y tipos de cambio.

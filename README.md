@@ -59,13 +59,13 @@ shopity/
 | Comprobante de compra en PDF | Sí | Sí (se descarga desde el panel y desde "Mis pedidos") |
 | Panel del superadmin: resumen, tiendas y cuentas (suspender y reactivar) | Sí | Sí (`/admin/tiendas`, `/admin/cuentas`) |
 | Manejo de errores y logs | Sí | Mensajes de error en cada pantalla |
+| Pruebas automatizadas: aislamiento entre tiendas, pagos, stock, planes y sesión (JUnit, MockMvc y Testcontainers) | Sí | - (`mvn test`, corren en el CI en cada PR) |
 | Despliegue (Neon, Render y Vercel) | Sí | https://shopity-7zya.vercel.app |
 
 ### Pendiente
 
 - Probar de punta a punta el pago en producción (necesita las credenciales de prueba de PayPal o Mercado Pago en Render; sin ellas la API responde 503). Con ese pago real quedan por comprobar las dos cosas que cuelgan de él: la comisión que se guarda en el pedido y los correos de confirmación.
 - Enviar correos de verdad: sin `RESEND_API_KEY` se registran como "simulado" y no salen.
-- Pruebas automatizadas del backend (JUnit y MockMvc). Hay un primer test, `TotpTest`, que corre en el CI; falta el resto de la suite.
 - Ofertas (tablas `ofertas` y `oferta_productos`): existen en la base, pero aún no tienen API ni pantalla.
 - Habilitar más países (México, Colombia, Argentina y Ecuador ya tienen su primer nivel territorial; falta cargar su lista completa, como `04_habilitar_chile.sql`).
 - Paginación en los listados y documentación Swagger/OpenAPI.
