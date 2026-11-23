@@ -34,6 +34,8 @@ services:
       MERCADOPAGO_WEBHOOK_SECRET: ${MERCADOPAGO_WEBHOOK_SECRET:-}
       PAYPAL_WEBHOOK_ID: ${PAYPAL_WEBHOOK_ID:-}
       # Correos. Sin RESEND_API_KEY se registran como simulados y no se envia nada.
+      # Fotos de los productos. Sin esto solo se pueden pegar enlaces.
+      CLOUDINARY_URL: ${CLOUDINARY_URL:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_REMITENTE: ${RESEND_REMITENTE:-Vendely <onboarding@resend.dev>}
       PAYPAL_CLIENT_ID: ${PAYPAL_CLIENT_ID:-}

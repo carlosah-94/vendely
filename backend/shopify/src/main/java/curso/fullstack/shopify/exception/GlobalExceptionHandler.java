@@ -14,6 +14,7 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -63,6 +64,15 @@ public class GlobalExceptionHandler {
     }
 
     // Se envió algo que no es JSON (por ejemplo, texto plano o un formulario)
+    /**
+     * El archivo paso el limite que acepta el servidor. Sin esto saldria un 500: el limite de
+     * Spring salta antes de que el controller pueda decir nada.
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiError> archivoMuyGrande(MaxUploadSizeExceededException ex, HttpServletRequest req) {
+        return respuesta(HttpStatus.PAYLOAD_TOO_LARGE, "La foto no puede pesar más de 2 MB", req, null);
+    }
+
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
     public ResponseEntity<ApiError> formatoNoSoportado(HttpMediaTypeNotSupportedException ex, HttpServletRequest req) {
         return respuesta(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "El cuerpo debe enviarse como JSON", req, null);

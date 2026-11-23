@@ -67,6 +67,7 @@ public class ProductoService {
     private final PrecioRepository precioRepository;
     private final InventarioRepository inventarioRepository;
     private final ImagenProductoRepository imagenProductoRepository;
+    private final CloudinaryClient cloudinary;
     private final CategoriaService categoriaService;
     private final PlanService planService;
 
@@ -74,7 +75,8 @@ public class ProductoService {
                            ProductoRepository productoRepository, VarianteRepository varianteRepository,
                            PrecioRepository precioRepository, InventarioRepository inventarioRepository,
                            ImagenProductoRepository imagenProductoRepository, CategoriaService categoriaService,
-                           PlanService planService) {
+                           PlanService planService, CloudinaryClient cloudinary) {
+        this.cloudinary = cloudinary;
         this.planService = planService;
         this.verificadorTienda = verificadorTienda;
         this.tiendaRepository = tiendaRepository;
@@ -222,9 +224,14 @@ public class ProductoService {
             throw new ApiException(HttpStatus.CONFLICT,
                     "El producto ya tiene ventas: no se puede eliminar (puedes desactivarlo)");
         }
+        // Las fotos subidas se piden borrar DESPUES de que la base acepte el borrado: si el
+        // producto no se puede eliminar, sus fotos tienen que seguir estando.
+        List<String> fotos = imagenProductoRepository.publicIdsDe(idProducto);
         productoRepository.delete(p);
         productoRepository.flush();   // si la base lo rechazara, el error sale aquí y se deshace todo
-        log.info("Producto eliminado: idProducto={}, tienda={}", idProducto, idTienda);
+        fotos.forEach(this::borrarFoto);
+        log.info("Producto eliminado: idProducto={}, tienda={} ({} foto(s) borradas)",
+                idProducto, idTienda, fotos.size());
     }
 
     // ------------------------------------------------------------------ catálogo público
@@ -522,6 +529,15 @@ public class ProductoService {
         if (imagenes == null) {
             return;
         }
+        // Las que estaban subidas a Cloudinary y ya no vienen en la lista hay que pedir que se
+        // borren: si no, quedan ocupando espacio en la cuenta para siempre. Se calcula ANTES
+        // de borrar las filas, que es cuando todavia se sabe cuales habia.
+        List<String> antes = imagenProductoRepository.publicIdsDe(p.getIdProducto());
+        Set<String> ahora = imagenes.stream()
+                .map(CloudinaryClient::publicIdDe)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
         imagenProductoRepository.borrarDeProducto(p.getIdProducto());
         imagenProductoRepository.flush();
         short posicion = 1;
@@ -529,11 +545,26 @@ public class ProductoService {
             ImagenProducto im = new ImagenProducto();
             im.setIdProducto(p.getIdProducto());
             im.setUrl(url.trim());
+            im.setPublicId(CloudinaryClient.publicIdDe(url));
             im.setTextoAlternativo(p.getNombre().length() > 200 ? p.getNombre().substring(0, 200) : p.getNombre());
             im.setPosicion(posicion++);
             imagenProductoRepository.save(im);
         }
         imagenProductoRepository.flush();
+
+        antes.stream().filter(id -> !ahora.contains(id)).forEach(this::borrarFoto);
+    }
+
+    /**
+     * Pide a Cloudinary que borre una foto. Nunca interrumpe: guardar el producto ya salio
+     * bien, y que la limpieza falle no puede deshacerlo. Queda en el log.
+     */
+    private void borrarFoto(String publicId) {
+        try {
+            cloudinary.borrar(publicId);
+        } catch (RuntimeException e) {
+            log.warn("No se pudo borrar la foto {} en Cloudinary: {}", publicId, e.getMessage());
+        }
     }
 
     /**
