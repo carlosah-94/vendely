@@ -1,0 +1,81 @@
+# Verifica que el proyecto compile antes de mergear (issue #10).
+#
+# Se ejecuta en cada pull request hacia main y en cada push a main.
+# Son dos trabajos independientes que corren en paralelo, asi que el PR
+# muestra dos checks: uno del backend y otro del frontend.
+#
+# No necesita ningun secreto: no toca la base de datos, ni Render, ni las
+# pasarelas de pago. Solo compila.
+#
+# Como el repositorio tiene el backend y el frontend en carpetas distintas,
+# cada paso indica su "working-directory" (backend/shopify o frontend). Sin
+# eso, los comandos se ejecutarian en la raiz, donde no hay pom.xml ni
+# package.json.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Si se empuja otro commit al mismo PR, se cancela la corrida anterior
+# en vez de dejar las dos gastando minutos.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Trabajo 1: el backend tiene que compilar con la misma version de Java
+  # que declara el pom.xml (<java.version>21</java.version>).
+  backend:
+    name: Backend (Java 21 + Maven)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el codigo
+        uses: actions/checkout@v4
+
+      - name: Preparar Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          # Guarda ~/.m2 entre corridas: la primera tarda, las siguientes no.
+          cache: maven
+
+      # package compila y, cuando exista la suite de la issue #9, tambien
+      # ejecuta los tests (fase test). Hoy no hay tests y pasa igual.
+      - name: Compilar y empaquetar
+        working-directory: backend/shopify
+        run: mvn -B -ntp package
+
+  # Trabajo 2: el frontend se revisa con ESLint y se compila como en
+  # produccion, para que un error de sintaxis o un import roto se vea en el
+  # PR y no al desplegar en Vercel.
+  frontend:
+    name: Frontend (Node 22 + Vite)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el codigo
+        uses: actions/checkout@v4
+
+      - name: Preparar Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # ci (no install): respeta package-lock.json y falla si esta
+      # desincronizado con package.json. Es lo que queremos en CI.
+      - name: Instalar dependencias
+        working-directory: frontend
+        run: npm ci
+
+      - name: Revisar el codigo (ESLint)
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Compilar para produccion
+        working-directory: frontend
+        run: npm run build
