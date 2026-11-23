@@ -27,6 +27,9 @@
         <testcontainers.version>1.21.4</testcontainers.version>
         <!-- Clase principal: la usan NetBeans (Run) y el plugin de Spring Boot -->
         <start-class>curso.fullstack.shopify.Shopify</start-class>
+        <!-- Byte Buddy (lo usa Mockito en las pruebas) aun no reconoce Java 25.
+        Con esto las pruebas corren tambien en JDK 25; en Java 21 no cambia nada. -->
+        <argLine>-Dnet.bytebuddy.experimental=true</argLine>
     </properties>
 
     <dependencies>
