@@ -7,12 +7,13 @@ API del proyecto Vendely (clon de Shopify). Permite que un dueño cree su tienda
 - Java 21, Spring Boot 3.3.4
 - Spring Security + JWT (jjwt)
 - Spring Data JPA (Hibernate con `ddl-auto: validate`) y PostgreSQL 16
+- Flyway: crea y versiona el esquema al arrancar
 - Jakarta Bean Validation y Lombok
 - Mercado Pago (Checkout Pro, modo de prueba)
 
 ## Cómo ejecutarlo
 
-1. Levanta la base desde la raíz del repositorio: `docker compose up -d db`. Los scripts de `db/init/` crean las tablas y los datos de prueba.
+1. Levanta la base desde la raíz del repositorio: `docker compose up -d db`. Queda vacía: las tablas y los datos los crea Flyway al arrancar el backend, en el paso 3.
 2. Copia `.env.example` a `.env` y completa los valores (ver abajo).
 3. Desde esta carpeta: `mvn spring-boot:run`, o abre el proyecto en NetBeans y usa **Clean and Build** y **Run**.
 
@@ -28,6 +29,7 @@ La API queda en `http://localhost:8080/api`.
 | `CORS_ORIGENES` | Frontends autorizados, separados por coma | `localhost:5173,5174` |
 | `MERCADOPAGO_ACCESS_TOKEN` | Token de **prueba** (`TEST-...`). Sin él, el pago responde 503 | vacío |
 | `FRONTEND_URL` | Adonde vuelve el cliente tras pagar | `http://localhost:5173` |
+| `FLYWAY_LOCATIONS` | Carpetas de migraciones. En el servidor: `classpath:db/migration` (sin los usuarios de prueba) | las dos carpetas |
 | `SERVER_PORT` | Puerto de la API | 8080 |
 | `JPA_SHOW_SQL` | Muestra el SQL en consola (solo para depurar) | `false` |
 
@@ -108,9 +110,24 @@ Paquete base: `curso.fullstack.shopify`
 
 ## Base de datos
 
-El esquema (30 tablas, restricciones y triggers) está en `db/init/01_esquema.sql`. Hibernate solo valida que las entidades coincidan; no crea ni modifica tablas.
+La base la construye **Flyway** al arrancar, antes de que Hibernate valide las entidades. Las migraciones están en `src/main/resources/db/`:
 
-`db/tests/03_pruebas.sql` tiene casos que la base debe aceptar y rechazar.
+| Migración | Qué hace |
+|---|---|
+| `migration/V1__esquema.sql` | El esquema: 30 tablas, restricciones y triggers |
+| `migration/V2__datos_iniciales.sql` | Monedas, 248 países, divisiones e impuestos |
+| `migration-local/V3__usuarios_prueba.sql` | Una cuenta por rol. **Solo en desarrollo** |
+| `migration/V4__habilitar_chile.sql` | Provincias y comunas de Chile; lo habilita |
+| `migration/V5__planes_plantillas.sql` | Planes, suscripciones y plantillas |
+
+Flyway aplica cada una una sola vez y guarda su huella en `flyway_schema_history`. De ahí salen dos reglas:
+
+1. **Una migración aplicada no se edita.** Cambiar el archivo cambia su checksum y el backend deja de arrancar (`Migration checksum mismatch`). Si hay que corregir algo, se agrega una migración nueva.
+2. **Un cambio en la base = un archivo nuevo**, con el número siguiente y un nombre que diga qué hace: `V6__notificaciones.sql`, `V7__filtros_productos.sql`. Van dos guiones bajos entre la versión y la descripción.
+
+Hibernate sigue en `ddl-auto: validate`: solo comprueba que las entidades coincidan con las tablas, no las crea ni las modifica.
+
+`db/tests/03_pruebas.sql` (en la raíz del repositorio) tiene casos que la base debe aceptar y rechazar; no es una migración y no lo aplica Flyway.
 
 ## Errores y logs
 

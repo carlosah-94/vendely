@@ -16,16 +16,18 @@ Vendely es una plataforma donde cualquier persona crea su tienda online, registr
 ```
 shopity/
 ├── backend/shopify/   # API REST en Spring Boot (proyecto Maven, se abre en NetBeans); tiene su propio README
-│   └── src/main/java/curso/fullstack/shopify/
-│       ├── controller/   # reciben las peticiones HTTP
-│       ├── service/      # reglas del negocio y transacciones
-│       ├── repository/   # acceso a la base (Spring Data JPA)
-│       ├── entity/       # clases que representan las tablas
-│       ├── dto/          # datos que entran y salen de la API, con sus validaciones
-│       ├── security/     # JWT, roles y verificación de la tienda
-│       └── exception/    # formato único de errores
+│   ├── src/main/java/curso/fullstack/shopify/
+│   │   ├── controller/   # reciben las peticiones HTTP
+│   │   ├── service/      # reglas del negocio y transacciones
+│   │   ├── repository/   # acceso a la base (Spring Data JPA)
+│   │   ├── entity/       # clases que representan las tablas
+│   │   ├── dto/          # datos que entran y salen de la API, con sus validaciones
+│   │   ├── security/     # JWT, roles y verificación de la tienda
+│   │   └── exception/    # formato único de errores
+│   └── src/main/resources/db/
+│       ├── migration/        # migraciones de Flyway: V1 esquema, V2 datos iniciales, V4 Chile, V5 planes
+│       └── migration-local/  # V3 usuarios de prueba (no se aplica en el servidor)
 ├── frontend/          # aplicación React: panel del dueño y tienda pública del comprador
-├── db/init/           # 01_esquema.sql, 02_datos_iniciales.sql, 03_usuarios_prueba.sql y 04_habilitar_chile.sql
 ├── db/tests/          # 03_pruebas.sql: casos que la base debe aceptar y rechazar
 ├── postman/           # colección Vendely_API para probar la API
 └── docker-compose.yml
@@ -86,26 +88,22 @@ Abre `.env` y cambia al menos `POSTGRES_PASSWORD`, `SPRING_DATASOURCE_PASSWORD` 
 docker compose up -d db
 ```
 
-La primera vez, Docker crea la base y ejecuta en orden los scripts de `db/init/`: el esquema (tablas, restricciones y triggers), los datos iniciales (países, divisiones e impuestos), los usuarios de prueba y la habilitación de Chile (sus 56 provincias y 346 comunas). La base queda disponible en el puerto `POSTGRES_PORT` de tu computadora (5433 por defecto).
+Docker crea la base **vacía**, en el puerto `POSTGRES_PORT` de tu computadora (5433 por defecto). Las tablas y los datos los pone Flyway cuando arranca el backend (paso 3): aplica en orden las migraciones de `backend/shopify/src/main/resources/db/migration/` —el esquema (tablas, restricciones y triggers), los datos iniciales (países, divisiones e impuestos), la habilitación de Chile y los planes— y, en desarrollo, los usuarios de prueba de `db/migration-local/`. Ya no hay que ejecutar ningún `.sql` a mano.
 
-Para borrar la base y crearla de nuevo (por ejemplo, después de un cambio en `db/init/`):
+Flyway anota en la tabla `flyway_schema_history` las migraciones que aplicó en esa base. Por eso, cuando un compañero agrega una migración, basta con hacer `git pull` y arrancar el backend: se aplica solo lo que falta y los datos de prueba no se pierden. Para ver el estado de una base:
+
+```sql
+SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank;
+```
+
+Para empezar de cero (borra todos los datos de la base):
 
 ```bash
 docker compose down -v
 docker compose up -d db
 ```
 
-Para cargar los scripts a mano en una base ya creada:
-
-```bash
-docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < db/init/03_usuarios_prueba.sql
-```
-
-Si tu base es anterior a `04_habilitar_chile.sql`, ejecútalo una vez de la misma forma (se puede repetir sin duplicar datos):
-
-```bash
-docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < db/init/04_habilitar_chile.sql
-```
+> **Si tu base ya existía antes de Flyway** no hay que hacer nada especial: Flyway la marca en la versión 5 (los cinco scripts que antes se corrían a mano) y de ahí en adelante aplica solo las migraciones nuevas. Eso supone que tiene los cinco aplicados; si nunca corriste `04_habilitar_chile.sql` o `05_planes_plantillas.sql`, lo más simple es `docker compose down -v` y dejar que Flyway la construya entera.
 
 ### 3. Backend
 
@@ -152,17 +150,17 @@ Render y Vercel se conectan al fork [`AndreeQuispe12/shopity`](https://github.co
 ### 1. Base de datos en Neon
 
 1. En [neon.tech](https://neon.tech) se creó el proyecto `vendely` (Postgres 18, región AWS US East (N. Virginia)). Neon soporta la extensión `btree_gist` que necesita el esquema.
-2. Los scripts se cargan una sola vez, en orden, con la conexión **directa** (sin `-pooler`). Se puede usar el `psql` del contenedor local, que ya tiene los scripts en `/docker-entrypoint-initdb.d/`:
+2. El esquema y los datos los aplica **Flyway** cuando arranca el backend en Render: no hay que correr ningún script a mano, ni ahora ni cuando se agregue una migración nueva. Dos cosas que hay que respetar en Render:
 
-   ```powershell
-   $env:NEON = "postgresql://USUARIO:CONTRASEÑA@HOST-SIN-POOLER/neondb?sslmode=require"
-   docker compose exec db psql $env:NEON -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/01_esquema.sql
-   docker compose exec db psql $env:NEON -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/02_datos_iniciales.sql
-   docker compose exec db psql $env:NEON -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/03_usuarios_prueba.sql
-   docker compose exec db psql $env:NEON -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/04_habilitar_chile.sql
+   - `SPRING_DATASOURCE_URL` con la conexión **directa** de Neon (sin `-pooler`): Flyway toma un bloqueo en la base mientras migra y conviene que sea sobre una conexión estable.
+   - `FLYWAY_LOCATIONS=classpath:db/migration`, para que en el servidor no se creen los usuarios de prueba (tienen contraseñas conocidas y son solo para desarrollo).
+
+   La base de Neon se creó antes de Flyway, con los scripts 01 al 05 cargados a mano, así que Flyway la marca en la versión 5 y aplica solo lo que venga después. Antes del primer despliegue conviene confirmar que los cinco estén aplicados:
+
+   ```sql
+   SELECT count(*) FROM planes;                           -- 3; si la tabla no existe, falta el script 05
+   SELECT count(*) FROM divisiones WHERE id_pais = 'CL';  -- 418; si sale 19, falta el script 04
    ```
-
-   Cuando se agrega un script nuevo a `db/init/` (como `04_habilitar_chile.sql`), hay que ejecutarlo también en Neon: allí no corre solo como en Docker.
 
 3. Para comprobarla, `db/tests/03_pruebas.sql` se puede correr contra Neon: termina en `ROLLBACK` y no deja datos.
 
@@ -310,7 +308,7 @@ El frontend guarda y usa el token así:
 
 ### Usuarios de prueba
 
-Al crear la base, `db/init/03_usuarios_prueba.sql` deja una cuenta lista por cada rol:
+Al crear la base, la migración `db/migration-local/V3__usuarios_prueba.sql` deja una cuenta lista por cada rol (solo en desarrollo: en el servidor esa carpeta no se aplica):
 
 | Rol | Correo | Contraseña | Cómo iniciar sesión |
 |---|---|---|---|

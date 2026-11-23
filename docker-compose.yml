@@ -9,7 +9,9 @@ services:
       - "${POSTGRES_PORT}:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
-      - ./db/init:/docker-entrypoint-initdb.d
+      # Ya no se monta ./db/init: el esquema lo aplica Flyway cuando arranca el
+      # backend. La base arranca vacía y así también las bases que ya existen
+      # reciben los cambios (el montaje de Postgres solo corre la primera vez).
 
   backend:
     build:
@@ -20,6 +22,10 @@ services:
       SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
       SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
       SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+      # Carpetas de migraciones que aplica Flyway al arrancar. Por defecto van las
+      # dos; en el servidor se deja solo classpath:db/migration para no crear los
+      # usuarios de prueba (se define en el panel de Render o en el .env).
+      FLYWAY_LOCATIONS: ${FLYWAY_LOCATIONS:-classpath:db/migration,classpath:db/migration-local}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRATION: ${JWT_EXPIRATION}
       CORS_ORIGENES: ${CORS_ORIGENES}
