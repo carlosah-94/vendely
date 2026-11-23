@@ -117,6 +117,27 @@ Paquete base: `curso.fullstack.shopify`
 | POST | `/api/cliente/pedidos/{idPedido}/pago/confirmar` | Confirma el resultado del pago |
 | GET | `/api/cliente/pedidos/{idPedido}/comprobante` | Su comprobante de compra en PDF |
 
+## Tiempo real (WebSockets)
+
+El panel y la tienda mantienen una conexión abierta con el backend: **WebSocket con STOMP en `/ws`**. STOMP le agrega "canales" al WebSocket; cada pantalla se suscribe a los que le importan.
+
+| Canal | Qué llega | Quién puede escucharlo |
+|---|---|---|
+| `/topic/tiendas/{id}/pedidos` | Pedido nuevo, pago aprobado, cambio de estado | Solo el dueño de esa tienda |
+| `/topic/tiendas/{id}/inventario` | Cambios de stock, para el panel | Solo el dueño de esa tienda |
+| `/topic/tiendas/{id}/stock` | La variante y su stock nuevo | Cualquiera (el stock ya es público) |
+| `/user/queue/pedidos` | El estado de **mis** pedidos | Cada cliente, solo lo suyo |
+
+**Cómo se autentica.** El navegador no deja agregar cabeceras al abrir un WebSocket, así que `/ws` está abierto en `SecurityConfig` y el token viaja en el primer mensaje STOMP (`CONNECT`). `AutorizacionStomp` lo valida con las mismas reglas que `JwtAuthFilter`: firma, vencimiento, cuenta activa y que no sea anterior a un cambio de contraseña. Sin token, la conexión queda como visitante y solo puede escuchar el stock público; con un token inválido se rechaza.
+
+**Quién escucha qué** lo decide `tiemporeal/Canales`, sin Spring, para poder probar cada regla en `CanalesTest`. Todo canal que no está en la lista se rechaza, y los clientes no pueden enviar mensajes: los canales son de solo lectura.
+
+**De dónde salen los avisos.** `TiempoRealListener` escucha los cuatro eventos que ya publicaban los servicios (`PedidoCreadoEvent`, `PagoAprobadoEvent`, `PedidoEstadoCambiadoEvent`, `StockCambiadoEvent`), con `@TransactionalEventListener`: un pedido que se deshace a mitad no aparece en el panel. El aviso es corto (tipo, número, estado); la pantalla, al recibirlo, vuelve a pedir sus datos por la API de siempre, así que lo que se muestra pasa por los mismos permisos que al recargar.
+
+**Del lado del navegador** (`services/tiempoReal.js` y el hook `useTiempoReal`) hay una sola conexión por pestaña, compartida por todas las pantallas. Se reconecta sola cada 5 segundos si se corta y vuelve a suscribir los canales; si cambia la sesión, se reconecta con la identidad nueva. Hay latidos cada 10 segundos en los dos sentidos para detectar una conexión muerta.
+
+**Un límite que conviene saber:** el broker es el simple de Spring, en memoria. Alcanza para un solo servidor, que es lo que hay en Render. Con varios servidores haría falta uno externo (RabbitMQ o Redis) para que un aviso llegue a las conexiones de todos.
+
 ## Doble autenticación
 
 Con la doble autenticación activa, la contraseña sola no basta: además hay que escribir el código de 6 dígitos que muestra una app como Google Authenticator, y que cambia cada 30 segundos. Quien robe una contraseña no puede entrar sin el teléfono.
@@ -308,7 +329,7 @@ Hibernate sigue en `ddl-auto: validate`: solo comprueba que las entidades coinci
 
 - [ ] **Pago:** el último intento respondió 503 (`El pago en línea no está disponible por ahora`). Revisar `MERCADOPAGO_ACCESS_TOKEN` y probar el flujo completo, incluida la confirmación y el aviso de la pasarela con una dirección pública. De ese pago real cuelgan dos cosas que todavía no se pudieron comprobar: la `comision_plataforma` que se guarda en el pedido y los dos correos de pago aprobado.
 - [ ] **Correos de verdad:** con `RESEND_API_KEY`, comprobar que llegan y que el PDF viaja como adjunto. Sin la clave quedan registrados como `SIMULADO`.
-- [ ] **Pruebas automatizadas:** hay un primer test, `TotpTest` (el generador de códigos contra los ejemplos del RFC 6238), que corre en el CI. Falta el resto: JUnit y MockMvc para `AuthService`, `PedidoService`, `PagoService`.
+- [ ] **Pruebas automatizadas:** hay dos tests que corren en el CI: `TotpTest` (el generador de códigos contra los ejemplos del RFC 6238) y `CanalesTest` (quién puede escuchar cada canal de tiempo real). Falta el resto: JUnit y MockMvc para `AuthService`, `PedidoService`, `PagoService`.
 - [ ] **Rol `SUPERADMIN`:** la ruta `/api/admin/**` existe pero no tiene endpoints.
 - [ ] **Categorías de productos:** la tabla `categorias` existe, pero la API aún no las expone.
 - [ ] **Tablas sin API todavía:** ofertas, carritos y tipos de cambio.

@@ -59,7 +59,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         chain.doFilter(request, response);
     }
 
-    private boolean tokenPosteriorAlCambio(Claims claims, Login login) {
+    /**
+     * Si el token se emitio despues del ultimo cambio de contrasena. Es publica porque la usa
+     * tambien AutorizacionStomp: una conexion de tiempo real tiene que cumplir la misma regla.
+     */
+    public static boolean tokenPosteriorAlCambio(Claims claims, Login login) {
         if (login.getContrasenaCambiadaEn() == null || claims.getIssuedAt() == null) {
             return true;
         }

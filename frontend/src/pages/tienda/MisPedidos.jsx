@@ -5,6 +5,8 @@ import Mensaje from '../../components/Mensaje';
 import { mensajeDeError } from '../../services/api';
 import { descargarMiComprobante, iniciarPago, listarMisPedidos, verMiPedido } from '../../services/tienda';
 import { formatoFecha, formatoMoneda } from '../../utils/formato';
+import { useTiempoReal } from '../../hooks/useTiempoReal';
+import { canales } from '../../services/tiempoReal';
 
 const NOMBRE_ESTADO = {
   SIN_ENVIAR: 'Sin enviar',
@@ -17,6 +19,11 @@ const NOMBRE_ESTADO = {
 export default function MisPedidos() {
   const { subdominio } = useOutletContext();
   const [estado, setEstado] = useState({ cargado: false, pedidos: [], error: '' });
+  // Tiempo real (issue #4): el backend avisa a esta cuenta cuando uno de sus pedidos se paga,
+  // se envia, se entrega o se cancela. Se recarga la lista y, si ese pedido esta abierto, su
+  // detalle (la linea de tiempo); si esta cerrado, se olvida el detalle guardado para no mostrar
+  // uno viejo al abrirlo.
+  const [version, setVersion] = useState(0);
   const [abierto, setAbierto] = useState(null);       // idPedido con el detalle desplegado
   const [detalles, setDetalles] = useState({});       // idPedido → detalle ya cargado
   const [error, setError] = useState('');
@@ -29,7 +36,23 @@ export default function MisPedidos() {
     return () => {
       vigente = false;
     };
-  }, []);
+  }, [version]);
+
+  useTiempoReal(canales.misPedidos, (aviso) => {
+    setVersion((v) => v + 1);
+    if (!aviso.idPedido) return;
+    if (abierto === aviso.idPedido) {
+      verMiPedido(aviso.idPedido)
+        .then((d) => setDetalles((actual) => ({ ...actual, [aviso.idPedido]: d })))
+        .catch(() => {});
+    } else {
+      setDetalles((actual) => {
+        const copia = { ...actual };
+        delete copia[aviso.idPedido];
+        return copia;
+      });
+    }
+  });
 
   async function alternar(idPedido) {
     if (abierto === idPedido) {

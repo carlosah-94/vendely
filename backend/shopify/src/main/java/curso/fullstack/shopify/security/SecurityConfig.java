@@ -75,6 +75,10 @@ public class SecurityConfig {
                 // y PagoWebhookService la comprueba antes de tocar un pago (401 si no cuadra).
                 .requestMatchers(HttpMethod.POST, "/api/public/pagos/webhook/*").permitAll()
                 .requestMatchers("/error").permitAll()
+                // El WebSocket (issue #4): el navegador no deja mandar cabeceras al abrirlo, asi
+                // que el token viaja dentro, en el CONNECT de STOMP, y lo valida AutorizacionStomp.
+                // Lo que cada uno puede escuchar lo deciden Canales, no esta regla.
+                .requestMatchers("/ws", "/ws/**").permitAll()
                 .requestMatchers("/api/panel/**").hasRole("ADMIN_TIENDA")
                 .requestMatchers("/api/cliente/**").hasRole("CLIENTE")
                 .requestMatchers("/api/admin/**").hasRole("SUPERADMIN")

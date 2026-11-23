@@ -8,6 +8,8 @@ import { useToast } from '../context/ToastContext';
 import { useTiendaActual } from '../hooks/useTiendaActual';
 import { mensajeDeError } from '../services/api';
 import { actualizarInventario, listarInventario } from '../services/inventario';
+import { useTiempoReal } from '../hooks/useTiempoReal';
+import { canales } from '../services/tiempoReal';
 import { formatoFecha } from '../utils/formato';
 import { BOTON, BOTON_SECUNDARIO, ENCABEZADO_TABLA, TARJETA, etiqueta, inputPanel } from '../utils/panel';
 
@@ -29,6 +31,9 @@ export default function Inventario() {
   const { tiendas, tienda, idTienda, cambiarTienda, cargando: cargandoTiendas, error: errorTiendas } = useTiendaActual();
   const { avisar } = useToast();
   const [datos, setDatos] = useState({ idTienda: null, filas: [], error: '' });
+  // Tiempo real (issue #4): una venta o una cancelacion cambia el stock y la tabla se refresca.
+  const [version, setVersion] = useState(0);
+  useTiempoReal(idTienda ? canales.inventarioDeTienda(idTienda) : null, () => setVersion((v) => v + 1));
   const [pestana, setPestana] = useState('TODOS');
   const [busqueda, setBusqueda] = useState('');
   const [editando, setEditando] = useState(null);     // { modo: 'recibir'|'ajustar', fila }
@@ -42,7 +47,7 @@ export default function Inventario() {
     return () => {
       vigente = false;
     };
-  }, [idTienda]);
+  }, [idTienda, version]);
 
   function reemplazar(fila) {
     setDatos((d) => ({ ...d, filas: d.filas.map((f) => (f.idVariante === fila.idVariante ? fila : f)) }));

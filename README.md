@@ -51,6 +51,7 @@ shopity/
 | Catálogo con filtros (texto, categoría, precio, disponibilidad), orden y paginación | Sí | Sí (barra de filtros en la tienda; los filtros quedan en la URL) |
 | Fotos de los productos y logo: subirlas desde el equipo (Cloudinary) | Sí | Sí (arrastrar o elegir, en el producto y en Personalizar) |
 | Doble autenticación (código de 6 dígitos) y cambio de contraseña | Sí | Sí (`/cuenta/seguridad`, en el menú de dueños y superadmin) |
+| Tiempo real: pedidos nuevos, stock y estado del envío sin recargar (WebSockets) | Sí | Sí (campanita en el panel; Pedidos, Inventario, la tienda y Mis pedidos se actualizan solos) |
 | Cliente: ingreso, direcciones (también en otros países), costo de envío, checkout y "Mis pedidos" | Sí | Sí (`/tienda/:subdominio/checkout`, `/mis-pedidos`) |
 | Pago en modo de prueba: PayPal Sandbox o Mercado Pago | Sí | Sí (`/tienda/:subdominio/pago/resultado`) |
 | Seguimiento del envío: enviado (con empresa y número), entregado y cancelado | Sí | Sí (en el detalle de la venta y en "Mis pedidos") |
@@ -572,6 +573,7 @@ Cada tienda tiene su vitrina en `/tienda/{subdominio}` (por ejemplo `/tienda/mod
 **Flujo de compra:** vitrina → carrito → ingresar → checkout (dirección y costo de envío) → pedido → pago → vuelve a `/tienda/{subdominio}/pago/resultado` (usa `FRONTEND_URL`) → "Mis pedidos".
 
 - La tienda del cliente sale de su token, no de la petición: un cliente no puede ver ni pagar pedidos de otra tienda.
+- **Tiempo real:** el panel y la tienda tienen una conexión abierta con el backend (WebSocket con STOMP en `/ws`). Cuando entra un pedido, al dueño le aparece un aviso y la campanita sube; Pedidos e Inventario se actualizan solos; en la tienda, un producto pasa a "Agotado" en cuanto alguien compra lo último; y el cliente ve moverse la línea de tiempo de su pedido. Si la conexión se corta, se reconecta sola. En producción la dirección es `wss://` (la saca de `VITE_API_BASE_URL`).
 - **Catálogo:** el filtrado y la paginación los hace la base, no el navegador: la tienda pide solo los doce productos que va a mostrar. Los filtros viajan en la URL (`?q=polo&categoria=3&min=20&max=80&stock=1&orden=precio_asc&pagina=2`), así que un enlace con filtros abierto en otra pestaña muestra exactamente lo mismo.
 - **Fotos:** se suben a Cloudinary, no al servidor. En Render el disco es temporal: se borra en cada despliegue y cada vez que el contenedor se duerme, así que una foto guardada ahí desaparecería sola. Sin `CLOUDINARY_URL` el botón de subir responde 503 y se pueden seguir pegando enlaces, que es como funcionaba antes.
 - **Direcciones:** en un país con lista oficial (Perú, Chile) el distrito o la comuna se elige de la lista; en otros países se escriben región, ciudad y código postal. Si la tienda no tiene tarifa para ese destino, el checkout lo avisa y no deja crear el pedido.
