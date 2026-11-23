@@ -1,6 +1,21 @@
+-- ---------------------------------------------------------------------
+--  MIGRACIÓN FLYWAY V3 (SOLO LOCAL) · antes: db/init/03_usuarios_prueba.sql
+--
+--  Vive en db/migration-local y no en db/migration porque crea cuentas con
+--  contraseñas conocidas: sirven para desarrollo y para las pruebas, pero no
+--  deben existir en el servidor. En producción se quita esta carpeta de
+--  spring.flyway.locations (variable FLYWAY_LOCATIONS) y la versión 3 nunca
+--  se aplica; el resto de las migraciones no depende de ella.
+--
+--  Flyway la aplica UNA sola vez y guarda su checksum en la tabla
+--  flyway_schema_history. Por eso este archivo ya NO se edita: cambiar
+--  una sola letra cambia el checksum y el backend no arranca. Los
+--  cambios al esquema o a los datos van en una migración nueva (V6, V7…).
+-- ---------------------------------------------------------------------
+
 -- =====================================================================
 -- Vendely - Usuarios de prueba
--- Se ejecuta después de 01_esquema.sql y 02_datos_iniciales.sql.
+-- Flyway la aplica después de V2 (esquema y datos iniciales), solo en local.
 --
 -- Crea una cuenta por cada rol para poder entrar al sistema sin
 -- registrarse:
@@ -19,7 +34,7 @@
 -- usan la secuencia, que empieza en 1).
 -- =====================================================================
 
-BEGIN;
+-- (Flyway abre y cierra la transaccion de esta migracion; antes aqui habia un BEGIN;)
 
 -- 1. Superadmin: cuenta del panel sin tienda (id_tienda NULL)
 INSERT INTO login (id_login, id_rol, id_tienda, usuario, correo, contrasena_hash,
@@ -71,4 +86,3 @@ SELECT 9001, id_division, 10.00, 200.00, 1, 5
   FROM divisiones WHERE id_pais = 'PE' AND nivel = 1
 ON CONFLICT DO NOTHING;
 
-COMMIT;

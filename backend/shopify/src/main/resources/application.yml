@@ -10,9 +10,25 @@ spring:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/shopify_db}
     username: ${SPRING_DATASOURCE_USERNAME:shopify_user}
     password: ${SPRING_DATASOURCE_PASSWORD:shopify_pass}
+  # Flyway construye y versiona el esquema al arrancar el backend, antes de que
+  # Hibernate valide las entidades. Ya no hay que ejecutar ningún .sql a mano:
+  # cada base (la de cada integrante y la del servidor) recibe las migraciones
+  # que le faltan y anota cuáles aplicó en la tabla flyway_schema_history.
+  flyway:
+    # Dos carpetas: db/migration son las migraciones del producto y
+    # db/migration-local agrega los usuarios de prueba. En el servidor se arranca
+    # con FLYWAY_LOCATIONS=classpath:db/migration para que esas cuentas, que
+    # tienen contraseñas conocidas, no se creen allá.
+    locations: ${FLYWAY_LOCATIONS:classpath:db/migration,classpath:db/migration-local}
+    # Las bases que ya existen (creadas a mano con los scripts 01 al 05) no deben
+    # recrearse: Flyway anota la versión 5 como punto de partida y aplica solo las
+    # migraciones posteriores. En una base vacía no actúa: ahí aplica V1 a V5.
+    baseline-on-migrate: true
+    baseline-version: 5
+    baseline-description: Esquema creado con los scripts 01 al 05 de db/init
   jpa:
     hibernate:
-      ddl-auto: validate      # las tablas las crea db/init; Hibernate solo verifica que coincidan
+      ddl-auto: validate      # las tablas las crea Flyway; Hibernate solo verifica que coincidan
     open-in-view: false
     # SQL en consola: apagado por defecto (llena el log). Para depurar: JPA_SHOW_SQL=true
     show-sql: ${JPA_SHOW_SQL:false}

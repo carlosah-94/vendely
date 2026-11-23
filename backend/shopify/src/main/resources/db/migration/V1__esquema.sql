@@ -1,3 +1,12 @@
+-- ---------------------------------------------------------------------
+--  MIGRACIÓN FLYWAY V1 · antes: db/init/01_esquema.sql
+--
+--  Flyway la aplica UNA sola vez y guarda su checksum en la tabla
+--  flyway_schema_history. Por eso este archivo ya NO se edita: cambiar
+--  una sola letra cambia el checksum y el backend no arranca. Los
+--  cambios al esquema o a los datos van en una migración nueva (V6, V7…).
+-- ---------------------------------------------------------------------
+
 -- =====================================================================
 --  VENDELY · Modelo de base de datos · versión 3 · INTERNACIONAL
 --  PostgreSQL 15 o superior · 30 tablas · normalizado hasta 3FN
@@ -42,7 +51,7 @@
 --           y envíos · 3 catálogo · 4 ofertas · 5 carrito · 6 pedidos y pagos
 -- =====================================================================
 
-BEGIN;
+-- (Flyway abre y cierra la transaccion de esta migracion; antes aqui habia un BEGIN;)
 
 -- btree_gist permite la restricción EXCLUDE de precios (periodos que no se cruzan)
 CREATE EXTENSION IF NOT EXISTS btree_gist;
@@ -1545,4 +1554,3 @@ CREATE TRIGGER tg_tarifas_envio_monto BEFORE INSERT OR UPDATE ON tarifas_envio
 CREATE TRIGGER tg_tarifas_int_monto   BEFORE INSERT OR UPDATE ON tarifas_internacionales
     FOR EACH ROW EXECUTE FUNCTION fn_monto_en_moneda();
 
-COMMIT;

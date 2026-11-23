@@ -1,3 +1,12 @@
+-- ---------------------------------------------------------------------
+--  MIGRACIÓN FLYWAY V2 · antes: db/init/02_datos_iniciales.sql
+--
+--  Flyway la aplica UNA sola vez y guarda su checksum en la tabla
+--  flyway_schema_history. Por eso este archivo ya NO se edita: cambiar
+--  una sola letra cambia el checksum y el backend no arranca. Los
+--  cambios al esquema o a los datos van en una migración nueva (V6, V7…).
+-- ---------------------------------------------------------------------
+
 -- =====================================================================
 --  VENDELY · Datos iniciales · versión 3 · INTERNACIONAL
 --  Ejecutar después de 01_esquema.sql
@@ -25,7 +34,7 @@
 --    16 % (México), 19 % (Colombia), 21 % (Argentina), 15 % (Ecuador).
 -- =====================================================================
 
-BEGIN;
+-- (Flyway abre y cierra la transaccion de esta migracion; antes aqui habia un BEGIN;)
 
 -- Roles de la plataforma
 INSERT INTO roles (id_rol, nombre, descripcion) VALUES
@@ -2768,4 +2777,3 @@ SELECT d.id_pais, d.nivel, n.nombre AS nivel_nombre, count(*) AS divisiones
   FROM divisiones d JOIN niveles_division n USING (id_pais, nivel)
  GROUP BY d.id_pais, d.nivel, n.nombre ORDER BY d.id_pais, d.nivel;
 
-COMMIT;

@@ -1,3 +1,12 @@
+-- ---------------------------------------------------------------------
+--  MIGRACIÓN FLYWAY V4 · antes: db/init/04_habilitar_chile.sql
+--
+--  Flyway la aplica UNA sola vez y guarda su checksum en la tabla
+--  flyway_schema_history. Por eso este archivo ya NO se edita: cambiar
+--  una sola letra cambia el checksum y el backend no arranca. Los
+--  cambios al esquema o a los datos van en una migración nueva (V6, V7…).
+-- ---------------------------------------------------------------------
+
 -- =============================================================================
 --  VENDELY · Habilitar CHILE para crear tiendas
 --
@@ -9,8 +18,7 @@
 --  (CLP, sin decimales), su IVA (19 %), su documento (RUT) y su zona horaria.
 --
 --  Se puede ejecutar más de una vez: lo que ya existe no se duplica (ON CONFLICT DO NOTHING).
---  Base nueva: Docker lo ejecuta solo, después de 03 (los scripts de db/init van en orden).
---  Base que ya existe: ejecutarlo una vez (ver README o DBeaver → Ejecutar script).
+--  Flyway la aplica sola al arrancar el backend, después de V2 y antes de V5.
 -- =============================================================================
 
 -- 1. Provincias (nivel 2). Su código CUT son los 3 primeros dígitos de sus comunas.

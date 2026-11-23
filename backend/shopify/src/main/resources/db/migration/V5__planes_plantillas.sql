@@ -1,3 +1,12 @@
+-- ---------------------------------------------------------------------
+--  MIGRACIÓN FLYWAY V5 · antes: db/init/05_planes_plantillas.sql
+--
+--  Flyway la aplica UNA sola vez y guarda su checksum en la tabla
+--  flyway_schema_history. Por eso este archivo ya NO se edita: cambiar
+--  una sola letra cambia el checksum y el backend no arranca. Los
+--  cambios al esquema o a los datos van en una migración nueva (V6, V7…).
+-- ---------------------------------------------------------------------
+
 -- =============================================================================
 --  VENDELY · Planes y plantillas (Entregable 3)
 --
@@ -6,8 +15,7 @@
 --  y la plantilla de diseño. Todas las tiendas que ya existen quedan en el plan Gratis.
 --
 --  Se puede ejecutar más de una vez: lo que ya existe no se vuelve a crear.
---  Base nueva: Docker lo ejecuta solo, después de 04 (los scripts de db/init van en orden).
---  Base que ya existe (local o Neon): ejecutarlo una vez (DBeaver → Ejecutar script).
+--  Flyway la aplica sola al arrancar el backend, después de V4.
 -- =============================================================================
 
 CREATE EXTENSION IF NOT EXISTS btree_gist;   -- para la restricción EXCLUDE de suscripciones
