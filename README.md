@@ -137,6 +137,12 @@ docker compose up --build
 
 Levanta la base, el backend (`http://localhost:8080`) y el frontend (`http://localhost:5174`, según `FRONTEND_PORT`).
 
+El frontend de Docker es la versión de **producción**: se compila con `npm ci` y `npm run build`, y lo sirve nginx en el puerto 80 del contenedor. Recargar una ruta interna (`/panel/productos`, `/tienda/mitienda`) no da 404. Tres cosas a tener en cuenta:
+
+- `VITE_API_BASE_URL` se incrusta **al compilar**. Si la cambias en el `.env`, reconstruye la imagen con `docker compose up --build frontend`.
+- `npm ci` falla si `package-lock.json` no coincide con `package.json`. Se arregla con `npm install` en `frontend/` y subiendo el lock actualizado.
+- Para programar con recarga en caliente sigue usando `npm run dev` fuera de Docker (paso 4).
+
 ## Despliegue en producción
 
 La aplicación está publicada en tres servicios gratuitos:
