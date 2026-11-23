@@ -45,12 +45,15 @@ services:
       - db
 
   frontend:
+    # Imagen de produccion: compila con Vite y la sirve nginx en el puerto 80.
+    # VITE_API_BASE_URL va como argumento del build porque Vite la incrusta al
+    # compilar; si cambia, hay que reconstruir: docker compose up --build.
     build:
       context: ./frontend
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
     ports:
-      - "${FRONTEND_PORT}:5173"
-    environment:
-      VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+      - "${FRONTEND_PORT}:80"
     depends_on:
       - backend
 
