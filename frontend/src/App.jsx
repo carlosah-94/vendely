@@ -21,6 +21,7 @@ import Inventario from './pages/Inventario';
 import NuevaVenta from './pages/NuevaVenta';
 import PersonalizarTienda from './pages/PersonalizarTienda';
 import Temas from './pages/Temas';
+import Perfil from './pages/Perfil';
 import Plan from './pages/Plan';
 import Portada from './pages/Portada';
 import Productos from './pages/Productos';
@@ -99,6 +100,7 @@ export default function App() {
       <Route element={<RutaProtegida roles={['ADMIN_TIENDA', 'EMPLEADO', 'SUPERADMIN']} />}>
         <Route element={<LayoutPanel />}>
           <Route path="/cuenta/seguridad" element={<Seguridad />} />
+          <Route path="/cuenta/perfil" element={<Perfil />} />
         </Route>
       </Route>
 

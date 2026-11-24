@@ -84,6 +84,12 @@ export const IconoInventario = (p) => (
 export const IconoPincel = (p) => (
   <Icono {...p}><path d="M14 4l6 6-8 8H6v-6z" /><path d="M11 7l6 6" /></Icono>
 );
+export const IconoSelector = (p) => (
+  <Icono {...p}><path d="M8 9l4-4 4 4M8 15l4 4 4-4" /></Icono>
+);
+export const IconoCandado = (p) => (
+  <Icono {...p}><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></Icono>
+);
 export const IconoMas = (p) => (
   <Icono {...p}><path d="M12 5v14M5 12h14" /></Icono>
 );
