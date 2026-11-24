@@ -362,7 +362,7 @@ export default function Registro() {
     <LayoutAcceso ancho="max-w-lg">
       <div className="mb-6">
         <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Paso {enPasoTienda ? 2 : 1} de 2</p>
-        <h1 className="text-xl font-semibold text-slate-900">
+        <h1 className="letra-titular mt-1 text-4xl text-[var(--v-tinta)]">
           {enPasoTienda ? 'Datos de tu tienda' : enPasoCodigo ? 'Verifica tu correo' : 'Crear cuenta'}
         </h1>
         <p className="text-sm text-slate-500">
@@ -398,7 +398,7 @@ export default function Registro() {
           <button
             type="submit"
             disabled={enviando}
-            className="w-full rounded-lg bg-slate-900 py-2.5 font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+            className="w-full rounded-full bg-[var(--v-tinta)] py-3 font-semibold text-white transition hover:bg-[var(--v-tinta-2)] disabled:opacity-60"
           >
             {enviando ? 'Creando cuenta...' : 'Crear cuenta'}
           </button>
@@ -479,7 +479,7 @@ export default function Registro() {
           <button
             type="submit"
             disabled={enviando}
-            className="w-full rounded-lg bg-slate-900 py-2.5 font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+            className="w-full rounded-full bg-[var(--v-tinta)] py-3 font-semibold text-white transition hover:bg-[var(--v-tinta-2)] disabled:opacity-60"
           >
             {enviando ? 'Enviando código...' : 'Continuar'}
           </button>
@@ -538,7 +538,7 @@ export default function Registro() {
           <button
             type="submit"
             disabled={enviando}
-            className="w-full rounded-lg bg-slate-900 py-2.5 font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+            className="w-full rounded-full bg-[var(--v-tinta)] py-3 font-semibold text-white transition hover:bg-[var(--v-tinta-2)] disabled:opacity-60"
           >
             {enviando ? 'Creando tienda...' : 'Crear tienda'}
           </button>

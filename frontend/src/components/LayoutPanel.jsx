@@ -9,6 +9,7 @@ import {
   IconoInventario, IconoMenu, IconoPedidos, IconoProductos, IconoSalir, IconoTienda,
 } from './Iconos';
 import { esDuenoDe, puede } from '../utils/permisos';
+import MarcaVendely from './marca/MarcaVendely';
 
 /**
  * Menú del panel de la tienda (dueño y empleados).
@@ -96,7 +97,7 @@ export default function LayoutPanel() {
           onClick={() => setMenuAbierto(false)}
           className={({ isActive }) =>
             `flex h-[30px] items-center gap-2.5 rounded-xl ${sub ? 'pl-[37px] pr-2.5' : 'px-2.5'} ${
-              isActive ? 'bg-[#2b2b2b] font-semibold text-[#fcfcfc]' : 'text-[#dcdcdc] hover:bg-[#1f1f1f]'
+              isActive ? 'bg-[#2b2b2b] font-semibold text-[#fcfcfc] shadow-[inset_3px_0_0_var(--v-mango)]' : 'text-[#dcdcdc] hover:bg-[#1f1f1f]'
             }`
           }
         >
@@ -118,7 +119,7 @@ export default function LayoutPanel() {
             onClick={() => setMenuAbierto(false)}
             className={({ isActive }) =>
               `flex h-[30px] items-center rounded-xl pl-[37px] pr-2.5 ${
-                isActive ? 'bg-[#2b2b2b] font-semibold text-[#fcfcfc]' : 'text-[#dcdcdc] hover:bg-[#1f1f1f]'
+                isActive ? 'bg-[#2b2b2b] font-semibold text-[#fcfcfc] shadow-[inset_3px_0_0_var(--v-mango)]' : 'text-[#dcdcdc] hover:bg-[#1f1f1f]'
               }`
             }
           >
@@ -149,7 +150,7 @@ export default function LayoutPanel() {
           >
             <IconoMenu tamano={20} />
           </button>
-          <span className="text-[17px] font-semibold tracking-tight text-white md:w-52">Vendely</span>
+          <span className="md:w-52"><MarcaVendely claro a="/inicio" tamano={26} className="text-[15px]" /></span>
 
           {esPanelTienda && permite('PRODUCTOS') ? (
             <form onSubmit={buscar} className="mx-auto hidden w-full max-w-lg sm:block">
@@ -175,7 +176,7 @@ export default function LayoutPanel() {
               <p className="text-[13px] font-medium text-white">{usuario.nombres} {usuario.primerApellido}</p>
               <p className="text-[12px] text-[#8a8a8a]">{NOMBRE_ROL[usuario.rol] ?? usuario.rol}</p>
             </div>
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1650d0] text-[13px] font-semibold text-white">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--v-mango)] text-[13px] font-bold text-[var(--v-tinta)]">
               {inicial}
             </span>
           </div>

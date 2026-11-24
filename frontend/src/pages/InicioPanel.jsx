@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import EtiquetaPago from '../components/EtiquetaPago';
-import { IconoCheck, IconoPedidos } from '../components/Iconos';
+import { IconoCheck, IconoClientes, IconoPedidos, IconoProductos } from '../components/Iconos';
 import Mensaje from '../components/Mensaje';
 import SelectorTienda from '../components/SelectorTienda';
 import { useAuth } from '../context/AuthContext';
@@ -9,6 +9,12 @@ import { useTiendaActual } from '../hooks/useTiendaActual';
 import { api, mensajeDeError } from '../services/api';
 import { formatoFecha, formatoMoneda } from '../utils/formato';
 import { esDuenoDe, puede } from '../utils/permisos';
+
+/** "Buenos días", "Buenas tardes" o "Buenas noches" según la hora. */
+function saludo() {
+  const h = new Date().getHours();
+  return h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
+}
 
 /** Inicio del panel: cuatro números y los últimos 5 pedidos, con las listas que ya existen. */
 export default function InicioPanel() {
@@ -90,17 +96,44 @@ export default function InicioPanel() {
 
   // Cada tarjeta se muestra solo si la cuenta puede ver ese dato en esta tienda.
   const tarjetas = [
-    puede(tienda, 'PEDIDOS') && ['Ventas de hoy (pagadas)', formatoMoneda(ventasHoy)],
-    puede(tienda, 'PEDIDOS') && ['Pedidos', datos.pedidos.length],
-    puede(tienda, 'PRODUCTOS', 'PEDIDOS', 'INVENTARIO') && ['Productos activos', activos],
-    puede(tienda, 'CLIENTES', 'PEDIDOS') && ['Clientes', datos.clientes.length],
+    puede(tienda, 'PEDIDOS') && ['Ventas de hoy (pagadas)', formatoMoneda(ventasHoy), IconoCheck, '#fff1d1', '#8a5a00'],
+    puede(tienda, 'PEDIDOS') && ['Pedidos', datos.pedidos.length, IconoPedidos, '#e8e6ff', '#3b2fc9'],
+    puede(tienda, 'PRODUCTOS', 'PEDIDOS', 'INVENTARIO') && ['Productos activos', activos, IconoProductos, '#ffe4ee', '#b0174f'],
+    puede(tienda, 'CLIENTES', 'PEDIDOS') && ['Clientes', datos.clientes.length, IconoClientes, '#dcf5ea', '#106a43'],
   ].filter(Boolean);
 
   return (
     <section className="max-w-5xl space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-[#101010]">Inicio</h1>
-        {tiendas.length > 0 && <SelectorTienda tiendas={tiendas} idTienda={idTienda} onCambiar={cambiarTienda} />}
+      {/* Saludo con la tienda elegida y el enlace para verla como la ven los clientes */}
+      <div className="relative isolate overflow-hidden rounded-2xl bg-[var(--v-tinta)] px-6 py-6 text-white md:px-8 md:py-7">
+        <span className="absolute -right-10 -top-16 -z-10 h-56 w-56 rounded-full bg-[var(--v-mango)] opacity-90" />
+        <span className="absolute right-28 top-14 -z-10 h-24 w-24 rounded-full bg-[var(--v-pitaya)] opacity-80" />
+        <p className="text-[13px] text-white/70">{saludo()}, {usuario?.nombres?.trim().split(/\s+/)[0]}</p>
+        <h1 className="letra-titular mt-1 max-w-[70%] text-[28px] leading-tight md:text-[34px]">
+          {tienda ? tienda.nombre : 'Inicio'}
+        </h1>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          {tiendas.length > 1 && (
+            <div className="rounded-lg bg-white px-2 text-[#303030]">
+              <SelectorTienda tiendas={tiendas} idTienda={idTienda} onCambiar={cambiarTienda} />
+            </div>
+          )}
+          {tienda?.subdominio && (
+            <a
+              href={`${window.location.origin}/tienda/${tienda.subdominio}`}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-full bg-white px-4 py-2 text-[13px] font-semibold text-[var(--v-tinta)] hover:bg-[var(--v-papel)]"
+            >
+              Ver mi tienda
+            </a>
+          )}
+          {dueno && (
+            <Link to="/panel/personalizar" className="rounded-full px-4 py-2 text-[13px] font-semibold text-white ring-1 ring-white/30 hover:bg-white/10">
+              Personalizar
+            </Link>
+          )}
+        </div>
       </div>
 
       {datos.error && <Mensaje tipo="error" texto={datos.error} />}
@@ -119,7 +152,7 @@ export default function InicioPanel() {
             <div className="mt-3 flex items-center gap-3">
               <span className="text-[12px] text-[#616161]">{completados} de {pasos.length} tareas completadas</span>
               <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#ebebeb]">
-                <div className="h-full rounded-full bg-[#303030]" style={{ width: `${(completados / pasos.length) * 100}%` }} />
+                <div className="h-full rounded-full bg-[var(--v-mango)]" style={{ width: `${(completados / pasos.length) * 100}%` }} />
               </div>
             </div>
           </div>
@@ -159,10 +192,13 @@ export default function InicioPanel() {
       )}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {tarjetas.map(([titulo, valor]) => (
-          <div key={titulo} className="rounded-xl bg-white p-4 shadow-[0_1px_0_rgba(0,0,0,0.08),0_0_0_1px_rgba(0,0,0,0.05)]">
-            <p className="text-xs text-[#616161]">{titulo}</p>
-            <p className="mt-1 text-2xl font-semibold">{cargando ? '…' : valor}</p>
+        {tarjetas.map(([titulo, valor, Icono, fondo, color]) => (
+          <div key={titulo} className="rounded-2xl bg-white p-4 shadow-[0_1px_0_rgba(0,0,0,0.08),0_0_0_1px_rgba(0,0,0,0.05)]">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl" style={{ background: fondo, color }}>
+              <Icono tamano={18} />
+            </span>
+            <p className="mt-3 text-xs text-[#616161]">{titulo}</p>
+            <p className="mt-0.5 text-2xl font-semibold text-[#101010]">{cargando ? '…' : valor}</p>
           </div>
         ))}
       </div>
