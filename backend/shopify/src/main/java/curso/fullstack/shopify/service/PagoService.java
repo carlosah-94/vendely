@@ -53,6 +53,7 @@ public class PagoService {
     private final BigDecimal tipoCambioPenUsd;
     private final BigDecimal tipoCambioClpUsd;
     private final String frontendUrl;
+    private final int diasParaVencer;
 
     public PagoService(PedidoRepository pedidoRepository, PagoRepository pagoRepository,
                        TiendaRepository tiendaRepository, MercadoPagoClient mercadoPago, PayPalClient payPal,
@@ -60,7 +61,9 @@ public class PagoService {
                        ApplicationEventPublisher eventos,
                        @Value("${app.paypal.tipo-cambio-pen-usd:3.75}") BigDecimal tipoCambioPenUsd,
                        @Value("${app.paypal.tipo-cambio-clp-usd:950}") BigDecimal tipoCambioClpUsd,
-                       @Value("${app.frontend-url:http://localhost:5173}") String frontendUrl) {
+                       @Value("${app.frontend-url:http://localhost:5173}") String frontendUrl,
+                       @Value("${app.pagos.dias-para-vencer:3}") int diasParaVencer) {
+        this.diasParaVencer = diasParaVencer;
         this.pedidoRepository = pedidoRepository;
         this.pagoRepository = pagoRepository;
         this.tiendaRepository = tiendaRepository;
@@ -366,7 +369,9 @@ public class PagoService {
             return false;
         }
         if (pagoRepository.existsByIdPedidoAndEstado(pago.getIdPedido(), Pago.APROBADO)) {
-            return false;   // otro intento del mismo pedido ya quedó aprobado
+            // Otro intento del mismo pedido ya quedó aprobado: este sobra. Antes se dejaba
+            // pendiente y se volvía a revisar cada 15 minutos para siempre.
+            return vencer(pago, "el pedido ya se pagó con otro intento");
         }
         Pedido p = pedidoRepository.findById(pago.getIdPedido()).orElse(null);
         if (p == null) {
@@ -378,7 +383,16 @@ public class PagoService {
             if (pago.getReferenciaTransaccion() == null || !payPal.estaConfigurado()) {
                 return false;
             }
-            confirmarPayPal(p, pago);
+            try {
+                confirmarPayPal(p, pago);
+            } catch (ApiException e) {
+                if (e.getStatus() != HttpStatus.NOT_FOUND) {
+                    throw e;
+                }
+                // PayPal ya no tiene la orden (borra a las pocas horas las que nadie aprueba):
+                // no se pagó y ya no se puede pagar.
+                return vencer(pago, "la orden ya no existe en PayPal");
+            }
             return !antes.equals(pago.getEstado());
         }
 
@@ -390,10 +404,29 @@ public class PagoService {
         Map<String, Object> mp = buscarEnMercadoPago(p.getIdPedido());
         String paymentId = mp == null ? null : texto(mp.get("id"));
         if (paymentId == null) {
+            // Mercado Pago no tiene ningún pago de este pedido: el cliente fue y no pagó (Mercado
+            // Pago no registra nada hasta que se paga). Pasados unos días se deja de preguntar.
+            // Si después pagara igual, aplicarPago crea un intento nuevo y el pago no se pierde.
+            if (pago.getFechaCreacion() != null
+                    && pago.getFechaCreacion().isBefore(OffsetDateTime.now().minusDays(diasParaVencer))) {
+                return vencer(pago, "sin pago en Mercado Pago después de " + diasParaVencer + " días");
+            }
             return false;
         }
         aplicarPago(p, paymentId, mp);
         return !antes.equals(pago.getEstado());
+    }
+
+    /**
+     * Cierra un intento de pago que nadie pagó (estado VENCIDO): así deja de revisarse cada
+     * 15 minutos y no ocupa lugar en la conciliación. El pedido queda "Sin pago" y se puede
+     * volver a pagar. Devuelve true (el intento cambió de estado).
+     */
+    private boolean vencer(Pago pago, String motivo) {
+        pago.setEstado(Pago.VENCIDO);
+        guardar(pago);
+        log.info("Intento de pago {} del pedido {} vencido: {}", pago.getIdPago(), pago.getIdPedido(), motivo);
+        return true;
     }
 
     /**

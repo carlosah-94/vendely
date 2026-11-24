@@ -40,6 +40,8 @@ public record PedidoResumenResponse(Long idPedido, Integer numeroPedido, OffsetD
             case 1 -> "APROBADO";
             case 2 -> "RECHAZADO";
             case 3 -> "REEMBOLSADO";
+            // 4 = intento vencido: nadie lo pagó y se dejó de revisar. Para el dueño y el cliente
+            // el pedido está "Sin pago" (no "Rechazado"): puede volver a pagarse.
             default -> "SIN_PAGO";
         };
     }

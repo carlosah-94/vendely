@@ -104,5 +104,8 @@ app:
     conciliacion-edad-minutos: ${PAGOS_CONCILIACION_EDAD_MINUTOS:30}
     # La primera revisión espera dos minutos, para no competir con el arranque.
     conciliacion-espera-inicial-ms: ${PAGOS_CONCILIACION_ESPERA_INICIAL_MS:120000}
+    # Un intento de Mercado Pago que después de estos días sigue sin ningún pago en la pasarela
+    # (el cliente fue y no pagó) pasa a VENCIDO y se deja de revisar. El pedido sigue sin pagar.
+    dias-para-vencer: ${PAGOS_DIAS_PARA_VENCER:3}
   # Dirección del frontend: a ella vuelve el cliente después de pagar en la pasarela
   frontend-url: ${FRONTEND_URL:http://localhost:5173}
