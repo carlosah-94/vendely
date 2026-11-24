@@ -38,6 +38,8 @@ services:
       CLOUDINARY_URL: ${CLOUDINARY_URL:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_REMITENTE: ${RESEND_REMITENTE:-Vendely <onboarding@resend.dev>}
+      # Codigo de 6 digitos al correo antes de crear la cuenta del dueno (false: sin codigo).
+      VERIFICAR_CORREO: ${VERIFICAR_CORREO:-true}
       PAYPAL_CLIENT_ID: ${PAYPAL_CLIENT_ID:-}
       PAYPAL_CLIENT_SECRET: ${PAYPAL_CLIENT_SECRET:-}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}

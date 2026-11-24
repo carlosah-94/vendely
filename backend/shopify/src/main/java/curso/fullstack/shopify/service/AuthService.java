@@ -48,12 +48,14 @@ public class AuthService {
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
     private final DobleFactorService dobleFactor;
+    private final VerificacionCorreoService verificacionCorreo;
 
     public AuthService(LoginRepository loginRepository, PropietarioRepository propietarioRepository,
             TiendaRepository tiendaRepository, PasswordEncoder passwordEncoder,
             JwtService jwtService, AuthenticationManager authenticationManager,
-            DobleFactorService dobleFactor) {
+            DobleFactorService dobleFactor, VerificacionCorreoService verificacionCorreo) {
         this.dobleFactor = dobleFactor;
+        this.verificacionCorreo = verificacionCorreo;
         this.loginRepository = loginRepository;
         this.propietarioRepository = propietarioRepository;
         this.tiendaRepository = tiendaRepository;
@@ -79,6 +81,9 @@ public class AuthService {
         if (propietarioRepository.existsByTipoDocumentoAndNumeroDocumento(r.tipoDocumento(), documento)) {
             throw new ApiException(HttpStatus.CONFLICT, "El documento ya está registrado");
         }
+        // El correo tiene que estar verificado con el código que se le envió. Va después de los
+        // otros controles: si el usuario o el documento ya existen, el código no se gasta.
+        verificacionCorreo.comprobar(correo, r.codigoVerificacion());
 
         Login login = nuevaCuenta(RolUsuario.ADMIN_TIENDA, null, r.usuario(), correo, r.contrasena(),
                 r.nombres(), r.primerApellido(), r.segundoApellido(), r.telefono(), false);
@@ -90,6 +95,7 @@ public class AuthService {
         p.setNumeroDocumento(documento);
         p.setRazonSocial(vacioANull(r.razonSocial()));
         propietarioRepository.save(p);
+        verificacionCorreo.consumir(correo);     // el código ya se usó: no sirve para otra cuenta
 
         log.info("Cuenta de dueño creada: idLogin={}, idPropietario={}", login.getIdLogin(), p.getIdPropietario());
         return respuesta(login);
