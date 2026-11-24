@@ -1,10 +1,10 @@
 -- ---------------------------------------------------------------------
---  MIGRACIÓN FLYWAY V9 · Empleados de la tienda (cuentas de personal)
+--  MIGRACIÓN FLYWAY V10 · Empleados de la tienda (cuentas de personal)
 --
 --  Flyway la aplica UNA sola vez y guarda su checksum en la tabla
 --  flyway_schema_history. Por eso este archivo ya NO se edita: cambiar
 --  una sola letra cambia el checksum y el backend no arranca. Los
---  cambios al esquema o a los datos van en una migración nueva (V10…).
+--  cambios al esquema o a los datos van en una migración nueva (V11…).
 -- ---------------------------------------------------------------------
 --
 --  Como las "cuentas de personal" de Shopify: el dueño agrega empleados a su tienda y elige
