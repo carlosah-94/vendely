@@ -2,26 +2,31 @@ import { useEffect, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import BuscadorDistrito from '../../components/BuscadorDistrito';
 import Campo from '../../components/Campo';
+import { IconoCheck } from '../../components/Iconos';
 import ImagenProducto from '../../components/ImagenProducto';
 import Mensaje from '../../components/Mensaje';
 import { useAuth } from '../../context/AuthContext';
 import { useCarrito } from '../../context/CarritoContext';
 import { mensajeDeError } from '../../services/api';
 import { cotizarEnvio, listarPaises } from '../../services/envios';
-import { crearDireccion, crearPedido, iniciarPago, listarDirecciones } from '../../services/tienda';
+import { crearDireccion, crearPedido, iniciarPago, listarDirecciones, verMiPedido } from '../../services/tienda';
 import { estiloInput } from '../../utils/estilos';
 import { formatoMoneda } from '../../utils/formato';
 import { METODOS_PAGO, metodosDeTienda } from '../../utils/metodosPago';
+import { borrarPedidoEnCurso, guardarPedidoEnCurso, huellaCarrito, leerPedidoEnCurso } from '../../utils/pedidoEnCurso';
 
 /**
  * Checkout en dos columnas: a la izquierda Contacto, Entrega y Pago; a la derecha el resumen gris.
  * Al pagar: crea el pedido, pide a la pasarela elegida (PayPal o Mercado Pago, en modo de prueba)
  * la página de pago y envía al cliente allí.
+ * Si el cliente vuelve con "Atrás" (desde la pasarela o desde el resultado), se revisa el pedido
+ * que ya se había creado: si está pagado se avisa y no se deja pagar otra vez; si no, se puede
+ * reintentar el pago del mismo pedido.
  */
 export default function Checkout() {
   const { tienda, subdominio } = useOutletContext();
   const { usuario } = useAuth();
-  const { items, subtotal } = useCarrito();
+  const { items, subtotal, vaciar } = useCarrito();
 
   const [direcciones, setDirecciones] = useState(null); // null = cargando
   const [idDireccion, setIdDireccion] = useState(null);
@@ -31,6 +36,10 @@ export default function Checkout() {
   const [enviando, setEnviando] = useState(false);
   // Si el pedido ya se creó pero el pago no pudo iniciarse, al reintentar NO se crea otro pedido.
   const [pedidoCreado, setPedidoCreado] = useState(null);
+  // Revisión del pedido que ya se mandó a pagar (al entrar y al volver con "Atrás").
+  const [revision, setRevision] = useState(0);
+  const [revisionHecha, setRevisionHecha] = useState(null);
+  const [pedidoPagado, setPedidoPagado] = useState(null); // número del pedido que ya se pagó
   // Envío a la dirección elegida: { idDireccion, subtotal, datos } (datos null = calculando).
   const [envio, setEnvio] = useState(null);
   // Método de pago: los que ofrece la tienda; por defecto el primero (el método base).
@@ -70,6 +79,41 @@ export default function Checkout() {
     };
   }, []);
 
+  // Al volver con "Atrás" el navegador puede restaurar la página tal como quedó al ir a la pasarela
+  // (bfcache): botón en "Procesando..." y el pedido de antes. Se reinicia y se revisa de nuevo.
+  useEffect(() => {
+    function alMostrar(e) {
+      if (!e.persisted) return;
+      setEnviando(false);
+      setError('');
+      setRevision((r) => r + 1);
+    }
+    window.addEventListener('pageshow', alMostrar);
+    return () => window.removeEventListener('pageshow', alMostrar);
+  }, []);
+
+  // ¿Hay un pedido de esta pestaña que ya se mandó a pagar? Se consulta su estado en el backend.
+  // Mientras tanto el botón de pagar queda deshabilitado (para no crear otro pedido).
+  const huella = huellaCarrito(items);
+  const claveRevision = `${huella}|${revision}`;
+  const revisando = revisionHecha !== claveRevision;
+  useEffect(() => {
+    let vigente = true;
+    revisarPedidoEnCurso(subdominio, huella).then(({ pagado, pedido }) => {
+      if (!vigente) return;
+      if (pagado != null) {
+        // Ya se pagó: no se puede pagar dos veces. El carrito de esa compra se vacía.
+        vaciar();
+        setPedidoPagado(pagado);
+      }
+      setPedidoCreado(pedido);
+      setRevisionHecha(claveRevision);
+    });
+    return () => {
+      vigente = false;
+    };
+  }, [subdominio, huella, claveRevision, vaciar]);
+
   async function pagar() {
     setError('');
     setEnviando(true);
@@ -82,6 +126,7 @@ export default function Checkout() {
         });
         setPedidoCreado(pedido);
       }
+      guardarPedidoEnCurso(subdominio, pedido.idPedido, items);
       const { urlPago } = await iniciarPago(pedido.idPedido, metodoElegido);
       window.location.href = urlPago;
     } catch (e) {
@@ -89,6 +134,28 @@ export default function Checkout() {
       setError(mensajeDeError(e));
       setEnviando(false);
     }
+  }
+
+  if (pedidoPagado != null) {
+    return (
+      <div className="mx-auto max-w-md space-y-4 px-4 py-20 text-center">
+        <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-green-700">
+          <IconoCheck tamano={32} />
+        </span>
+        <h1 className="text-2xl font-semibold">Este pedido ya está pagado</h1>
+        <p className="text-[#616161]">
+          El pago de tu pedido #{pedidoPagado} ya se aprobó. No necesitas pagarlo otra vez.
+        </p>
+        <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:justify-center">
+          <Link to={`/tienda/${subdominio}/mis-pedidos`} className="rounded-md bg-[var(--tienda)] px-6 py-3 font-medium text-[var(--tienda-texto)] hover:brightness-90">
+            Ver mis pedidos
+          </Link>
+          <Link to={`/tienda/${subdominio}`} className="rounded-md border border-[#303030] px-6 py-3 font-medium">
+            Seguir comprando
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   if (items.length === 0) {
@@ -296,7 +363,7 @@ export default function Checkout() {
           <button
             type="button"
             onClick={pagar}
-            disabled={enviando || !idDireccion || nueva || !cotizacion?.datos?.disponible || !metodoElegido}
+            disabled={enviando || revisando || !idDireccion || nueva || !cotizacion?.datos?.disponible || !metodoElegido}
             className="w-full rounded-md bg-[var(--tienda)] py-4 text-lg font-medium text-[var(--tienda-texto)] hover:brightness-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {enviando ? 'Procesando...' : metodoElegido ? `Pagar con ${METODOS_PAGO[metodoElegido].nombre}` : 'Pagar ahora'}
@@ -312,6 +379,37 @@ export default function Checkout() {
       </aside>
     </div>
   );
+}
+
+/**
+ * Revisa el pedido que esta pestaña ya mandó a pagar. Devuelve { pagado, pedido }:
+ * - pagado: número del pedido si su pago ya se aprobó (no se debe cobrar otra vez);
+ * - pedido: el pedido para reintentar el pago (cancelado, rechazado o a medias), o null si hay
+ *   que crear uno nuevo (no había, el pedido se canceló, o el carrito cambió desde entonces).
+ */
+async function revisarPedidoEnCurso(subdominio, huella) {
+  const guardado = leerPedidoEnCurso(subdominio);
+  if (!guardado) return { pagado: null, pedido: null };
+  if (guardado.huella !== huella) {
+    // El carrito cambió (u otro checkout ya lo vació al aprobar el pago): ese pedido ya no es este.
+    borrarPedidoEnCurso(subdominio);
+    return { pagado: null, pedido: null };
+  }
+  try {
+    const pedido = await verMiPedido(guardado.idPedido);
+    if (pedido.estadoPago === 'APROBADO') {
+      borrarPedidoEnCurso(subdominio);
+      return { pagado: pedido.numeroPedido, pedido: null };
+    }
+    if (pedido.estado === 'CANCELADO') {
+      borrarPedidoEnCurso(subdominio);
+      return { pagado: null, pedido: null };
+    }
+    return { pagado: null, pedido };
+  } catch {
+    borrarPedidoEnCurso(subdominio);
+    return { pagado: null, pedido: null };
+  }
 }
 
 /**

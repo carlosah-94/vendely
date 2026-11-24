@@ -5,6 +5,7 @@ import { useCarrito } from '../../context/CarritoContext';
 import { mensajeDeError } from '../../services/api';
 import { confirmarPago, iniciarPago } from '../../services/tienda';
 import { metodoDelRegreso } from '../../utils/metodosPago';
+import { borrarPedidoEnCurso } from '../../utils/pedidoEnCurso';
 
 /**
  * Regreso de la pasarela de pago.
@@ -38,6 +39,7 @@ export default function ResultadoPago() {
       .then((r) => {
         if (r.estadoPago === 'APROBADO') {
           vaciar();
+          borrarPedidoEnCurso(subdominio);
           setEstado({ fase: 'aprobado', numero: r.numeroPedido, error: '' });
         } else if (r.estadoPago === 'PENDIENTE') {
           setEstado({ fase: 'pendiente', numero: r.numeroPedido, error: '' });
@@ -46,7 +48,7 @@ export default function ResultadoPago() {
         }
       })
       .catch((e) => setEstado({ fase: 'rechazado', numero: null, error: mensajeDeError(e) }));
-  }, [sinDatos, idPedido, paymentId, vaciar]);
+  }, [sinDatos, idPedido, paymentId, vaciar, subdominio]);
 
   async function reintentar() {
     setReintentando(true);

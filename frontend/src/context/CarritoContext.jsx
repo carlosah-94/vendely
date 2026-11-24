@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
 const CarritoContext = createContext(null);
 
@@ -30,6 +30,16 @@ export function CarritoProvider({ subdominio, children }) {
       // Sin almacenamiento, el carrito solo dura mientras la página está abierta.
     }
   }, [clave, items]);
+
+  // Al volver con "Atrás" el navegador puede restaurar la página congelada (bfcache) con el
+  // carrito de antes de pagar. Se vuelve a leer el guardado: si el pago se aprobó, ya está vacío.
+  useEffect(() => {
+    function alMostrar(e) {
+      if (e.persisted) setItems(leer(clave));
+    }
+    window.addEventListener('pageshow', alMostrar);
+    return () => window.removeEventListener('pageshow', alMostrar);
+  }, [clave]);
 
   /** Agrega un producto sin pasar del stock disponible. */
   function agregar(producto, cantidad = 1) {
@@ -70,9 +80,8 @@ export function CarritoProvider({ subdominio, children }) {
     setItems((actual) => actual.filter((i) => i.idVariante !== idVariante));
   }
 
-  function vaciar() {
-    setItems([]);
-  }
+  // Estable entre renders: las pantallas lo usan en las dependencias de sus efectos.
+  const vaciar = useCallback(() => setItems([]), []);
 
   const cantidadTotal = items.reduce((suma, i) => suma + i.cantidad, 0);
   const subtotal = items.reduce((suma, i) => suma + i.precio * i.cantidad, 0);
