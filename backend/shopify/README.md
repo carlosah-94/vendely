@@ -33,6 +33,7 @@ La API queda en `http://localhost:8080/api`.
 | `RESEND_API_KEY` | Clave de resend.com. Sin ella los correos se registran como "simulado" | vacío |
 | `CLOUDINARY_URL` | `cloudinary://clave:secreto@nube`. Sin ella, subir fotos responde 503 | vacío |
 | `RESEND_REMITENTE` | Remitente de los correos | `Vendely <onboarding@resend.dev>` |
+| `VERIFICAR_CORREO` | Pedir el código de 6 dígitos al correo antes de crear la cuenta del dueño. `false` solo para Postman | `true` |
 | `FRONTEND_URL` | Adonde vuelve el cliente tras pagar | `http://localhost:5173` |
 | `FLYWAY_LOCATIONS` | Carpetas de migraciones. En el servidor: `classpath:db/migration` (sin los usuarios de prueba) | las dos carpetas |
 | `SERVER_PORT` | Puerto de la API | 8080 |
@@ -76,7 +77,8 @@ Paquete base: `curso.fullstack.shopify`
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| POST | `/registro/dueno` | Crea la cuenta de dueño y su primera tienda |
+| POST | `/registro/codigo` | Envía un código de 6 dígitos al correo del futuro dueño |
+| POST | `/registro/dueno` | Crea la cuenta de dueño (exige `codigoVerificacion`) |
 | POST | `/registro/cliente` | Crea un cliente en una tienda (por `subdominio`) |
 | POST | `/login` | Sin `subdominio`: panel. Con `subdominio`: cliente de esa tienda |
 | GET | `/yo` | Datos de quien inició sesión |
@@ -163,6 +165,27 @@ Cómo está hecho, y por qué:
 **Cambiar la contraseña cierra las demás sesiones**: el backend entrega un token nuevo y `JwtAuthFilter` rechaza los emitidos antes del cambio (`login.contrasena_cambiada_en`).
 
 **Pendiente, y conviene saberlo:** el secreto se guarda en la base tal cual, sin cifrar. Para este proyecto es aceptable, pero quien lea la tabla `login` podría generar los códigos.
+
+## Verificación del correo
+
+Antes de crear la cuenta de un dueño se comprueba que el correo existe y es suyo, como en Shopify: se le envía un código de 6 dígitos y solo con ese código se crea la cuenta (`VerificacionCorreoService`).
+
+1. `POST /api/auth/registro/codigo` con `{ "correo": "..." }`: genera el código, guarda **solo su hash** (BCrypt) en `verificaciones_correo` y lo envía con Resend.
+2. `POST /api/auth/registro/dueno` con los datos de siempre más `"codigoVerificacion": "123456"`. Si el código es correcto se crea la cuenta y el código se borra.
+
+| Regla | Respuesta |
+|---|---|
+| El correo ya tiene cuenta | `409` al pedir el código (`campos.correo`), antes de escribirlo |
+| Pedir otro código antes de 1 minuto | `429` |
+| El correo no sale (Resend falla) | `502`; no queda código guardado, se puede pedir otro enseguida |
+| Sin código, código equivocado, vencido (10 minutos) o 5 intentos fallidos | `400` con `campos.codigoVerificacion` |
+
+- **Los intentos se cuentan aunque el registro falle**: la comprobación va en su propia transacción (`REQUIRES_NEW`), y la fila se bloquea para que no se puedan probar códigos en paralelo.
+- El código se comprueba **después** de ver que el usuario y el documento estén libres: si alguno ya existe, el código no se gasta y se puede corregir el dato.
+- Pedir un código nuevo invalida el anterior y devuelve los 5 intentos. Cada noche se borran los códigos vencidos que nadie usó.
+- **Sin `RESEND_API_KEY`** (en local) no se envía nada: el código aparece en el log del backend (`docker compose logs backend`).
+- **Con el remitente de pruebas de Resend** (`onboarding@resend.dev`) solo se puede enviar al correo de la cuenta de Resend: a cualquier otro, Resend responde 403 y el registro da 502. Para registrar a personas reales hay que verificar un dominio en resend.com/domains y cambiar `RESEND_REMITENTE`.
+- `VERIFICAR_CORREO=false` apaga la verificación (el registro funciona como antes). Es para herramientas que no pueden leer el correo, como la colección de Postman.
 
 ## Fotos (Cloudinary)
 
@@ -348,6 +371,7 @@ Para correr una sola clase: `mvn test -Dtest=PagoServiceTest`. Desde NetBeans: c
 | `service/PedidoServiceTest` | Que una venta sea todo o nada: si falta stock en una línea, el inventario queda exactamente como estaba. Líneas repetidas, eliminar con devolución de stock y productos que no están a la venta. |
 | `service/PlanServiceTest` | Los límites de cada plan y el texto "Mejora tu plan" del 403, del que depende `esErrorDePlan()` en el frontend. |
 | `security/SesionTest` | Que un token deje de servir si está firmado con otra clave, vencido, emitido antes del cambio de contraseña o si la cuenta se suspendió; y que el login no revele qué correos existen. |
+| `security/VerificacionCorreoTest` | Que la cuenta del dueño solo se cree con el código enviado a su correo: sin código, equivocado, vencido o tras 5 intentos no se crea; que los intentos se guarden aunque el registro falle; que no se reenvíe antes de un minuto; y que un usuario ya ocupado no gaste el código. |
 | `security/TotpTest`, `tiemporeal/CanalesTest` | El generador de códigos de la doble autenticación y quién escucha cada canal de tiempo real. No levantan Spring. |
 
 **Cómo están armadas.** Las de integración heredan de `PruebaIntegracion`: Spring completo, MockMvc y un solo contenedor para toda la suite. Cada prueba crea sus propias tiendas, productos y clientes con `DatosPrueba` (SQL directo), así no depende del orden ni de lo que dejaron las otras. A propósito **no** se usa `@Transactional` en las clases de prueba: la transacción del service tiene que confirmarse o deshacerse de verdad para poder comprobar, por ejemplo, que el stock vuelve a su valor si la venta falla.
@@ -364,6 +388,7 @@ El CI (`.github/workflows/ci.yml`) las corre en cada PR con `mvn package`; el ru
 ### Hecho
 
 - Registro, login, roles y cambio de contraseña con JWT
+- Verificación del correo del dueño con un código de 6 dígitos antes de crear la cuenta
 - Tiendas: crear, listar, consultar y actualizar
 - CRUD de clientes y de productos (con precio y stock)
 - Ventas desde el panel: registro, consulta y eliminación con ajuste de stock

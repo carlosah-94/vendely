@@ -35,5 +35,10 @@ public record RegistroDuenoRequest(
         @NotBlank @Size(max = 20)
         String numeroDocumento,
 
-        @Size(max = 150) String razonSocial
+        @Size(max = 150) String razonSocial,
+
+        // El código de 6 dígitos que se envió al correo (POST /api/auth/registro/codigo).
+        // Lo exige VerificacionCorreoService; solo es opcional si la verificación está apagada.
+        @Pattern(regexp = "^[0-9]{6}$", message = "El código tiene 6 dígitos")
+        String codigoVerificacion
 ) {}

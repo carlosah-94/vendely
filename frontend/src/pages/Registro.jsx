@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import Campo from '../components/Campo';
 import LayoutAcceso from '../components/LayoutAcceso';
@@ -133,7 +133,8 @@ function erroresDelBackend(error) {
 
 /**
  * Crear cuenta de dueño de tienda, en dos pasos, como en Shopify:
- *   1. La cuenta: primero el país y luego datos personales, acceso y documento.
+ *   1. La cuenta: primero el país y luego datos personales, acceso y documento. Antes de
+ *      crearla se verifica el correo con un código de 6 dígitos (VerificacionCorreoService).
  *   2. La primera tienda: nombre y subdominio (su dirección web).
  * Al terminar, el dueño entra al panel para registrar sus productos.
  */
@@ -141,8 +142,12 @@ export default function Registro() {
   const { usuario, registrarDueno } = useAuth();
   const navigate = useNavigate();
 
-  // 'cuenta' → 'registrando' (esperando al backend) → 'tienda'
+  // 'cuenta' → 'codigo' (verificar el correo) → 'registrando' (esperando al backend) → 'tienda'
   const [paso, setPaso] = useState('cuenta');
+  // Código de verificación: a qué correo se envió, cuándo se puede pedir otro y lo que escribió.
+  const [verificacion, setVerificacion] = useState({ enviadoA: '', reenviarDesde: 0 });
+  const [codigo, setCodigo] = useState('');
+  const [ahora, setAhora] = useState(() => Date.now());
   const [cuenta, setCuenta] = useState(() => cuentaInicial(paisDelNavegador()));
   const [tienda, setTienda] = useState({ nombre: '', subdominio: '', correoContacto: '', idPais: 'PE' });
   const paises = usePaisesHabilitados();
@@ -151,6 +156,20 @@ export default function Registro() {
   const [errores, setErrores] = useState({});
   const [errorGeneral, setErrorGeneral] = useState('');
   const [enviando, setEnviando] = useState(false);
+
+  // El error general va arriba del formulario: si el dueño está abajo (en "Continuar"), se
+  // lleva la vista hasta el mensaje para que no parezca que el botón no hizo nada.
+  const avisoRef = useRef(null);
+  useEffect(() => {
+    if (errorGeneral) avisoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [errorGeneral]);
+
+  // Mientras se muestra el paso del código, un reloj para la cuenta regresiva de "Reenviar".
+  useEffect(() => {
+    if (paso !== 'codigo') return undefined;
+    const reloj = setInterval(() => setAhora(Date.now()), 1000);
+    return () => clearInterval(reloj);
+  }, [paso]);
 
   // Una persona que ya inició sesión no necesita crear otra cuenta.
   if (usuario && paso === 'cuenta') {
@@ -200,13 +219,79 @@ export default function Registro() {
     };
   }
 
-  async function crearCuenta(evento) {
+  /**
+   * Pide al backend un código para el correo (POST /auth/registro/codigo).
+   * Devuelve false si el backend tiene la verificación apagada: entonces no hay código.
+   */
+  async function pedirCodigo(correo) {
+    const { data } = await api.post('/auth/registro/codigo', { correo });
+    if (!data.requerido) return false;
+    setVerificacion({ enviadoA: correo, reenviarDesde: Date.now() + data.reenviarEnSegundos * 1000 });
+    setAhora(Date.now());
+    return true;
+  }
+
+  /**
+   * "Continuar" del formulario: valida y envía el código al correo (como Shopify, la cuenta
+   * no se crea hasta escribir el código). Si ya se envió uno a este mismo correo, por ejemplo
+   * porque volvió a corregir su usuario, no se pide otro: se usa el mismo.
+   */
+  async function continuar(evento) {
     evento.preventDefault();
     setErrorGeneral('');
     const encontrados = validarCuenta(cuenta);
     setErrores(encontrados);
     if (Object.keys(encontrados).length > 0) return;
 
+    const correo = cuenta.correo.trim().toLowerCase();
+    if (verificacion.enviadoA === correo) {
+      setPaso('codigo');
+      return;
+    }
+    setEnviando(true);
+    try {
+      const requerido = await pedirCodigo(correo);
+      setCodigo('');
+      if (requerido) {
+        setPaso('codigo');
+      } else {
+        await crearCuenta(null);
+      }
+    } catch (e) {
+      const { campos, general } = erroresDelBackend(e);
+      setErrores(campos);             // 409: campos.correo = "El correo ya está registrado"
+      setErrorGeneral(general);       // 429 o 502: el mensaje va arriba
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function reenviarCodigo() {
+    setErrorGeneral('');
+    setErrores((er) => ({ ...er, codigoVerificacion: undefined }));
+    setEnviando(true);
+    try {
+      await pedirCodigo(verificacion.enviadoA);
+      setCodigo('');
+    } catch (e) {
+      setErrorGeneral(erroresDelBackend(e).general || 'No se pudo reenviar el código');
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  function enviarConCodigo(evento) {
+    evento.preventDefault();
+    setErrorGeneral('');
+    if (!/^[0-9]{6}$/.test(codigo)) {
+      setErrores((er) => ({ ...er, codigoVerificacion: 'Escribe los 6 dígitos del código' }));
+      return;
+    }
+    crearCuenta(codigo);
+  }
+
+  /** Crea la cuenta con el código de verificación (null si el backend no lo pide). */
+  async function crearCuenta(codigoVerificacion) {
     setEnviando(true);
     setPaso('registrando');
     try {
@@ -221,6 +306,7 @@ export default function Registro() {
         tipoDocumento: Number(cuenta.tipoDocumento),
         numeroDocumento: cuenta.numeroDocumento.trim().toUpperCase(),
         razonSocial: tipoElegido?.empresa ? cuenta.razonSocial.trim() || null : null,
+        codigoVerificacion,
       });
       // La tienda se propone en el país elegido arriba, si ahí se pueden crear tiendas.
       setTienda((t) => ({
@@ -233,8 +319,9 @@ export default function Registro() {
     } catch (e) {
       const { campos, general } = erroresDelBackend(e);
       setErrores(campos);
-      setErrorGeneral(general); // por ejemplo, 409 "El correo ya está registrado"
-      setPaso('cuenta');
+      setErrorGeneral(general); // por ejemplo, 409 "El nombre de usuario ya está en uso"
+      // Un código malo o vencido se corrige en el mismo paso; lo demás, en el formulario.
+      setPaso(campos.codigoVerificacion && codigoVerificacion ? 'codigo' : 'cuenta');
     } finally {
       setEnviando(false);
     }
@@ -267,27 +354,75 @@ export default function Registro() {
   }
 
   const enPasoTienda = paso === 'tienda';
+  // Mientras se crea la cuenta desde el paso del código, se sigue viendo ese paso.
+  const enPasoCodigo = paso === 'codigo' || (paso === 'registrando' && Boolean(verificacion.enviadoA));
+  const segundosParaReenviar = Math.max(0, Math.ceil((verificacion.reenviarDesde - ahora) / 1000));
 
   return (
     <LayoutAcceso ancho="max-w-lg">
       <div className="mb-6">
         <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Paso {enPasoTienda ? 2 : 1} de 2</p>
         <h1 className="text-xl font-semibold text-slate-900">
-          {enPasoTienda ? 'Datos de tu tienda' : 'Crear cuenta'}
+          {enPasoTienda ? 'Datos de tu tienda' : enPasoCodigo ? 'Verifica tu correo' : 'Crear cuenta'}
         </h1>
         <p className="text-sm text-slate-500">
           {enPasoTienda
             ? 'Podrás crear más tiendas después desde el panel.'
-            : 'Tus datos como dueño de tienda.'}
+            : enPasoCodigo
+              ? <>Te enviamos un código de 6 dígitos a <b className="text-slate-700">{verificacion.enviadoA}</b>.</>
+              : 'Tus datos como dueño de tienda.'}
         </p>
       </div>
 
       {errorGeneral && (
-        <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{errorGeneral}</p>
+        <p ref={avisoRef} role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{errorGeneral}</p>
       )}
 
-      {!enPasoTienda ? (
-        <form onSubmit={crearCuenta} noValidate className="space-y-4">
+      {enPasoCodigo ? (
+        <form onSubmit={enviarConCodigo} noValidate className="space-y-4">
+          <Campo etiqueta="Código de verificación" error={errores.codigoVerificacion} ayuda="Revisa también la carpeta de spam. Vence en 10 minutos.">
+            <input
+              value={codigo}
+              onChange={(e) => {
+                setCodigo(e.target.value.replace(/\D/g, '').slice(0, 6));
+                setErrores((er) => ({ ...er, codigoVerificacion: undefined }));
+              }}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              autoFocus
+              placeholder="123456"
+              className={`${estiloInput(errores.codigoVerificacion)} text-center text-2xl tracking-[0.5em]`}
+            />
+          </Campo>
+
+          <button
+            type="submit"
+            disabled={enviando}
+            className="w-full rounded-lg bg-slate-900 py-2.5 font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+          >
+            {enviando ? 'Creando cuenta...' : 'Crear cuenta'}
+          </button>
+
+          <div className="flex items-center justify-between text-sm">
+            <button
+              type="button"
+              onClick={() => { setErrorGeneral(''); setPaso('cuenta'); }}
+              className="text-slate-600 hover:underline"
+            >
+              Cambiar mis datos
+            </button>
+            <button
+              type="button"
+              onClick={reenviarCodigo}
+              disabled={enviando || segundosParaReenviar > 0}
+              className="font-medium text-violet-700 hover:underline disabled:cursor-not-allowed disabled:text-slate-400 disabled:no-underline"
+            >
+              {segundosParaReenviar > 0 ? `Reenviar código en ${segundosParaReenviar} s` : 'Reenviar código'}
+            </button>
+          </div>
+        </form>
+      ) : !enPasoTienda ? (
+        <form onSubmit={continuar} noValidate className="space-y-4">
           {/* El país va primero: de él salen los documentos y el prefijo del teléfono. */}
           <Campo etiqueta="País" ayuda="Según tu país te pedimos el documento y el código de teléfono.">
             <select value={cuenta.idPais} onChange={cambiarPais} autoComplete="country" className={estiloInput()}>
@@ -346,7 +481,7 @@ export default function Registro() {
             disabled={enviando}
             className="w-full rounded-lg bg-slate-900 py-2.5 font-medium text-white hover:bg-slate-800 disabled:opacity-60"
           >
-            {enviando ? 'Creando cuenta...' : 'Continuar'}
+            {enviando ? 'Enviando código...' : 'Continuar'}
           </button>
 
           <p className="text-center text-sm text-slate-600">
