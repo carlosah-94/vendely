@@ -32,6 +32,16 @@ export async function obtenerProducto(subdominio, idProducto) {
 }
 
 // ---- Registro de cliente
+/**
+ * Pide el código de verificación para registrarse como cliente de esta tienda.
+ * Devuelve { requerido, correo, venceEnSegundos, reenviarEnSegundos }; requerido = false si el
+ * backend tiene la verificación apagada (entonces la cuenta se crea sin código).
+ */
+export async function pedirCodigoCliente(correo, subdominio) {
+  return (await api.post('/auth/registro/codigo', { correo, subdominio })).data;
+}
+
+/** datos lleva codigoVerificacion (el de 6 dígitos que llegó al correo, o null si no se pide). */
 export async function registrarCliente(datos) {
   return (await api.post('/auth/registro/cliente', datos)).data;
 }

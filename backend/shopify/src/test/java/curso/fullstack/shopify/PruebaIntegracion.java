@@ -14,7 +14,7 @@ import curso.fullstack.shopify.security.JwtService;
 import curso.fullstack.shopify.service.CloudinaryClient;
 import curso.fullstack.shopify.service.MercadoPagoClient;
 import curso.fullstack.shopify.service.PayPalClient;
-import curso.fullstack.shopify.service.ResendClient;
+import curso.fullstack.shopify.service.CorreoClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -69,7 +69,7 @@ public abstract class PruebaIntegracion {
     // Ninguna prueba sale a internet: las integraciones externas se simulan.
     @MockBean protected MercadoPagoClient mercadoPago;
     @MockBean protected PayPalClient payPal;
-    @MockBean protected ResendClient resend;
+    @MockBean protected CorreoClient correos;   // Brevo y Resend: ningún correo sale de verdad
     @MockBean protected CloudinaryClient cloudinary;
 
     @Autowired protected MockMvc mvc;
