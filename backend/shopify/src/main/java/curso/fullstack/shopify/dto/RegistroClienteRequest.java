@@ -30,5 +30,10 @@ public record RegistroClienteRequest(
                  message = "El teléfono debe tener formato internacional, por ejemplo +51987654321")
         String telefono,
 
-        Boolean aceptaMarketing
+        Boolean aceptaMarketing,
+
+        // El código de 6 dígitos que se envió al correo (POST /api/auth/registro/codigo con el
+        // subdominio). Lo exige VerificacionCorreoService; solo es opcional si está apagada.
+        @Pattern(regexp = "^[0-9]{6}$", message = "El código tiene 6 dígitos")
+        String codigoVerificacion
 ) {}

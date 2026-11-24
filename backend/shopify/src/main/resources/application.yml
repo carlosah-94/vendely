@@ -86,9 +86,18 @@ app:
     api-key: ${RESEND_API_KEY:}
     # Remitente. El de por defecto es el de pruebas de Resend, que no necesita dominio propio.
     remitente: ${RESEND_REMITENTE:Vendely <onboarding@resend.dev>}
+  brevo:
+    # Brevo (brevo.com) para enviar los correos a cualquier persona, sin dominio propio: se verifica
+    # un correo personal como remitente. Si están la clave y el remitente, se usa en vez de Resend.
+    # Gratis hasta 300 correos al día. Brevo puede cambiar el dominio del remitente que se ve
+    # (por ejemplo, tucorreo@...t-sender-sib.com) porque Gmail exige un dominio autenticado.
+    api-key: ${BREVO_API_KEY:}
+    remitente-correo: ${BREVO_REMITENTE_CORREO:}
+    remitente-nombre: ${BREVO_REMITENTE_NOMBRE:Vendely}
   registro:
-    # Verificar el correo del dueño con un código de 6 dígitos antes de crear su cuenta.
-    # Sin RESEND_API_KEY el código se escribe en el log del backend (para probar en local).
+    # Verificar el correo con un código de 6 dígitos antes de crear la cuenta: la del dueño y la
+    # del cliente en una tienda. Sin BREVO_API_KEY ni RESEND_API_KEY el código se escribe en el
+    # log del backend (para probar en local).
     # false solo para herramientas que no pueden leer el correo, como la colección de Postman.
     verificar-correo: ${VERIFICAR_CORREO:true}
   cloudinary:

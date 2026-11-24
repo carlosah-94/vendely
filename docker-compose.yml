@@ -33,12 +33,16 @@ services:
       # Firma de los avisos de pago. Sin estas dos, los webhook responden 503.
       MERCADOPAGO_WEBHOOK_SECRET: ${MERCADOPAGO_WEBHOOK_SECRET:-}
       PAYPAL_WEBHOOK_ID: ${PAYPAL_WEBHOOK_ID:-}
-      # Correos. Sin RESEND_API_KEY se registran como simulados y no se envia nada.
       # Fotos de los productos. Sin esto solo se pueden pegar enlaces.
       CLOUDINARY_URL: ${CLOUDINARY_URL:-}
+      # Correos: Brevo si estan su clave y su remitente; si no, Resend. Sin ninguno se registran
+      # como simulados y no se envia nada.
+      BREVO_API_KEY: ${BREVO_API_KEY:-}
+      BREVO_REMITENTE_CORREO: ${BREVO_REMITENTE_CORREO:-}
+      BREVO_REMITENTE_NOMBRE: ${BREVO_REMITENTE_NOMBRE:-Vendely}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_REMITENTE: ${RESEND_REMITENTE:-Vendely <onboarding@resend.dev>}
-      # Codigo de 6 digitos al correo antes de crear la cuenta del dueno (false: sin codigo).
+      # Codigo de 6 digitos al correo antes de crear la cuenta del dueno y del cliente (false: sin codigo).
       VERIFICAR_CORREO: ${VERIFICAR_CORREO:-true}
       PAYPAL_CLIENT_ID: ${PAYPAL_CLIENT_ID:-}
       PAYPAL_CLIENT_SECRET: ${PAYPAL_CLIENT_SECRET:-}

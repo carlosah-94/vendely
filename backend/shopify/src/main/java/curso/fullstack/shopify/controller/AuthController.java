@@ -26,9 +26,9 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * POST /api/auth/registro/codigo    enviar código al correo del dueño    (abierto)
+ * POST /api/auth/registro/codigo    enviar código al correo (dueño, o cliente con subdominio) (abierto)
  * POST /api/auth/registro/dueno     crear cuenta de dueño (con el código) (abierto)
- * POST /api/auth/registro/cliente   crear cuenta de cliente en una tienda (abierto)
+ * POST /api/auth/registro/cliente   crear cuenta de cliente en una tienda (con el código) (abierto)
  * POST /api/auth/login              iniciar sesión → token               (abierto)
  * GET  /api/auth/yo                 datos de quien inició sesión         (con token)
  * POST /api/auth/cambiar-contrasena cambiar la contraseña → token nuevo  (con token)
@@ -54,13 +54,14 @@ public class AuthController {
     }
 
     /**
-     * Paso previo al registro del dueño: envía un código de 6 dígitos a su correo.
+     * Paso previo al registro: envía un código de 6 dígitos al correo. Con subdominio es para un
+     * cliente de esa tienda (404 si no existe, 403 si está suspendida); sin él, para un dueño.
      * Está bajo /registro/** para que sea abierta (SecurityConfig).
      * 409 si el correo ya tiene cuenta · 429 si pide otro antes de un minuto · 502 si el correo no sale.
      */
     @PostMapping("/registro/codigo")
     public CodigoEnviadoResponse enviarCodigo(@Valid @RequestBody CodigoCorreoRequest request) {
-        return verificacionCorreo.enviar(request.correo());
+        return verificacionCorreo.enviar(request.correo(), request.subdominio());
     }
 
     @PostMapping("/registro/dueno")

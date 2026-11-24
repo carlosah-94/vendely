@@ -20,6 +20,9 @@ app:
     webhook-id: ""
   resend:
     api-key: ""
+  brevo:
+    api-key: ""
+    remitente-correo: ""
   cloudinary:
     url: ""
   pagos:

@@ -40,7 +40,7 @@ import org.springframework.web.util.HtmlUtils;
  *     compra falle porque el correo no salió.
  *  2. **Se registra siempre**, en la tabla notificaciones: enviado, simulado o fallido con su
  *     motivo. Un correo que no llegó y no deja rastro es un problema que nadie puede atender.
- *  3. **Modo simulado**: sin RESEND_API_KEY no se envía nada, se registra como simulado. Así el
+ *  3. **Modo simulado**: sin clave de correo (BREVO_API_KEY o RESEND_API_KEY) no se envía nada, se registra como simulado. Así el
  *     proyecto corre completo en cualquier máquina del equipo sin tener que crear una cuenta.
  */
 @Slf4j
@@ -56,13 +56,13 @@ public class NotificacionService {
     private final InventarioRepository inventarioRepository;
     private final VerificadorTienda verificadorTienda;
     private final ComprobanteService comprobanteService;
-    private final ResendClient resend;
+    private final CorreoClient correos;
 
     public NotificacionService(NotificacionRepository notificacionRepository, PedidoRepository pedidoRepository,
                                DetallePedidoRepository detallePedidoRepository, TiendaRepository tiendaRepository,
                                LoginRepository loginRepository, VarianteRepository varianteRepository,
                                InventarioRepository inventarioRepository, VerificadorTienda verificadorTienda,
-                               ComprobanteService comprobanteService, ResendClient resend) {
+                               ComprobanteService comprobanteService, CorreoClient correos) {
         this.notificacionRepository = notificacionRepository;
         this.pedidoRepository = pedidoRepository;
         this.detallePedidoRepository = detallePedidoRepository;
@@ -72,7 +72,7 @@ public class NotificacionService {
         this.inventarioRepository = inventarioRepository;
         this.verificadorTienda = verificadorTienda;
         this.comprobanteService = comprobanteService;
-        this.resend = resend;
+        this.correos = correos;
     }
 
     // ------------------------------------------------------------------ lo que ve el dueño
@@ -193,21 +193,21 @@ public class NotificacionService {
         n.setTipo(tipo);
         n.setAsunto(recortar(asunto, 200));
 
-        if (!resend.estaConfigurado()) {
+        if (!correos.estaConfigurado()) {
             n.setEstado(Notificacion.SIMULADO);
             n.setFechaEnvio(OffsetDateTime.now());
             guardar(n);
-            log.info("Correo simulado (falta RESEND_API_KEY): tipo={}, para={}", tipo, enmascarar(destinatario));
+            log.info("Correo simulado (falta BREVO_API_KEY o RESEND_API_KEY): tipo={}, para={}", tipo, enmascarar(destinatario));
             return;
         }
         try {
-            String id = resend.enviar(destinatario, asunto, html,
+            String id = correos.enviar(destinatario, asunto, html,
                     adjunto == null ? null : adjunto.nombreArchivo(),
                     adjunto == null ? null : adjunto.contenido());
             n.setEstado(Notificacion.ENVIADO);
             n.setFechaEnvio(OffsetDateTime.now());
             guardar(n);
-            log.info("Correo enviado: tipo={}, para={}, id={}", tipo, enmascarar(destinatario), id);
+            log.info("Correo enviado con {}: tipo={}, para={}, id={}", correos.servicio(), tipo, enmascarar(destinatario), id);
         } catch (RestClientException e) {
             n.setEstado(Notificacion.FALLIDO);
             n.setFechaEnvio(null);                       // lo exige ck_notificaciones_envio
