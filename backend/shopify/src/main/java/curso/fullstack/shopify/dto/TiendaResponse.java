@@ -31,10 +31,11 @@ public record TiendaResponse(
         OffsetDateTime fechaCreacion,
         String plantilla,           // clasica, moderna o boutique
         String plan,                // "Gratis", "Basico", "Pro"
-        Boolean permitePersonalizar,// su plan deja poner logo y color
-        Boolean permitePlantillas,  // su plan deja elegir plantilla
+        Boolean permitePersonalizar,// su plan deja poner logo, colores, portada, letra y botones
+        Boolean permitePlantillas,  // su plan deja elegir plantilla y color de fondo
         Boolean esDueno,            // true: puede todo. false: es empleado y solo puede lo de "permisos"
-        List<String> permisos       // PEDIDOS, PRODUCTOS, INVENTARIO, CLIENTES (el dueño las tiene todas)
+        List<String> permisos,      // PEDIDOS, PRODUCTOS, INVENTARIO, CLIENTES (el dueño las tiene todas)
+        DisenoTienda diseno         // letra, botones, acento, fondo, portada, anuncio y secciones (lo guardado)
 ) {
     private static final List<String> TODOS = Arrays.stream(PermisoTienda.values()).map(Enum::name).toList();
 
@@ -58,6 +59,6 @@ public record TiendaResponse(
                 plan == null ? null : plan.getNombre(),
                 plan == null || Boolean.TRUE.equals(plan.getPermitePersonalizar()),
                 plan == null || Boolean.TRUE.equals(plan.getPermitePlantillas()),
-                esDueno, lista);
+                esDueno, lista, DisenoTienda.de(t));
     }
 }

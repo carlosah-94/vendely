@@ -32,7 +32,7 @@ export default function Destacado({ producto: p, tienda, paises, subdominio, onA
           <Link
             to={enlace}
             className={`group block overflow-hidden ${
-              boutique ? 'bg-[#f3f2f0]' : moderna ? 'rotate-[-1.5deg] rounded-[2rem] bg-white shadow-[0_30px_60px_-25px_rgba(0,0,0,0.5)] ring-8 ring-white' : 'rounded-3xl bg-[#f4f4f4]'
+              boutique ? 'tarjeta-tienda bg-[var(--fondo-suave)]' : moderna ? 'rotate-[-1.5deg] rounded-[2rem] bg-white shadow-[0_30px_60px_-25px_rgba(0,0,0,0.5)] ring-8 ring-white' : 'tarjeta-tienda bg-[var(--fondo-suave)]'
             }`}
           >
             <ImagenProducto
@@ -45,7 +45,7 @@ export default function Destacado({ producto: p, tienda, paises, subdominio, onA
           {oferta && p.disponible && (
             <span
               className={`absolute left-4 top-4 px-3.5 py-1.5 text-sm font-semibold ${
-                boutique ? 'bg-white text-[#222]' : moderna ? 'rotate-[-6deg] rounded-full bg-[#141414] text-white' : 'rounded-full bg-[var(--tienda)] text-[var(--tienda-texto)]'
+                boutique ? 'bg-white text-[#222]' : moderna ? 'rotate-[-6deg] rounded-full bg-[#141414] text-white' : 'rounded-full bg-[var(--acento)] text-[var(--acento-texto)]'
               }`}
             >
               {descuento(p)}% menos
@@ -54,7 +54,7 @@ export default function Destacado({ producto: p, tienda, paises, subdominio, onA
           {fotos.length > 1 && !moderna && (
             <div className="mt-3 grid grid-cols-3 gap-3">
               {fotos.slice(1).map((url) => (
-                <Link key={url} to={enlace} className={`overflow-hidden ${boutique ? '' : 'rounded-2xl'}`} aria-label={`Ver ${p.nombre}`}>
+                <Link key={url} to={enlace} className="tarjeta-tienda overflow-hidden" aria-label={`Ver ${p.nombre}`}>
                   <ImagenProducto url={url} nombre={p.nombre} proporcion={boutique ? 'aspect-[4/5]' : 'aspect-square'} />
                 </Link>
               ))}
@@ -91,10 +91,10 @@ export default function Destacado({ producto: p, tienda, paises, subdominio, onA
               onAgregar={onAgregar}
               className={
                 boutique
-                  ? 'bg-[#222] px-10 py-4 text-sm tracking-[0.08em] text-white transition hover:bg-[var(--tienda)] hover:text-[var(--tienda-texto)] disabled:cursor-not-allowed disabled:bg-[#cfcfcf]'
+                  ? 'boton-tienda bg-[#222] px-10 py-4 text-sm tracking-[0.08em] text-white transition hover:bg-[var(--tienda)] hover:text-[var(--tienda-texto)] disabled:cursor-not-allowed disabled:bg-[#cfcfcf]'
                   : moderna
-                    ? 'rounded-full bg-[var(--tienda-texto)] px-9 py-4 font-semibold text-[var(--tienda)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50'
-                    : 'rounded-full bg-[var(--tienda)] px-9 py-4 font-semibold text-[var(--tienda-texto)] shadow-[0_12px_30px_-12px_var(--tienda)] transition hover:brightness-95 disabled:cursor-not-allowed disabled:bg-[#cfcfcf] disabled:shadow-none'
+                    ? 'boton-tienda bg-[var(--tienda-texto)] px-9 py-4 font-semibold text-[var(--tienda)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50'
+                    : 'boton-tienda bg-[var(--tienda)] px-9 py-4 font-semibold text-[var(--tienda-texto)] shadow-[0_12px_30px_-12px_var(--tienda)] transition hover:brightness-95 disabled:cursor-not-allowed disabled:bg-[#cfcfcf] disabled:shadow-none'
               }
             />
             <Link to={enlace} className="text-sm font-semibold underline underline-offset-4 opacity-80 hover:opacity-100">

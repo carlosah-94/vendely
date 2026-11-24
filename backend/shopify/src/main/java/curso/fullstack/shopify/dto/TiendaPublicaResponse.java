@@ -26,7 +26,8 @@ public record TiendaPublicaResponse(
         Boolean selloVendely,   // true = muestra "Hecho con Vendely" en el pie (plan Gratis)
         // Con qué puede pagar el cliente: ["PAYPAL", "MERCADO_PAGO"]. El primero es el de por defecto.
         // Vacío = la tienda no tiene pago en línea (ninguna pasarela configurada en el servidor).
-        List<MetodoPago> metodosPago
+        List<MetodoPago> metodosPago,
+        DisenoTienda diseno     // letra, botones, acento, fondo, portada, anuncio y secciones (lo que su plan incluye)
 ) {
     public static TiendaPublicaResponse desde(Tienda t, DireccionRepository.PaisInfo p) {
         return desde(t, p, null, List.of());
@@ -45,6 +46,7 @@ public record TiendaPublicaResponse(
         return new TiendaPublicaResponse(t.getIdTienda(), t.getIdPais(), p.getNombre(), p.getIdMoneda(), p.getDecimales(),
                 p.getImpuesto(), p.getNivelFinal(), t.getNombre(), t.getSubdominio(), t.getDescripcion(),
                 t.getCorreoContacto(), personaliza ? t.getLogoUrl() : null, personaliza ? t.getColorPrincipal() : null,
-                t.getPermiteInvitados(), plantillas ? t.getPlantilla() : "clasica", !personaliza, metodosPago);
+                t.getPermiteInvitados(), plantillas ? t.getPlantilla() : "clasica", !personaliza, metodosPago,
+                DisenoTienda.de(t, personaliza, plantillas));
     }
 }

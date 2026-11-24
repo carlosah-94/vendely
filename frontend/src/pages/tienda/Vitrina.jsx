@@ -18,6 +18,7 @@ import { enOferta, formatoMoneda } from '../../utils/formato';
 import { claseGrilla, hayFiltros, productoEstrella } from '../../utils/catalogo';
 import Destacado from '../../components/tienda/Destacado';
 import Garantias from '../../components/tienda/Garantias';
+import { disenoDe } from '../../utils/diseno';
 
 /**
  * Portada de la tienda. Carga productos y categorías y los dibuja con la plantilla elegida:
@@ -119,6 +120,8 @@ export default function Vitrina() {
 
   const vista = {
     tienda,
+    // Letra, botones, portada, acento y qué secciones se muestran (Personalizar → utils/diseno.js).
+    diseno: disenoDe(tienda),
     subdominio,
     paises: paises ?? [],
     todos: muestra,
@@ -148,69 +151,93 @@ export default function Vitrina() {
 }
 
 /**
- * Plantilla Clásica: portada con el color de la tienda y, si hay foto, el producto estrella al
- * lado del nombre. Con un solo producto, ese producto se muestra en grande en vez de la grilla.
+ * Plantilla Clásica (todos los planes): portada en una tarjeta grande con esquinas redondeadas,
+ * a lo ancho de la página. Si el dueño subió una imagen de portada, esa imagen va de fondo con un
+ * velo de su color; si no, el producto estrella al lado del nombre. Debajo, garantías, el producto
+ * destacado y el catálogo con tarjetas limpias. Con un solo producto, se luce en grande.
  */
-function VitrinaClasica({ tienda, subdominio, paises, todos, productos, categorias, elegida, cargando, error,
+function VitrinaClasica({ tienda, diseno, subdominio, paises, todos, productos, categorias, elegida, cargando, error,
   elegirCategoria, agregarAlCarrito, filtros, total, paginas, cambiarFiltro, irAPagina }) {
   const estrella = productoEstrella(todos);
   const unico = todos.length === 1 && !hayFiltros(filtros);
   const base = `/tienda/${subdominio}`;
+  const banner = diseno.imagenPortadaUrl;
+  const radioPortada = { borderRadius: 'calc(var(--radio-tarjeta) * 2)' };
+
+  const botones = (
+    <div className="flex flex-wrap items-center gap-3 pt-2">
+      <a href="#catalogo" className="boton-tienda bg-[var(--tienda-texto)] px-8 py-3.5 font-semibold text-[var(--tienda)] transition hover:opacity-90">
+        {unico ? 'Comprar ahora' : 'Ver productos'}
+      </a>
+      {!unico && estrella && (
+        <Link to={`${base}/producto/${estrella.idProducto}`} className="boton-tienda border border-current/30 px-6 py-3.5 font-semibold transition hover:border-current">
+          Ver {estrella.nombre}
+        </Link>
+      )}
+    </div>
+  );
 
   return (
     <>
-      <section className="relative isolate overflow-hidden bg-[var(--tienda)] text-[var(--tienda-texto)]">
-        {/* Círculos suaves de fondo, con el mismo color de texto de la tienda */}
-        <span className="absolute -right-24 -top-24 -z-10 h-96 w-96 rounded-full bg-[var(--tienda-texto)] opacity-[0.07]" />
-        <span className="absolute -bottom-32 left-1/3 -z-10 h-80 w-80 rounded-full bg-[var(--tienda-texto)] opacity-[0.05]" />
-        {estrella?.imagenUrl ? (
-          <div className="mx-auto grid max-w-6xl items-center gap-12 px-5 py-14 md:grid-cols-2 md:py-20">
-            <div className="space-y-6">
-              {tienda.logoUrl && <img src={tienda.logoUrl} alt="" className="h-16 w-16 rounded-2xl bg-white object-contain p-1.5" />}
-              <h1 className="break-words text-[clamp(2.6rem,6vw,4.5rem)] font-semibold leading-[1.02] tracking-tight">{tienda.nombre}</h1>
-              {tienda.descripcion && <p className="max-w-md text-lg leading-relaxed opacity-85">{tienda.descripcion}</p>}
-              <div className="flex flex-wrap items-center gap-3 pt-2">
-                <a href="#catalogo" className="rounded-full bg-[var(--tienda-texto)] px-8 py-3.5 font-semibold text-[var(--tienda)] transition hover:opacity-90">
-                  {unico ? 'Comprar ahora' : 'Ver productos'}
-                </a>
-                {!unico && (
-                  <Link to={`${base}/producto/${estrella.idProducto}`} className="rounded-full px-5 py-3.5 font-semibold underline-offset-4 hover:underline">
-                    Ver {estrella.nombre}
-                  </Link>
-                )}
+      <section className="px-3 pt-3 sm:px-5 sm:pt-5">
+        <div className="relative isolate mx-auto max-w-7xl overflow-hidden bg-[var(--tienda)] text-[var(--tienda-texto)]" style={radioPortada}>
+          {banner ? (
+            <>
+              {/* Imagen de portada con un velo del color de la tienda para que el texto se lea */}
+              <img src={banner} alt="" className="absolute inset-0 -z-20 h-full w-full object-cover" />
+              <span className="absolute inset-0 -z-10 bg-[linear-gradient(100deg,var(--tienda)_15%,color-mix(in_srgb,var(--tienda)_55%,transparent)_55%,transparent)]" />
+              <div className="flex min-h-[460px] max-w-2xl flex-col justify-center gap-6 px-6 py-16 sm:min-h-[540px] sm:px-14">
+                {tienda.logoUrl && <img src={tienda.logoUrl} alt="" className="h-16 w-16 rounded-2xl bg-white object-contain p-1.5" />}
+                <h1 className="break-words text-[clamp(2.6rem,6vw,4.75rem)] font-semibold leading-[1.02] tracking-tight">{tienda.nombre}</h1>
+                {tienda.descripcion && <p className="max-w-md text-lg leading-relaxed opacity-90">{tienda.descripcion}</p>}
+                {botones}
               </div>
+            </>
+          ) : estrella?.imagenUrl ? (
+            <>
+              <span className="absolute -right-24 -top-24 -z-10 h-96 w-96 rounded-full bg-[var(--tienda-texto)] opacity-[0.07]" />
+              <span className="absolute -bottom-32 left-1/3 -z-10 h-80 w-80 rounded-full bg-[var(--acento)] opacity-[0.22] blur-2xl" />
+              <div className="grid items-center gap-12 px-6 py-14 sm:px-14 md:grid-cols-2 md:py-20">
+                <div className="space-y-6">
+                  {tienda.logoUrl && <img src={tienda.logoUrl} alt="" className="h-16 w-16 rounded-2xl bg-white object-contain p-1.5" />}
+                  <h1 className="break-words text-[clamp(2.6rem,6vw,4.5rem)] font-semibold leading-[1.02] tracking-tight">{tienda.nombre}</h1>
+                  {tienda.descripcion && <p className="max-w-md text-lg leading-relaxed opacity-85">{tienda.descripcion}</p>}
+                  {botones}
+                </div>
+                <Link to={`${base}/producto/${estrella.idProducto}`} className="group relative mx-auto block w-full max-w-md pb-5">
+                  <div className="tarjeta-tienda overflow-hidden bg-white shadow-[0_40px_80px_-30px_rgba(0,0,0,0.55)]">
+                    <img src={estrella.imagenUrl} alt={estrella.nombre} className="aspect-[4/5] w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]" />
+                  </div>
+                  <span className="tarjeta-tienda absolute bottom-0 left-6 right-6 flex items-center justify-between gap-3 bg-white px-5 py-3.5 text-[#1a1a1a] shadow-xl">
+                    <span className="truncate font-medium">{estrella.nombre}</span>
+                    <span className="shrink-0 font-semibold">{formatoMoneda(estrella.precio)}</span>
+                  </span>
+                </Link>
+              </div>
+            </>
+          ) : (
+            <div className="mx-auto max-w-3xl space-y-5 px-5 py-20 text-center sm:py-28">
+              <span className="absolute -right-24 -top-24 -z-10 h-96 w-96 rounded-full bg-[var(--tienda-texto)] opacity-[0.07]" />
+              {tienda.logoUrl && <img src={tienda.logoUrl} alt="" className="mx-auto h-16 w-16 rounded-2xl bg-white object-contain p-1.5" />}
+              <h1 className="break-words text-[clamp(2.6rem,7vw,4.75rem)] font-semibold leading-[1.02] tracking-tight">{tienda.nombre}</h1>
+              {tienda.descripcion && <p className="mx-auto max-w-xl text-lg opacity-85">{tienda.descripcion}</p>}
+              <a href="#catalogo" className="boton-tienda inline-block bg-[var(--tienda-texto)] px-8 py-3.5 font-semibold text-[var(--tienda)] hover:opacity-90">
+                Ver productos
+              </a>
             </div>
-            <Link to={`${base}/producto/${estrella.idProducto}`} className="group relative mx-auto block w-full max-w-md">
-              <div className="overflow-hidden rounded-[2rem] bg-white shadow-[0_40px_80px_-30px_rgba(0,0,0,0.55)]">
-                <img src={estrella.imagenUrl} alt={estrella.nombre} className="aspect-[4/5] w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]" />
-              </div>
-              <span className="absolute -bottom-5 left-6 right-6 flex items-center justify-between gap-3 rounded-2xl bg-white px-5 py-3.5 text-[#1a1a1a] shadow-xl">
-                <span className="truncate font-medium">{estrella.nombre}</span>
-                <span className="shrink-0 font-semibold">{formatoMoneda(estrella.precio)}</span>
-              </span>
-            </Link>
-          </div>
-        ) : (
-          <div className="mx-auto max-w-3xl space-y-5 px-5 py-20 text-center sm:py-28">
-            {tienda.logoUrl && <img src={tienda.logoUrl} alt="" className="mx-auto h-16 w-16 rounded-2xl bg-white object-contain p-1.5" />}
-            <h1 className="break-words text-[clamp(2.6rem,7vw,4.75rem)] font-semibold leading-[1.02] tracking-tight">{tienda.nombre}</h1>
-            {tienda.descripcion && <p className="mx-auto max-w-xl text-lg opacity-85">{tienda.descripcion}</p>}
-            <a href="#catalogo" className="inline-block rounded-full bg-[var(--tienda-texto)] px-8 py-3.5 font-semibold text-[var(--tienda)] hover:opacity-90">
-              Ver productos
-            </a>
-          </div>
-        )}
+          )}
+        </div>
       </section>
 
-      <Garantias tienda={tienda} paises={paises} estilo="clasica" />
+      {diseno.mostrarGarantias && <Garantias tienda={tienda} paises={paises} estilo="clasica" />}
 
       {unico ? (
         <Destacado id="catalogo" producto={todos[0]} tienda={tienda} paises={paises} subdominio={subdominio}
           onAgregar={agregarAlCarrito} etiqueta="Nuestro producto" />
       ) : (
         <>
-          {todos.length >= 4 && (
-            <div className="bg-[#f7f7f8]">
+          {todos.length >= 4 && diseno.mostrarDestacado && (
+            <div className="bg-[var(--fondo-suave)]">
               <Destacado producto={estrella} tienda={tienda} paises={paises} subdominio={subdominio}
                 onAgregar={agregarAlCarrito} etiqueta="Producto destacado" />
             </div>
@@ -218,20 +245,23 @@ function VitrinaClasica({ tienda, subdominio, paises, todos, productos, categori
 
           <section id="catalogo" className="mx-auto max-w-6xl scroll-mt-20 px-5 pt-14">
             <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-              <h2 className="text-3xl font-semibold tracking-tight">{elegida ? elegida.nombre : 'Catálogo'}</h2>
+              <div>
+                <p className="text-sm font-semibold text-[var(--acento)]">{tienda.nombre}</p>
+                <h2 className="text-3xl font-semibold tracking-tight">{elegida ? elegida.nombre : 'Catálogo'}</h2>
+              </div>
               {!cargando && total > 0 && <p className="text-sm text-[#666]">{total} {total === 1 ? 'producto' : 'productos'}</p>}
             </div>
-            {categorias.length > 0 && (
-              <div className="mb-6 flex flex-wrap gap-2">
+            {categorias.length > 0 && diseno.mostrarCategorias && (
+              <div className="-mx-5 mb-6 flex gap-2 overflow-x-auto px-5 pb-1">
                 {[{ slug: '', nombre: 'Todos' }, ...categorias].map((c) => (
                   <button
                     key={c.slug || 'todos'}
                     type="button"
                     onClick={() => elegirCategoria(c.slug)}
-                    className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
+                    className={`boton-tienda shrink-0 border px-4 py-2 text-sm font-medium transition ${
                       (elegida?.slug ?? '') === c.slug
                         ? 'border-[var(--tienda)] bg-[var(--tienda)] text-[var(--tienda-texto)]'
-                        : 'border-[#dcdcdc] hover:border-[#303030]'
+                        : 'border-[var(--fondo-borde)] bg-[var(--fondo)] hover:border-[#303030]'
                     }`}
                   >
                     {c.nombre}
@@ -244,7 +274,7 @@ function VitrinaClasica({ tienda, subdominio, paises, todos, productos, categori
             {cargando ? (
               <p className="text-[#616161]">Cargando productos...</p>
             ) : productos.length === 0 && !error ? (
-              <p className="rounded-2xl bg-[#f7f7f8] px-6 py-12 text-center text-[#616161]">
+              <p className="tarjeta-tienda bg-[var(--fondo-suave)] px-6 py-12 text-center text-[#616161]">
                 {hayFiltros(filtros) ? 'Ningún producto coincide con esos filtros.' : 'Esta tienda está preparando sus productos. Vuelve pronto.'}
               </p>
             ) : (
@@ -253,19 +283,19 @@ function VitrinaClasica({ tienda, subdominio, paises, todos, productos, categori
                   {productos.map((p) => (
                     <article key={p.idProducto} className="group flex flex-col">
                       <Link to={`${base}/producto/${p.idProducto}`} className="block">
-                        <div className="relative overflow-hidden rounded-2xl bg-[#f4f4f4]">
+                        <div className="tarjeta-tienda relative overflow-hidden bg-[var(--fondo-suave)] transition-shadow duration-300 group-hover:shadow-[0_18px_40px_-20px_rgba(0,0,0,0.35)]">
                           <ImagenProducto url={p.imagenUrl} nombre={p.nombre} className="transition-transform duration-500 group-hover:scale-105" />
                           {!p.disponible ? (
                             <span className="absolute left-3 top-3 rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#303030] shadow-sm">Agotado</span>
                           ) : enOferta(p) && (
-                            <span className="absolute left-3 top-3 rounded-full bg-[var(--tienda)] px-3 py-1 text-xs font-semibold text-[var(--tienda-texto)]">Oferta</span>
+                            <span className="absolute left-3 top-3 rounded-full bg-[var(--acento)] px-3 py-1 text-xs font-semibold text-[var(--acento-texto)]">Oferta</span>
                           )}
                         </div>
                         <h3 className={`mt-3.5 font-medium text-[#1a1a1a] group-hover:underline ${productos.length <= 2 ? 'text-lg' : 'text-[15px]'}`}>{p.nombre}</h3>
                         <PrecioTienda producto={p} desde={tieneVariosPrecios(p)} />
                       </Link>
                       <BotonComprar producto={p} subdominio={subdominio} onAgregar={agregarAlCarrito}
-                        className="mt-3.5 rounded-full border-2 border-[var(--tienda)] py-2.5 text-center text-sm font-semibold transition hover:bg-[var(--tienda)] hover:text-[var(--tienda-texto)] disabled:cursor-not-allowed disabled:border-[#d5d5d5] disabled:text-[#9a9a9a] disabled:hover:bg-transparent disabled:hover:text-[#9a9a9a]" />
+                        className="boton-tienda mt-3.5 border-2 border-[var(--tienda)] py-2.5 text-center text-sm font-semibold transition hover:bg-[var(--tienda)] hover:text-[var(--tienda-texto)] disabled:cursor-not-allowed disabled:border-[#d5d5d5] disabled:text-[#9a9a9a] disabled:hover:bg-transparent disabled:hover:text-[#9a9a9a]" />
                     </article>
                   ))}
                 </div>

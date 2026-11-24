@@ -83,6 +83,56 @@ public class Tienda {
     @Column(name = "plantilla", nullable = false, length = 20)
     private String plantilla = "clasica";
 
+    // ---- Personalización de la vitrina (V12). Qué permite cada plan: TiendaService.actualizar.
+
+    /** Segundo color (#RRGGBB): etiquetas de oferta, detalles y cinta. null = el principal. Básico y Pro. */
+    @Setter
+    @Column(name = "color_acento", length = 7)
+    private String colorAcento;
+
+    /** Texto de la barra de arriba. null = "Envíos a todo ..." según las tarifas. Básico y Pro. */
+    @Setter
+    @Column(name = "texto_anuncio", length = 120)
+    private String textoAnuncio;
+
+    /** false = sin barra de anuncio. Básico y Pro. */
+    @Setter
+    @Column(name = "mostrar_anuncio", nullable = false)
+    private Boolean mostrarAnuncio = true;
+
+    /** Banner de la portada. Básico y Pro. */
+    @Setter
+    @Column(name = "imagen_portada_url", length = 500)
+    private String imagenPortadaUrl;
+
+    /** auto (la de la plantilla), moderna, expresiva, elegante o impacto (CHECK ck_tiendas_fuente). Básico y Pro. */
+    @Setter
+    @Column(name = "fuente", nullable = false, length = 20)
+    private String fuente = "auto";
+
+    /** auto (el de la plantilla), redondo, suave o recto (CHECK ck_tiendas_estilo_botones). Básico y Pro. */
+    @Setter
+    @Column(name = "estilo_botones", nullable = false, length = 20)
+    private String estiloBotones = "auto";
+
+    /** blanco, hueso, perla o arena (CHECK ck_tiendas_fondo). Distinto de blanco solo con Pro. */
+    @Setter
+    @Column(name = "fondo", nullable = false, length = 20)
+    private String fondo = "blanco";
+
+    /** Secciones de la portada: las puede ocultar cualquier plan. */
+    @Setter
+    @Column(name = "mostrar_garantias", nullable = false)
+    private Boolean mostrarGarantias = true;
+
+    @Setter
+    @Column(name = "mostrar_destacado", nullable = false)
+    private Boolean mostrarDestacado = true;
+
+    @Setter
+    @Column(name = "mostrar_categorias", nullable = false)
+    private Boolean mostrarCategorias = true;
+
     /** 1 activa · 0 suspendida */
     @Setter
     @Column(name = "estado", nullable = false)
