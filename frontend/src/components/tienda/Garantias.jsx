@@ -37,7 +37,7 @@ export default function Garantias({ tienda, paises, estilo = 'clasica' }) {
   const lista = garantiasDe(tienda, paises);
   if (estilo === 'boutique') {
     return (
-      <section className="border-b border-[#ebe9e6]">
+      <section className="border-b border-[var(--fondo-borde)]">
         <div className="mx-auto grid max-w-6xl gap-6 px-6 py-8 text-center text-sm text-[#6b6b6b] sm:grid-cols-3">
           {lista.map((g) => (
             <p key={g.icono}>
@@ -51,7 +51,7 @@ export default function Garantias({ tienda, paises, estilo = 'clasica' }) {
   }
   const moderna = estilo === 'moderna';
   return (
-    <section className={moderna ? 'bg-[#141414] text-white' : 'border-b border-[#ececec] bg-white'}>
+    <section className={moderna ? 'bg-[#141414] text-white' : 'border-b border-[var(--fondo-borde)]'}>
       <div className="mx-auto grid max-w-6xl gap-5 px-5 py-6 sm:grid-cols-3">
         {lista.map((g) => (
           <div key={g.icono} className="flex items-center gap-3.5">

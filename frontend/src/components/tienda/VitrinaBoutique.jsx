@@ -11,33 +11,34 @@ import { claseGrilla, hayFiltros, productoEstrella } from '../../utils/catalogo'
 
 /**
  * Plantilla Boutique ("atelier", solo plan Pro).
- * Lo memorable es la portada: la mejor foto de la tienda a pantalla completa con su nombre en
+ * Lo memorable es la portada: la imagen de portada del dueño (o, si no subió una, la mejor
+ * foto de sus productos) a pantalla completa con su nombre en
  * una serifa fina y grande. El resto es silencioso: fondo blanco, mucho aire, fotos verticales
  * (4:5, como en moda), nombres en serifa y el color de la tienda solo en detalles.
  */
-export default function VitrinaBoutique({ tienda, subdominio, paises, todos, productos, categorias, elegida,
+export default function VitrinaBoutique({ tienda, diseno, subdominio, paises, todos, productos, categorias, elegida,
   cargando, error, elegirCategoria, agregarAlCarrito, filtros, total, paginas, cambiarFiltro, irAPagina }) {
-  const portada = todos.find((p) => p.imagenUrl);
+  const producto = todos.find((p) => p.imagenUrl);
+  const banner = diseno.imagenPortadaUrl;
+  const foto = banner || producto?.imagenUrl;
   const base = `/tienda/${subdominio}`;
   const unico = todos.length === 1 && !hayFiltros(filtros);
 
   return (
-    <div className="bg-white text-[#222]">
+    <div className="text-[#222]">
       {/* Portada: foto a pantalla completa (o el color de la tienda si todavía no hay fotos) */}
       <section className="relative isolate flex min-h-[78vh] items-end overflow-hidden bg-[var(--tienda)]">
-        {portada && (
-          <img src={portada.imagenUrl} alt="" className="absolute inset-0 -z-10 h-full w-full object-cover" />
-        )}
-        {portada && <div className="absolute inset-0 -z-10 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />}
-        <div className={`mx-auto w-full max-w-6xl px-6 pb-14 sm:pb-20 ${portada ? 'text-white' : 'text-[var(--tienda-texto)]'}`}>
+        {foto && <img src={foto} alt="" className="absolute inset-0 -z-10 h-full w-full object-cover" />}
+        {foto && <div className="absolute inset-0 -z-10 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />}
+        <div className={`mx-auto w-full max-w-6xl px-6 pb-14 sm:pb-20 ${foto ? 'text-white' : 'text-[var(--tienda-texto)]'}`}>
           <h1 className="letra-serifa max-w-4xl text-[clamp(3rem,9vw,7.5rem)] font-normal leading-[0.9]">{tienda.nombre}</h1>
           <div className="mt-8 flex flex-wrap items-center gap-6">
-            <a href="#catalogo" className="border border-current px-9 py-3.5 text-sm tracking-[0.12em] transition hover:bg-white hover:text-[#222]">
+            <a href="#catalogo" className="boton-tienda border border-current px-9 py-3.5 text-sm tracking-[0.12em] transition hover:bg-white hover:text-[#222]">
               {unico ? 'Comprar ahora' : 'Ver la colección'}
             </a>
-            {portada && (
-              <Link to={`${base}/producto/${portada.idProducto}`} className="text-sm text-white/85 underline-offset-4 hover:underline">
-                En la foto: {portada.nombre}
+            {!banner && producto && (
+              <Link to={`${base}/producto/${producto.idProducto}`} className="text-sm text-white/85 underline-offset-4 hover:underline">
+                En la foto: {producto.nombre}
               </Link>
             )}
           </div>
@@ -48,14 +49,14 @@ export default function VitrinaBoutique({ tienda, subdominio, paises, todos, pro
       {tienda.descripcion && (
         <section className="mx-auto max-w-3xl px-6 py-20 text-center">
           <p className="letra-serifa text-[clamp(1.6rem,3.2vw,2.4rem)] leading-snug text-[#2a2a2a]">{tienda.descripcion}</p>
-          <span className="mx-auto mt-8 block h-px w-16 bg-[var(--tienda)]" />
+          <span className="mx-auto mt-8 block h-px w-16 bg-[var(--acento)]" />
         </section>
       )}
 
-      <Garantias tienda={tienda} paises={paises} estilo="boutique" />
+      {diseno.mostrarGarantias && <Garantias tienda={tienda} paises={paises} estilo="boutique" />}
 
       {/* Categorías: retratos verticales con el nombre debajo */}
-      {categorias.length > 0 && !unico && (
+      {categorias.length > 0 && !unico && diseno.mostrarCategorias && (
         <section className="mx-auto max-w-6xl px-6 pb-20">
           <div className="grid grid-cols-2 gap-6 md:grid-cols-3">
             {categorias.slice(0, 6).map((c) => {
@@ -71,7 +72,7 @@ export default function VitrinaBoutique({ tienda, subdominio, paises, todos, pro
                   }}
                   className="group text-left"
                 >
-                  <span className="block overflow-hidden bg-[#f3f2f0]">
+                  <span className="tarjeta-tienda block overflow-hidden bg-[var(--fondo-suave)]">
                     {foto ? (
                       <img src={foto.imagenUrl} alt="" className="aspect-[4/5] w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]" />
                     ) : (
@@ -93,14 +94,14 @@ export default function VitrinaBoutique({ tienda, subdominio, paises, todos, pro
           onAgregar={agregarAlCarrito} estilo="boutique" etiqueta="La pieza" />
       ) : (
       <>
-      {todos.length >= 4 && (
-        <div className="border-t border-[#ebe9e6]">
+      {todos.length >= 4 && diseno.mostrarDestacado && (
+        <div className="border-t border-[var(--fondo-borde)]">
           <Destacado producto={productoEstrella(todos)} tienda={tienda} paises={paises} subdominio={subdominio}
             onAgregar={agregarAlCarrito} estilo="boutique" etiqueta="Pieza destacada" />
         </div>
       )}
       {/* Colección */}
-      <section id="catalogo" className="mx-auto max-w-6xl scroll-mt-20 border-t border-[#ebe9e6] px-6 pt-16">
+      <section id="catalogo" className="mx-auto max-w-6xl scroll-mt-20 border-t border-[var(--fondo-borde)] px-6 pt-16">
         <div className="mb-10 flex flex-wrap items-baseline justify-between gap-4">
           <h2 className="text-4xl">{elegida ? elegida.nombre : 'La colección'}</h2>
           {categorias.length > 0 && (
@@ -135,7 +136,7 @@ export default function VitrinaBoutique({ tienda, subdominio, paises, todos, pro
           <div className={`grid gap-x-6 gap-y-14 ${claseGrilla(productos.length, 3)}`}>
             {productos.map((p) => (
               <article key={p.idProducto} className="group flex flex-col">
-                <Link to={`${base}/producto/${p.idProducto}`} className="relative block overflow-hidden bg-[#f3f2f0]">
+                <Link to={`${base}/producto/${p.idProducto}`} className="tarjeta-tienda relative block overflow-hidden bg-[var(--fondo-suave)]">
                   <ImagenProducto
                     url={p.imagenUrl}
                     nombre={p.nombre}
@@ -145,7 +146,7 @@ export default function VitrinaBoutique({ tienda, subdominio, paises, todos, pro
                   {!p.disponible ? (
                     <span className="absolute left-3 top-3 bg-white px-3 py-1 text-xs text-[#222]">Agotado</span>
                   ) : enOferta(p) && (
-                    <span className="absolute left-3 top-3 bg-[var(--tienda)] px-3 py-1 text-xs text-[var(--tienda-texto)]">Oferta</span>
+                    <span className="absolute left-3 top-3 bg-[var(--acento)] px-3 py-1 text-xs text-[var(--acento-texto)]">Oferta</span>
                   )}
                 </Link>
                 <Link to={`${base}/producto/${p.idProducto}`} className="mt-4 block text-center">

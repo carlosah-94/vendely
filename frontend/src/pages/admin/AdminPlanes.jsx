@@ -6,8 +6,8 @@ import { mensajeDeError } from '../../services/api';
 import { BOTON, TARJETA, inputPanel } from '../../utils/panel';
 
 const BENEFICIOS = [
-  ['permitePersonalizar', 'Logo, color propio y sin el sello de Vendely'],
-  ['permitePlantillas', 'Elegir plantilla Moderna o Boutique'],
+  ['permitePersonalizar', 'Logo, colores, portada, letra, botones y sin el sello de Vendely'],
+  ['permitePlantillas', 'Plantillas Moderna o Boutique y color de fondo'],
   ['permiteMasMetodosPago', 'Más métodos de pago además de PayPal'],
   ['permiteEnvioInternacional', 'Envíos internacionales'],
 ];

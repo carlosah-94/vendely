@@ -132,11 +132,51 @@ public class TiendaService {
             }
             t.setPlantilla(r.plantilla());
         }
+        personalizar(t, r);
         copiarDatos(t, r.nombre(), r.descripcion(), r.correoContacto(), r.logoUrl(), r.colorPrincipal(),
                 r.permiteInvitados());
         tiendaRepository.saveAndFlush(t);
         log.info("Tienda actualizada: idTienda={}", idTienda);
         return responder(t);
+    }
+
+    /**
+     * Opciones de diseño de la vitrina (V12). Cada campo null se deja como está. Como con el logo
+     * y el color, el plan se exige solo si el valor CAMBIA: así una tienda que bajó de plan puede
+     * seguir guardando su nombre o su correo aunque tenga guardadas opciones que ya no incluye.
+     *   - Secciones (garantías, destacado, categorías): cualquier plan.
+     *   - Acento, anuncio, portada, letra y botones: PERSONALIZAR (Básico y Pro).
+     *   - Fondo distinto de blanco: PLANTILLAS (Pro). Volver a blanco siempre se puede.
+     */
+    private void personalizar(Tienda t, TiendaActualizarRequest r) {
+        Long id = t.getIdTienda();
+        String acento = r.colorAcento() == null ? t.getColorAcento()
+                : r.colorAcento().isBlank() ? null : r.colorAcento().trim().toUpperCase(Locale.ROOT);
+        String anuncio = r.textoAnuncio() == null ? t.getTextoAnuncio() : vacioANull(r.textoAnuncio());
+        String portada = r.imagenPortadaUrl() == null ? t.getImagenPortadaUrl() : vacioANull(r.imagenPortadaUrl());
+        Boolean mostrarAnuncio = r.mostrarAnuncio() == null ? t.getMostrarAnuncio() : r.mostrarAnuncio();
+        String fuente = r.fuente() == null ? t.getFuente() : r.fuente();
+        String botones = r.estiloBotones() == null ? t.getEstiloBotones() : r.estiloBotones();
+
+        if (cambia(t.getColorAcento(), acento) || cambia(t.getTextoAnuncio(), anuncio)
+                || cambia(t.getImagenPortadaUrl(), portada) || !mostrarAnuncio.equals(t.getMostrarAnuncio())
+                || cambia(t.getFuente(), fuente) || cambia(t.getEstiloBotones(), botones)) {
+            planService.exigir(id, FuncionPlan.PERSONALIZAR);
+        }
+        if (r.fondo() != null && cambia(t.getFondo(), r.fondo()) && !"blanco".equals(r.fondo())) {
+            planService.exigir(id, FuncionPlan.PLANTILLAS);
+        }
+
+        t.setColorAcento(acento);
+        t.setTextoAnuncio(anuncio);
+        t.setImagenPortadaUrl(portada);
+        t.setMostrarAnuncio(mostrarAnuncio);
+        t.setFuente(fuente);
+        t.setEstiloBotones(botones);
+        if (r.fondo() != null) t.setFondo(r.fondo());
+        if (r.mostrarGarantias() != null) t.setMostrarGarantias(r.mostrarGarantias());
+        if (r.mostrarDestacado() != null) t.setMostrarDestacado(r.mostrarDestacado());
+        if (r.mostrarCategorias() != null) t.setMostrarCategorias(r.mostrarCategorias());
     }
 
     // ------------------------------------------------------------ vitrina pública

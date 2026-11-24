@@ -97,8 +97,9 @@ public class PlanService {
         return switch (funcion) {
             case CREAR_PRODUCTO -> plan + " permite hasta " + p.getMaxProductos()
                     + (p.getMaxProductos() != null && p.getMaxProductos() == 1 ? " producto. " : " productos. ") + MEJORA_TU_PLAN;
-            case PERSONALIZAR -> plan + " no incluye logo ni color propios. " + MEJORA_TU_PLAN;
-            case PLANTILLAS -> plan + " no incluye elegir plantilla. " + MEJORA_TU_PLAN;
+            case PERSONALIZAR -> plan + " no incluye personalizar tu marca (logo, colores, portada, letra y botones). "
+                    + MEJORA_TU_PLAN;
+            case PLANTILLAS -> plan + " no incluye elegir plantilla ni color de fondo. " + MEJORA_TU_PLAN;
             case ENVIO_INTERNACIONAL -> plan + " no incluye envios internacionales. " + MEJORA_TU_PLAN;
             // Un solo método y no "solo PayPal": el método base es el primero configurado en el
             // servidor (MetodoPagoService), que puede ser Mercado Pago si PayPal no tiene credenciales.
