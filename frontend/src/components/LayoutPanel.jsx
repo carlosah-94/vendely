@@ -5,7 +5,7 @@ import Campanita from './Campanita';
 import { ToastProvider } from '../context/ToastContext';
 import { useTiendaActual } from '../hooks/useTiendaActual';
 import {
-  IconoBuscar, IconoCategoria, IconoCheck, IconoClientes, IconoCuenta, IconoDescuento, IconoEmpleados, IconoEnlaceExterno, IconoEnvio, IconoInicio,
+  IconoBuscar, IconoCategoria, IconoCheck, IconoClientes, IconoCuenta, IconoDescuento, IconoEmpleados, IconoInforme, IconoEnlaceExterno, IconoEnvio, IconoInicio,
   IconoInventario, IconoMenu, IconoPedidos, IconoProductos, IconoSalir, IconoTienda,
 } from './Iconos';
 import { esDuenoDe, puede } from '../utils/permisos';
@@ -27,6 +27,7 @@ const MENU_TIENDA = [
   { ruta: '/panel/productos/categorias', texto: 'Categorías', sub: true, permiso: 'PRODUCTOS', iconoSolo: IconoCategoria },
   { ruta: '/panel/clientes', texto: 'Clientes', icono: IconoClientes, permiso: 'CLIENTES' },
   { ruta: '/panel/descuentos', texto: 'Descuentos', icono: IconoDescuento, permiso: 'PRODUCTOS' },
+  { ruta: '/panel/informes', texto: 'Informes', icono: IconoInforme, soloDueno: true },
   { ruta: '/panel/envios', texto: 'Envíos', icono: IconoEnvio, soloDueno: true },
   { ruta: '/panel/tiendas', texto: 'Mis tiendas', icono: IconoTienda },
   { ruta: '/panel/empleados', texto: 'Empleados', icono: IconoEmpleados, soloDueno: true },

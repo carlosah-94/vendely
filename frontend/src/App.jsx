@@ -10,6 +10,7 @@ import Clientes from './pages/Clientes';
 import Descuentos from './pages/Descuentos';
 import DetalleVenta from './pages/DetalleVenta';
 import Empleados from './pages/Empleados';
+import Informes from './pages/Informes';
 import Inicio from './pages/Inicio';
 import InicioPanel from './pages/InicioPanel';
 import Login from './pages/Login';
@@ -85,6 +86,7 @@ export default function App() {
           </Route>
           <Route element={<RequierePermiso soloDueno />}>
             <Route path="/panel/envios" element={<Envios />} />
+            <Route path="/panel/informes" element={<Informes />} />
             <Route path="/panel/temas" element={<Temas />} />
             <Route path="/panel/personalizar" element={<PersonalizarTienda />} />
             <Route path="/panel/plan" element={<Plan />} />

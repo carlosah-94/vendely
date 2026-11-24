@@ -75,6 +75,9 @@ export const IconoCategoria = (p) => (
 export const IconoDescuento = (p) => (
   <Icono {...p}><circle cx="12" cy="12" r="9" /><path d="M9 15l6-6" /><circle cx="9.3" cy="9.3" r="0.9" /><circle cx="14.7" cy="14.7" r="0.9" /></Icono>
 );
+export const IconoInforme = (p) => (
+  <Icono {...p}><path d="M4 20V4M4 20h16" /><path d="M8 16l4-5 3 3 5-6" /></Icono>
+);
 export const IconoInventario = (p) => (
   <Icono {...p}><path d="M4 8l8-4 8 4v8l-8 4-8-4z" /><path d="M4 8l8 4 8-4M12 12v8" /></Icono>
 );
