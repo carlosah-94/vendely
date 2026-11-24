@@ -176,18 +176,17 @@ export default function AdminTiendas() {
                 <th className="px-4 py-2.5 text-right font-medium">Productos</th>
                 <th className="px-4 py-2.5 text-right font-medium">Pedidos</th>
                 <th className="px-4 py-2.5 text-right font-medium">Ventas pagadas</th>
-                <th className="px-4 py-2.5 font-medium">Creada</th>
                 <th className="px-4 py-2.5 font-medium">Estado</th>
                 <th className="px-4 py-2.5 text-right font-medium">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#ebebeb]">
               {datos.cargando && (
-                <tr><td colSpan={9} className="px-4 py-8 text-center text-[#616161]">Cargando tiendas...</td></tr>
+                <tr><td colSpan={8} className="px-4 py-8 text-center text-[#616161]">Cargando tiendas...</td></tr>
               )}
               {!datos.cargando && visibles.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center text-[#616161]">
+                  <td colSpan={8} className="px-4 py-12 text-center text-[#616161]">
                     <span className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-[#f1f1f1]">
                       <IconoTienda tamano={24} />
                     </span>
@@ -200,6 +199,9 @@ export default function AdminTiendas() {
                   <td className="px-4 py-3">
                     <p className="font-medium text-[#101010]">{t.nombre}</p>
                     <p className="text-xs text-[#616161]">{t.subdominio}.vendely.pe · {t.pais}</p>
+                    {/* La fecha va aquí y no en su propia columna: así la tabla entra en una laptop
+                        y el botón Suspender se ve sin desplazarse hacia la derecha. */}
+                    <p className="text-xs text-[#8a8a8a]">Creada el {formatoFecha(t.fechaCreacion)}</p>
                   </td>
                   <td className="px-4 py-3">
                     <p className="text-[#303030]">{t.dueno}</p>
@@ -212,7 +214,6 @@ export default function AdminTiendas() {
                   <td className="px-4 py-3 text-right">{t.productos}</td>
                   <td className="px-4 py-3 text-right">{t.pedidos}</td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">{formatoMoneda(t.ventasPagadas, t.moneda)}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-[#616161]">{formatoFecha(t.fechaCreacion)}</td>
                   <td className="px-4 py-3">
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
