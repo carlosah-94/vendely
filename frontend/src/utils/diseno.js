@@ -37,6 +37,48 @@ export const FONDOS = [
   { valor: 'arena', nombre: 'Arena', color: '#F4EDE3', suave: '#E9DFD1', borde: '#DCCFBD' },
 ];
 
+/**
+ * Diseño avanzado del plan Pro (V15, DisenoPro en el backend). La vitrina recibe el "vacío"
+ * (todo apagado) si la tienda no es Pro. Los enlaces solo pueden empezar con /, # o https://.
+ */
+export const PRO_INICIAL = {
+  portada: {
+    activa: false, titulo: null, subtitulo: null, boton1Texto: null, boton1Enlace: null,
+    boton2Texto: null, boton2Enlace: null, alineacion: 'izquierda', oscurecer: 35, alto: 'alto',
+  },
+  anuncio: { color: null, mensajes: [] },
+  promo: { mostrar: false, titulo: null, texto: null, botonTexto: null, botonEnlace: null, color: null },
+  categoriasEnMenu: false,
+  mostrarDescuento: false,
+};
+
+/** El diseño Pro con los valores por defecto donde falte algo. */
+export function proDe(pro) {
+  const p = pro ?? {};
+  const sinNulos = (o) => Object.fromEntries(Object.entries(o ?? {}).filter(([, v]) => v !== null && v !== undefined));
+  return {
+    portada: { ...PRO_INICIAL.portada, ...sinNulos(p.portada) },
+    anuncio: { ...PRO_INICIAL.anuncio, ...sinNulos(p.anuncio) },
+    promo: { ...PRO_INICIAL.promo, ...sinNulos(p.promo) },
+    categoriasEnMenu: Boolean(p.categoriasEnMenu),
+    mostrarDescuento: Boolean(p.mostrarDescuento),
+  };
+}
+
+/** Texto de la etiqueta de un producto rebajado: "-25 %" si la tienda lo eligió (Pro), si no "Oferta". */
+export function etiquetaOferta(producto, diseno) {
+  if (!diseno?.pro?.mostrarDescuento) return 'Oferta';
+  const antes = Number(producto.precioComparacion);
+  const ahora = Number(producto.precio);
+  const porcentaje = antes > 0 ? Math.round((1 - ahora / antes) * 100) : 0;
+  return porcentaje > 0 ? `-${porcentaje} %` : 'Oferta';
+}
+
+/** ¿El enlace de un botón es seguro? (el backend ya lo valida; esto evita pintar algo raro). */
+export function enlaceSeguro(enlace) {
+  return typeof enlace === 'string' && /^(\/|#|https?:\/\/)/.test(enlace.trim());
+}
+
 export const DISENO_INICIAL = {
   colorAcento: null,
   textoAnuncio: null,
@@ -54,7 +96,7 @@ export const DISENO_INICIAL = {
 export function disenoDe(tienda) {
   const d = tienda?.diseno ?? {};
   const limpio = Object.fromEntries(Object.entries(d).filter(([, v]) => v !== null && v !== undefined));
-  return { ...DISENO_INICIAL, ...limpio };
+  return { ...DISENO_INICIAL, ...limpio, pro: proDe(d.pro) };
 }
 
 /** Clases y variables CSS del contenedor de la tienda (LayoutTienda). */

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import CampoPanel from '../components/CampoPanel';
 import { IconoEnlaceExterno } from '../components/Iconos';
@@ -9,7 +9,8 @@ import { useToast } from '../context/ToastContext';
 import { useTiendaActual } from '../hooks/useTiendaActual';
 import { api, mensajeDeError } from '../services/api';
 import { revisarArchivo, subirImagen } from '../services/imagenes';
-import { BOTONES, DISENO_INICIAL, FONDOS, FUENTES, disenoDe } from '../utils/diseno';
+import { BOTONES, DISENO_INICIAL, FONDOS, FUENTES, disenoDe, enlaceSeguro } from '../utils/diseno';
+import { listarCategorias } from '../services/categorias';
 import { temaActual } from '../utils/temas';
 import { BOTON, TARJETA, inputPanel } from '../utils/panel';
 
@@ -18,6 +19,53 @@ const MAX_DESCRIPCION = 2000;
 const MAX_ANUNCIO = 120;
 const HEX = /^#[0-9A-Fa-f]{6}$/;
 const ES_URL = /^https?:\/\/.+/;
+const ENLACE = /^(\/|#|https?:\/\/)\S{0,300}$/;
+
+/** El diseño Pro guardado, como campos del formulario ('' en vez de null; siempre 3 mensajes). */
+function formularioPro(pro) {
+  const t = (x) => x ?? '';
+  const mensajes = [...(pro.anuncio.mensajes ?? []), '', '', ''].slice(0, 3);
+  return {
+    portada: {
+      activa: pro.portada.activa, titulo: t(pro.portada.titulo), subtitulo: t(pro.portada.subtitulo),
+      boton1Texto: t(pro.portada.boton1Texto), boton1Enlace: t(pro.portada.boton1Enlace),
+      boton2Texto: t(pro.portada.boton2Texto), boton2Enlace: t(pro.portada.boton2Enlace),
+      alineacion: pro.portada.alineacion, oscurecer: pro.portada.oscurecer, alto: pro.portada.alto,
+    },
+    anuncio: { color: t(pro.anuncio.color), mensajes },
+    promo: {
+      mostrar: pro.promo.mostrar, titulo: t(pro.promo.titulo), texto: t(pro.promo.texto),
+      botonTexto: t(pro.promo.botonTexto), botonEnlace: t(pro.promo.botonEnlace), color: t(pro.promo.color),
+    },
+    categoriasEnMenu: pro.categoriasEnMenu,
+    mostrarDescuento: pro.mostrarDescuento,
+  };
+}
+
+/**
+ * Del formulario a lo que se guarda (o se ve en la vista previa): textos sin espacios de más,
+ * vacíos como null. Con soloValido, un color o un enlace a medio escribir no se manda.
+ */
+function proParaEnviar(f, soloValido = false) {
+  const t = (x) => (x.trim() ? x.trim() : null);
+  const color = (x) => (!x.trim() ? null : soloValido && !HEX.test(x.trim()) ? null : x.trim().toUpperCase());
+  const enlace = (x) => (!x.trim() ? null : soloValido && !enlaceSeguro(x) ? null : x.trim());
+  return {
+    portada: {
+      activa: f.portada.activa, titulo: t(f.portada.titulo), subtitulo: t(f.portada.subtitulo),
+      boton1Texto: t(f.portada.boton1Texto), boton1Enlace: enlace(f.portada.boton1Enlace),
+      boton2Texto: t(f.portada.boton2Texto), boton2Enlace: enlace(f.portada.boton2Enlace),
+      alineacion: f.portada.alineacion, oscurecer: Number(f.portada.oscurecer), alto: f.portada.alto,
+    },
+    anuncio: { color: color(f.anuncio.color), mensajes: f.anuncio.mensajes.map((m) => m.trim()).filter(Boolean) },
+    promo: {
+      mostrar: f.promo.mostrar, titulo: t(f.promo.titulo), texto: t(f.promo.texto),
+      botonTexto: t(f.promo.botonTexto), botonEnlace: enlace(f.promo.botonEnlace), color: color(f.promo.color),
+    },
+    categoriasEnMenu: f.categoriasEnMenu,
+    mostrarDescuento: f.mostrarDescuento,
+  };
+}
 
 /** Datos del formulario a partir de la tienda guardada (los textos vacíos como '' para los inputs). */
 function desdeTienda(t) {
@@ -40,6 +88,7 @@ function desdeTienda(t) {
     mostrarGarantias: d.mostrarGarantias,
     mostrarDestacado: d.mostrarDestacado,
     mostrarCategorias: d.mostrarCategorias,
+    pro: formularioPro(d.pro),
   };
 }
 
@@ -83,6 +132,17 @@ function Editor({ tienda, tiendas, idTienda, onCambiarTienda }) {
     setErrores((e) => ({ ...e, [campo]: undefined }));
   }
 
+  /** Cambia una opción del diseño Pro: cambiarPro('portada', 'titulo', 'Black Friday'). campo null = opción suelta. */
+  function cambiarPro(bloque, campo, valor) {
+    setV((actual) => ({
+      ...actual,
+      pro: campo === null
+        ? { ...actual.pro, [bloque]: valor }
+        : { ...actual.pro, [bloque]: { ...actual.pro[bloque], [campo]: valor } },
+    }));
+    setErrores((e) => ({ ...e, [`pro.${bloque}.${campo}`]: undefined }));
+  }
+
   /**
    * Sube el logo o la portada y lo deja en el campo. No se guarda la tienda todavía: el dueño lo
    * ve en la vista previa y decide. Si nunca guarda, la foto queda en Cloudinary sin usarse; es
@@ -119,6 +179,18 @@ function Editor({ tienda, tiendas, idTienda, onCambiarTienda }) {
       if (v.colorAcento && !HEX.test(v.colorAcento)) er.colorAcento = 'Formato #RRGGBB, por ejemplo #DB2777';
       if (v.textoAnuncio.length > MAX_ANUNCIO) er.textoAnuncio = `Hasta ${MAX_ANUNCIO} caracteres`;
     }
+    if (conPlantillas) {
+      const p = v.pro;
+      for (const [bloque, campo] of [['portada', 'boton1Enlace'], ['portada', 'boton2Enlace'], ['promo', 'botonEnlace']]) {
+        const x = p[bloque][campo].trim();
+        if (x && !ENLACE.test(x)) er[`pro.${bloque}.${campo}`] = 'Empieza con # (ej. #catalogo), con / o con https://';
+      }
+      if (p.anuncio.color && !HEX.test(p.anuncio.color)) er['pro.anuncio.color'] = 'Formato #RRGGBB';
+      if (p.promo.color && !HEX.test(p.promo.color)) er['pro.promo.color'] = 'Formato #RRGGBB';
+      if (p.promo.mostrar && !p.promo.titulo.trim() && !p.promo.texto.trim()) {
+        er['pro.promo.titulo'] = 'Escribe un título o un texto para la promoción';
+      }
+    }
     setErrores(er);
     if (Object.keys(er).length) return;
 
@@ -143,7 +215,7 @@ function Editor({ tienda, tiendas, idTienda, onCambiarTienda }) {
           fuente: v.fuente,
           estiloBotones: v.estiloBotones,
         }),
-        ...(conPlantillas && { fondo: v.fondo }),
+        ...(conPlantillas && { fondo: v.fondo, disenoPro: proParaEnviar(v.pro) }),
         mostrarGarantias: v.mostrarGarantias,
         mostrarDestacado: v.mostrarDestacado,
         mostrarCategorias: v.mostrarCategorias,
@@ -182,6 +254,7 @@ function Editor({ tienda, tiendas, idTienda, onCambiarTienda }) {
       mostrarGarantias: v.mostrarGarantias,
       mostrarDestacado: v.mostrarDestacado,
       mostrarCategorias: v.mostrarCategorias,
+      ...(conPlantillas && { pro: proParaEnviar(v.pro, true) }),
     },
   }), [v, personaliza, conPlantillas]);
 
@@ -331,6 +404,17 @@ function Editor({ tienda, tiendas, idTienda, onCambiarTienda }) {
             </div>
           </Seccion>
 
+          {/* ---------------------------------------------------------------- Diseño Pro */}
+          <DisenoPro
+            pro={v.pro}
+            errores={errores}
+            bloqueada={!conPlantillas}
+            idTienda={idTienda}
+            subdominio={tienda.subdominio}
+            hayPortada={Boolean(v.imagenPortadaUrl.trim())}
+            onCambiar={cambiarPro}
+          />
+
           {/* ---------------------------------------------------------------- Secciones (todos) */}
           <Seccion titulo="Secciones de la portada">
             <Interruptor etiqueta="Beneficios" ayuda="Envíos, formas de pago y compra sin cuenta" valor={v.mostrarGarantias}
@@ -351,6 +435,160 @@ function Editor({ tienda, tiendas, idTienda, onCambiarTienda }) {
         </div>
       </div>
     </section>
+  );
+}
+
+// ------------------------------------------------------------------ diseño Pro
+
+/**
+ * "Diseño Pro": portada a medida, barra de anuncio con varios mensajes y color, franja de
+ * promoción, categorías en el menú y etiqueta "-25 %". Los enlaces de los botones se eligen de
+ * una lista (el catálogo, cada categoría) o se escriben.
+ */
+function DisenoPro({ pro, errores, bloqueada, idTienda, subdominio, hayPortada, onCambiar }) {
+  const [categorias, setCategorias] = useState([]);
+  useEffect(() => {
+    let vigente = true;
+    listarCategorias(idTienda)
+      .then((lista) => vigente && setCategorias(lista.filter((c) => c.estado === 'ACTIVA')))
+      .catch(() => vigente && setCategorias([]));
+    return () => {
+      vigente = false;
+    };
+  }, [idTienda]);
+
+  const destinos = [
+    { valor: '#catalogo', texto: 'Catálogo' },
+    ...categorias.map((c) => ({ valor: `/tienda/${subdominio}?categoria=${c.slug}#catalogo`, texto: `Categoría ${c.nombre}` })),
+  ];
+  const p = pro.portada;
+  const error = (bloque, campo) => errores[`pro.${bloque}.${campo}`];
+
+  return (
+    <Seccion titulo="Diseño Pro" plan="Pro" bloqueada={bloqueada}
+      aviso="Portada a medida, anuncios que rotan, franja de promoción y más.">
+      <datalist id="destinos-tienda">
+        {destinos.map((d) => <option key={d.valor} value={d.valor}>{d.texto}</option>)}
+      </datalist>
+
+      {/* Portada a medida */}
+      <div className="space-y-3 rounded-lg border border-[#ebebeb] p-3">
+        <Interruptor etiqueta="Portada a medida" ayuda="Un banner a todo lo ancho con tu título y tus botones"
+          valor={p.activa} onCambiar={(x) => onCambiar('portada', 'activa', x)} />
+        {p.activa && (
+          <>
+            {!hayPortada && (
+              <p className="rounded-lg bg-[#f7f7f7] px-3 py-2 text-[12px] text-[#616161]">
+                Sube una <b>imagen de portada</b> (arriba, en &quot;Portada y anuncio&quot;) para que se vea de fondo.
+              </p>
+            )}
+            <CampoPanel etiqueta="Título" ayuda="Vacío = el nombre de la tienda">
+              <input value={p.titulo} maxLength={90} placeholder="Ej.: Black Friday: hasta 40 % menos"
+                onChange={(e) => onCambiar('portada', 'titulo', e.target.value)} className={inputPanel()} />
+            </CampoPanel>
+            <CampoPanel etiqueta="Texto" ayuda="Vacío = la descripción de la tienda">
+              <textarea rows={2} value={p.subtitulo} maxLength={200} placeholder="Ej.: Solo este fin de semana, en toda la tienda"
+                onChange={(e) => onCambiar('portada', 'subtitulo', e.target.value)} className={inputPanel()} />
+            </CampoPanel>
+            {[1, 2].map((n) => (
+              <div key={n} className="grid grid-cols-[1fr_1.3fr] gap-2">
+                <CampoPanel etiqueta={`Botón ${n}`}>
+                  <input value={p[`boton${n}Texto`]} maxLength={30} placeholder={n === 1 ? 'Comprar ahora' : 'Opcional'}
+                    onChange={(e) => onCambiar('portada', `boton${n}Texto`, e.target.value)} className={inputPanel()} />
+                </CampoPanel>
+                <CampoPanel etiqueta="Lleva a" error={error('portada', `boton${n}Enlace`)}>
+                  <input list="destinos-tienda" value={p[`boton${n}Enlace`]} placeholder="#catalogo"
+                    onChange={(e) => onCambiar('portada', `boton${n}Enlace`, e.target.value)}
+                    className={inputPanel(error('portada', `boton${n}Enlace`))} />
+                </CampoPanel>
+              </div>
+            ))}
+            <div>
+              <span className="text-[13px] text-[#303030]">Alineación</span>
+              <div className="mt-1 grid grid-cols-2 gap-2">
+                {[['izquierda', 'Izquierda'], ['centro', 'Centro']].map(([valor, texto]) => (
+                  <Opcion key={valor} elegida={p.alineacion === valor} onClick={() => onCambiar('portada', 'alineacion', valor)} centrada>
+                    <span className="text-[12px]">{texto}</span>
+                  </Opcion>
+                ))}
+              </div>
+            </div>
+            <div>
+              <span className="text-[13px] text-[#303030]">Alto</span>
+              <div className="mt-1 grid grid-cols-3 gap-2">
+                {[['medio', 'Medio'], ['alto', 'Alto'], ['pantalla', 'Pantalla completa']].map(([valor, texto]) => (
+                  <Opcion key={valor} elegida={p.alto === valor} onClick={() => onCambiar('portada', 'alto', valor)} centrada>
+                    <span className="text-[12px]">{texto}</span>
+                  </Opcion>
+                ))}
+              </div>
+            </div>
+            {hayPortada && (
+              <label className="block">
+                <span className="flex justify-between text-[13px] text-[#303030]">
+                  Oscurecer la imagen <span className="text-[#616161]">{p.oscurecer} %</span>
+                </span>
+                <input type="range" min={0} max={80} step={5} value={p.oscurecer}
+                  onChange={(e) => onCambiar('portada', 'oscurecer', Number(e.target.value))} className="mt-1 w-full accent-[#303030]" />
+                <span className="block text-[12px] text-[#616161]">Más oscuro = el texto blanco se lee mejor</span>
+              </label>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Barra de anuncio */}
+      <div className="space-y-3 rounded-lg border border-[#ebebeb] p-3">
+        <p className="text-[13px] font-medium text-[#303030]">Barra de anuncio</p>
+        <SelectorColor etiqueta="Color de la barra" ayuda="Vacío = el color principal" opcional
+          valor={pro.anuncio.color} error={error('anuncio', 'color')} onCambiar={(c) => onCambiar('anuncio', 'color', c)} />
+        <div className="space-y-2">
+          <span className="text-[13px] text-[#303030]">Mensajes que van rotando (hasta 3)</span>
+          {pro.anuncio.mensajes.map((m, i) => (
+            <input key={i} value={m} maxLength={120}
+              placeholder={['Ej.: Envío gratis desde S/ 150', 'Ej.: Cambios gratis en 30 días', 'Opcional'][i]}
+              onChange={(e) => onCambiar('anuncio', 'mensajes', pro.anuncio.mensajes.map((x, j) => (j === i ? e.target.value : x)))}
+              className={inputPanel()} aria-label={`Mensaje ${i + 1}`} />
+          ))}
+          <span className="block text-[12px] text-[#616161]">Si escribes mensajes aquí, reemplazan el texto del anuncio de arriba.</span>
+        </div>
+      </div>
+
+      {/* Franja de promoción */}
+      <div className="space-y-3 rounded-lg border border-[#ebebeb] p-3">
+        <Interruptor etiqueta="Franja de promoción" ayuda="Debajo de la portada, a todo lo ancho"
+          valor={pro.promo.mostrar} onCambiar={(x) => onCambiar('promo', 'mostrar', x)} />
+        {pro.promo.mostrar && (
+          <>
+            <CampoPanel etiqueta="Título" error={error('promo', 'titulo')}>
+              <input value={pro.promo.titulo} maxLength={80} placeholder="Ej.: 50 % en packs exclusivos"
+                onChange={(e) => onCambiar('promo', 'titulo', e.target.value)} className={inputPanel(error('promo', 'titulo'))} />
+            </CampoPanel>
+            <CampoPanel etiqueta="Texto (opcional)">
+              <input value={pro.promo.texto} maxLength={200} placeholder="Ej.: Y hasta 40 % en el resto por tiempo limitado"
+                onChange={(e) => onCambiar('promo', 'texto', e.target.value)} className={inputPanel()} />
+            </CampoPanel>
+            <div className="grid grid-cols-[1fr_1.3fr] gap-2">
+              <CampoPanel etiqueta="Botón (opcional)">
+                <input value={pro.promo.botonTexto} maxLength={30} placeholder="Ver packs"
+                  onChange={(e) => onCambiar('promo', 'botonTexto', e.target.value)} className={inputPanel()} />
+              </CampoPanel>
+              <CampoPanel etiqueta="Lleva a" error={error('promo', 'botonEnlace')}>
+                <input list="destinos-tienda" value={pro.promo.botonEnlace} placeholder="#catalogo"
+                  onChange={(e) => onCambiar('promo', 'botonEnlace', e.target.value)} className={inputPanel(error('promo', 'botonEnlace'))} />
+              </CampoPanel>
+            </div>
+            <SelectorColor etiqueta="Color de la franja" ayuda="Vacío = el color de acento" opcional
+              valor={pro.promo.color} error={error('promo', 'color')} onCambiar={(c) => onCambiar('promo', 'color', c)} />
+          </>
+        )}
+      </div>
+
+      <Interruptor etiqueta="Categorías en el menú" ayuda="Hasta 5 categorías como enlaces en la cabecera (en pantallas grandes)"
+        valor={pro.categoriasEnMenu} onCambiar={(x) => onCambiar('categoriasEnMenu', null, x)} />
+      <Interruptor etiqueta="Mostrar el % de descuento" ayuda="En los productos rebajados: «-25 %» en lugar de «Oferta»"
+        valor={pro.mostrarDescuento} onCambiar={(x) => onCambiar('mostrarDescuento', null, x)} />
+    </Seccion>
   );
 }
 

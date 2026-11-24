@@ -6,7 +6,10 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import curso.fullstack.shopify.dto.DisenoPro;
 import java.time.OffsetDateTime;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -141,6 +144,12 @@ public class Tienda {
     @Setter
     @Column(name = "tema_aplicado_el")
     private OffsetDateTime temaAplicadoEl;
+
+    /** Diseño avanzado del plan Pro (V15): portada a medida, anuncio, promoción... null = nunca se configuró. */
+    @Setter
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "diseno_pro", columnDefinition = "jsonb")
+    private DisenoPro disenoPro;
 
     /** 1 activa · 0 suspendida */
     @Setter

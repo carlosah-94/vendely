@@ -17,7 +17,8 @@ public record DisenoTienda(
         String fondo,             // blanco, hueso, perla, arena
         Boolean mostrarGarantias,
         Boolean mostrarDestacado,
-        Boolean mostrarCategorias
+        Boolean mostrarCategorias,
+        DisenoPro pro             // diseño avanzado (V15): solo con PLANTILLAS (Pro); si no, el vacío
 ) {
     /** Lo guardado, tal cual (para el panel). */
     public static DisenoTienda de(Tienda t) {
@@ -40,6 +41,7 @@ public record DisenoTienda(
                 plantillas ? t.getFondo() : "blanco",
                 !Boolean.FALSE.equals(t.getMostrarGarantias()),
                 !Boolean.FALSE.equals(t.getMostrarDestacado()),
-                !Boolean.FALSE.equals(t.getMostrarCategorias()));
+                !Boolean.FALSE.equals(t.getMostrarCategorias()),
+                plantillas && t.getDisenoPro() != null ? t.getDisenoPro().limpio() : DisenoPro.VACIO);
     }
 }

@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Link, Outlet, useMatch, useParams } from 'react-router-dom';
+import { Link, Outlet, useLocation, useMatch, useNavigate, useParams } from 'react-router-dom';
 import { CarritoProvider, useCarrito } from '../../context/CarritoContext';
 import { useAuth } from '../../context/AuthContext';
 import { mensajeDeError } from '../../services/api';
 import { paisesDeEnvio } from '../../services/envios';
-import { usarMoneda } from '../../utils/formato';
+import { colorTextoSobre, usarMoneda } from '../../utils/formato';
 import { disenoDe, estiloTienda } from '../../utils/diseno';
 import { obtenerTienda } from '../../services/tienda';
+import { categoriasPublicas } from '../../services/categorias';
 import { IconoBuscar, IconoCarrito, IconoCuenta } from '../Iconos';
 import CarritoDrawer from './CarritoDrawer';
 
@@ -66,6 +67,14 @@ function Marco({ subdominio }) {
   const [paises, setPaises] = useState([]);
   const enCheckout = useMatch('/tienda/:subdominio/checkout');
   const borrador = useBorradorVistaPrevia();
+  const { pathname } = useLocation();
+
+  // Al pasar a otra página de la tienda (un producto, el carrito) se empieza desde arriba, como
+  // en una web normal. Con #catalogo no: ahí la vitrina baja sola al catálogo cuando carga.
+  // Solo al cambiar de página: cambiar un filtro (la búsqueda de la URL) no mueve la pantalla.
+  useEffect(() => {
+    if (!window.location.hash) window.scrollTo(0, 0);
+  }, [pathname]);
 
   // Países a los que vende la tienda: para la barra de anuncio y el pie.
   useEffect(() => {
@@ -121,18 +130,8 @@ function Marco({ subdominio }) {
   return (
     <div className={`flex min-h-screen flex-col text-[#303030] ${estilo.className}`} style={{ fontSize: 16, ...estilo.style }}>
       {/* Barra de anuncio: el texto del dueño (Básico y Pro) o, si no hay, a dónde envía */}
-      {diseno.mostrarAnuncio && (
-        <div
-          className={`px-4 py-2 text-center text-xs tracking-wide ${
-            tienda.plantilla === 'boutique'
-              ? 'border-b border-[var(--fondo-borde)] text-[#6b6b6b]'
-              : 'bg-[var(--tienda)] text-[var(--tienda-texto)]'
-          }`}
-        >
-          {diseno.textoAnuncio || textoEnvios(paises)}
-        </div>
-      )}
-      <Cabecera tienda={tienda} subdominio={subdominio} />
+      {diseno.mostrarAnuncio && <BarraAnuncio tienda={tienda} diseno={diseno} paises={paises} />}
+      <Cabecera tienda={tienda} subdominio={subdominio} diseno={diseno} />
       <main className="flex-1">
         <Outlet context={contexto} />
       </main>
@@ -171,18 +170,107 @@ function Marco({ subdominio }) {
   );
 }
 
-function Cabecera({ tienda, subdominio }) {
+/**
+ * Barra de anuncio. Plan Pro: su propio color y hasta 3 mensajes que van rotando (con flechas
+ * para pasarlos). Si no, el texto del dueño (Básico y Pro) o a dónde envía la tienda.
+ */
+function BarraAnuncio({ tienda, diseno, paises }) {
+  const pro = diseno.pro.anuncio;
+  const mensajes = pro.mensajes.length > 0 ? pro.mensajes : [diseno.textoAnuncio || textoEnvios(paises)];
+  const [indice, setIndice] = useState(0);
+  const total = mensajes.length;
+
+  useEffect(() => {
+    if (total < 2) return undefined;
+    const id = setInterval(() => setIndice((i) => (i + 1) % total), 5000);
+    return () => clearInterval(id);
+  }, [total]);
+
+  const estilo = pro.color ? { background: pro.color, color: colorTextoSobre(pro.color) } : undefined;
+  const clases = pro.color
+    ? ''
+    : tienda.plantilla === 'boutique'
+      ? 'border-b border-[var(--fondo-borde)] text-[#6b6b6b]'
+      : 'bg-[var(--tienda)] text-[var(--tienda-texto)]';
+  const actual = mensajes[indice % total];
+  const flecha = 'px-2 text-sm opacity-70 hover:opacity-100';
+
+  return (
+    <div className={`px-4 py-2 text-center text-xs tracking-wide ${clases}`} style={estilo}>
+      <div className="mx-auto flex max-w-3xl items-center justify-center gap-3">
+        {total > 1 && (
+          <button type="button" onClick={() => setIndice((i) => (i - 1 + total) % total)} aria-label="Anuncio anterior" className={flecha}>‹</button>
+        )}
+        <p aria-live="polite" className="min-w-0 flex-1 truncate">{actual}</p>
+        {total > 1 && (
+          <button type="button" onClick={() => setIndice((i) => (i + 1) % total)} aria-label="Anuncio siguiente" className={flecha}>›</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Plan Pro: las categorías de la tienda como enlaces del menú (hasta 5). */
+function useCategoriasMenu(subdominio, activo) {
+  const [categorias, setCategorias] = useState([]);
+  useEffect(() => {
+    if (!activo) return undefined;
+    let vigente = true;
+    categoriasPublicas(subdominio)
+      .then((lista) => vigente && setCategorias(lista.slice(0, 5)))
+      .catch(() => vigente && setCategorias([]));
+    return () => {
+      vigente = false;
+    };
+  }, [subdominio, activo]);
+  return activo ? categorias : [];
+}
+
+function Cabecera({ tienda, subdominio, diseno }) {
   const { usuario, cerrarSesion } = useAuth();
   const { cantidadTotal, abrir } = useCarrito();
   const esCliente = usuario?.rol === 'CLIENTE' && usuario.idTienda === tienda.idTienda;
   const base = `/tienda/${subdominio}`;
+  const location = useLocation();
+  const navigate = useNavigate();
+  const enPortada = location.pathname === base || location.pathname === `${base}/`;
+
+  // Inicio: la portada desde arriba y sin filtros. Si ya está en la portada, el enlace no
+  // cambiaría nada: se limpia la búsqueda y se sube.
+  function irAInicio(e) {
+    if (!enPortada) return;
+    e.preventDefault();
+    if (location.search || location.hash) navigate(base);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // Catálogo: navegación dentro de la app (sin recargar la tienda). Desde otra página, la
+  // vitrina baja al catálogo cuando termina de cargar (#catalogo); en la portada, baja ya.
+  function irAlCatalogo(e) {
+    if (!enPortada) return;
+    e.preventDefault();
+    document.getElementById('catalogo')?.scrollIntoView({ behavior: 'smooth' });
+    if (location.hash !== '#catalogo') navigate({ search: location.search, hash: '#catalogo' }, { replace: true });
+  }
+  const alCatalogo = { pathname: base, hash: '#catalogo' };
+  const categoriasMenu = useCategoriasMenu(subdominio, diseno.pro.categoriasEnMenu);
+  const categoriaActual = new URLSearchParams(location.search).get('categoria');
 
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--fondo-borde)] bg-[var(--fondo)]/95 backdrop-blur">
       <div className="mx-auto grid max-w-6xl grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 py-4">
         <nav className="hidden gap-5 text-sm sm:flex">
-          <Link to={base} className="hover:underline">Inicio</Link>
-          <a href={`${base}#catalogo`} className="hover:underline">Catálogo</a>
+          <Link to={base} onClick={irAInicio} className="hover:underline">Inicio</Link>
+          <Link to={alCatalogo} onClick={irAlCatalogo} className="hover:underline">Catálogo</Link>
+          {categoriasMenu.map((c) => (
+            <Link
+              key={c.idCategoria}
+              to={{ pathname: base, search: `?categoria=${encodeURIComponent(c.slug)}`, hash: '#catalogo' }}
+              className={`hidden hover:underline lg:inline ${enPortada && categoriaActual === c.slug ? 'font-semibold underline' : ''}`}
+            >
+              {c.nombre}
+            </Link>
+          ))}
         </nav>
         <Link
           to={base}
@@ -198,7 +286,7 @@ function Cabecera({ tienda, subdominio }) {
           {tienda.nombre}
         </Link>
         <div className="col-start-3 flex items-center justify-end gap-4">
-          <a href={`${base}#catalogo`} aria-label="Buscar" className="hidden sm:block"><IconoBuscar /></a>
+          <Link to={alCatalogo} onClick={irAlCatalogo} aria-label="Buscar" className="hidden sm:block"><IconoBuscar /></Link>
           {esCliente ? (
             <>
               {usuario.nombres && (

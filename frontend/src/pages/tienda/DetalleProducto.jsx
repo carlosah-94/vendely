@@ -3,6 +3,7 @@ import { Link, useNavigate, useOutletContext, useParams } from 'react-router-dom
 import ImagenProducto from '../../components/ImagenProducto';
 import Mensaje from '../../components/Mensaje';
 import PrecioTienda from '../../components/tienda/PrecioTienda';
+import { disenoDe, etiquetaOferta } from '../../utils/diseno';
 import { useCarrito } from '../../context/CarritoContext';
 import { mensajeDeError } from '../../services/api';
 import { enOferta } from '../../utils/formato';
@@ -131,7 +132,7 @@ export default function DetalleProducto() {
           <div className="flex items-center gap-3">
             <PrecioTienda producto={elegido} grande />
             {enOferta(elegido) && (
-              <span className="rounded-full bg-[var(--acento)] px-2.5 py-0.5 text-xs font-medium text-[var(--acento-texto)]">Oferta</span>
+              <span className="rounded-full bg-[var(--acento)] px-2.5 py-0.5 text-xs font-medium text-[var(--acento-texto)]">{etiquetaOferta(elegido, disenoDe(tienda))}</span>
             )}
           </div>
           {/* Oferta automática del panel (Descuentos): su nombre, como "Fin de temporada" */}

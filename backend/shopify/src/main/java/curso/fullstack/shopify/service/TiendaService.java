@@ -1,5 +1,6 @@
 package curso.fullstack.shopify.service;
 
+import curso.fullstack.shopify.dto.DisenoPro;
 import curso.fullstack.shopify.dto.TiendaActualizarRequest;
 import curso.fullstack.shopify.dto.TiendaCrearRequest;
 import curso.fullstack.shopify.dto.TiendaPublicaResponse;
@@ -186,6 +187,15 @@ public class TiendaService {
         if (r.mostrarGarantias() != null) t.setMostrarGarantias(r.mostrarGarantias());
         if (r.mostrarDestacado() != null) t.setMostrarDestacado(r.mostrarDestacado());
         if (r.mostrarCategorias() != null) t.setMostrarCategorias(r.mostrarCategorias());
+
+        if (r.disenoPro() != null) {
+            DisenoPro nuevo = r.disenoPro().limpio();
+            DisenoPro actual = t.getDisenoPro() == null ? DisenoPro.VACIO : t.getDisenoPro().limpio();
+            if (nuevo.usaAlgo() && !nuevo.equals(actual)) {
+                planService.exigir(id, FuncionPlan.PLANTILLAS);
+            }
+            t.setDisenoPro(nuevo.usaAlgo() ? nuevo : null);
+        }
     }
 
     // ------------------------------------------------------------ vitrina pública

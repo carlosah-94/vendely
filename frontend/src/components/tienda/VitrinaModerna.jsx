@@ -1,4 +1,6 @@
 import { Link } from 'react-router-dom';
+import { BandaPromo, PortadaPro } from './BloquesPro';
+import { etiquetaOferta } from '../../utils/diseno';
 import { BotonComprar, tieneVariosPrecios } from './comprar';
 import { enOferta, formatoMoneda } from '../../utils/formato';
 import { claseGrilla, hayFiltros, productoEstrella } from '../../utils/catalogo';
@@ -36,72 +38,79 @@ export default function VitrinaModerna({ tienda, diseno, subdominio, paises, tod
 
   return (
     <div>
-      {/* Portada */}
-      <section className="overflow-hidden bg-[var(--tienda)] text-[var(--tienda-texto)]">
-        <div className="mx-auto grid max-w-6xl items-center gap-10 px-5 py-14 md:grid-cols-[1.1fr_1fr] md:py-20">
-          <div className="space-y-6">
-            {tienda.logoUrl && <img src={tienda.logoUrl} alt="" className="h-14 w-14 rounded-2xl bg-white object-contain p-1.5" />}
-            <h1 className="letra-ancha break-words text-[clamp(2.75rem,7vw,5.5rem)] leading-[0.95]">{tienda.nombre}</h1>
-            {tienda.descripcion && <p className="max-w-md text-lg leading-relaxed opacity-90">{tienda.descripcion}</p>}
-            <div className="flex flex-wrap gap-3">
-              <a href="#catalogo" className="boton-tienda bg-[var(--tienda-texto)] px-7 py-3.5 font-semibold text-[var(--tienda)] transition hover:opacity-90">
-                {unico ? 'Comprar ahora' : 'Ver productos'}
-              </a>
-              {categorias[0] && !unico && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    elegirCategoria(categorias[0].slug);
-                    document.getElementById('catalogo')?.scrollIntoView({ behavior: 'smooth' });
-                  }}
-                  className="boton-tienda border-2 border-[var(--tienda-texto)]/40 px-7 py-3 font-semibold transition hover:border-[var(--tienda-texto)]"
-                >
-                  {categorias[0].nombre}
-                </button>
+      {/* Plan Pro: portada a medida (Personalizar → Diseño Pro); si no, la de la plantilla */}
+      {diseno.pro.portada.activa ? (
+        <PortadaPro tienda={tienda} diseno={diseno} />
+      ) : (
+        <>
+          {/* Portada */}
+          <section className="overflow-hidden bg-[var(--tienda)] text-[var(--tienda-texto)]">
+            <div className="mx-auto grid max-w-6xl items-center gap-10 px-5 py-14 md:grid-cols-[1.1fr_1fr] md:py-20">
+              <div className="space-y-6">
+                {tienda.logoUrl && <img src={tienda.logoUrl} alt="" className="h-14 w-14 rounded-2xl bg-white object-contain p-1.5" />}
+                <h1 className="letra-ancha break-words text-[clamp(2.75rem,7vw,5.5rem)] leading-[0.95]">{tienda.nombre}</h1>
+                {tienda.descripcion && <p className="max-w-md text-lg leading-relaxed opacity-90">{tienda.descripcion}</p>}
+                <div className="flex flex-wrap gap-3">
+                  <a href="#catalogo" className="boton-tienda bg-[var(--tienda-texto)] px-7 py-3.5 font-semibold text-[var(--tienda)] transition hover:opacity-90">
+                    {unico ? 'Comprar ahora' : 'Ver productos'}
+                  </a>
+                  {categorias[0] && !unico && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        elegirCategoria(categorias[0].slug);
+                        document.getElementById('catalogo')?.scrollIntoView({ behavior: 'smooth' });
+                      }}
+                      className="boton-tienda border-2 border-[var(--tienda-texto)]/40 px-7 py-3 font-semibold transition hover:border-[var(--tienda-texto)]"
+                    >
+                      {categorias[0].nombre}
+                    </button>
+                  )}
+                </div>
+              </div>
+  
+              {/* Imagen de portada del dueño: una foto grande, inclinada, con marco blanco */}
+              {banner && (
+                <div className="relative mx-auto w-full max-w-[480px]">
+                  <span className="absolute -inset-3 rotate-3 rounded-[2rem] bg-[var(--acento)] opacity-80" />
+                  <img
+                    src={banner}
+                    alt=""
+                    className="relative aspect-[4/5] w-full -rotate-2 rounded-[1.75rem] object-cover shadow-[0_24px_60px_-20px_rgba(0,0,0,0.45)] ring-4 ring-white sm:aspect-square"
+                  />
+                </div>
+              )}
+              {/* Collage con fotos de la tienda (si todavía no hay fotos, no se muestra) */}
+              {!banner && collage.length > 0 && (
+                <div className="relative mx-auto h-[340px] w-full max-w-[460px] sm:h-[420px]">
+                  {collage.map((p, i) => (
+                    <Link
+                      key={p.idProducto}
+                      to={`${base}/producto/${p.idProducto}`}
+                      aria-label={p.nombre}
+                      className={[
+                        'absolute overflow-hidden rounded-[1.75rem] bg-white shadow-[0_24px_60px_-20px_rgba(0,0,0,0.45)] ring-4 ring-white transition-transform duration-300 hover:-translate-y-1',
+                        collage.length === 1 ? 'inset-x-8 inset-y-2 rotate-2' : '',
+                        collage.length > 1 && i === 0 ? 'left-0 top-0 h-[78%] w-[62%] -rotate-3' : '',
+                        collage.length > 1 && i === 1 ? 'bottom-0 right-0 h-[64%] w-[52%] rotate-3' : '',
+                        i === 2 ? 'right-[8%] top-[4%] h-[34%] w-[30%] rotate-6' : '',
+                      ].join(' ')}
+                    >
+                      <img src={p.imagenUrl} alt="" className="h-full w-full object-cover" />
+                      {i === 0 && (
+                        <span className="absolute bottom-3 left-3 rounded-full bg-white px-3 py-1 text-sm font-semibold text-[#141414]">
+                          {formatoMoneda(p.precio)}
+                        </span>
+                      )}
+                    </Link>
+                  ))}
+                </div>
               )}
             </div>
-          </div>
-
-          {/* Imagen de portada del dueño: una foto grande, inclinada, con marco blanco */}
-          {banner && (
-            <div className="relative mx-auto w-full max-w-[480px]">
-              <span className="absolute -inset-3 rotate-3 rounded-[2rem] bg-[var(--acento)] opacity-80" />
-              <img
-                src={banner}
-                alt=""
-                className="relative aspect-[4/5] w-full -rotate-2 rounded-[1.75rem] object-cover shadow-[0_24px_60px_-20px_rgba(0,0,0,0.45)] ring-4 ring-white sm:aspect-square"
-              />
-            </div>
-          )}
-          {/* Collage con fotos de la tienda (si todavía no hay fotos, no se muestra) */}
-          {!banner && collage.length > 0 && (
-            <div className="relative mx-auto h-[340px] w-full max-w-[460px] sm:h-[420px]">
-              {collage.map((p, i) => (
-                <Link
-                  key={p.idProducto}
-                  to={`${base}/producto/${p.idProducto}`}
-                  aria-label={p.nombre}
-                  className={[
-                    'absolute overflow-hidden rounded-[1.75rem] bg-white shadow-[0_24px_60px_-20px_rgba(0,0,0,0.45)] ring-4 ring-white transition-transform duration-300 hover:-translate-y-1',
-                    collage.length === 1 ? 'inset-x-8 inset-y-2 rotate-2' : '',
-                    collage.length > 1 && i === 0 ? 'left-0 top-0 h-[78%] w-[62%] -rotate-3' : '',
-                    collage.length > 1 && i === 1 ? 'bottom-0 right-0 h-[64%] w-[52%] rotate-3' : '',
-                    i === 2 ? 'right-[8%] top-[4%] h-[34%] w-[30%] rotate-6' : '',
-                  ].join(' ')}
-                >
-                  <img src={p.imagenUrl} alt="" className="h-full w-full object-cover" />
-                  {i === 0 && (
-                    <span className="absolute bottom-3 left-3 rounded-full bg-white px-3 py-1 text-sm font-semibold text-[#141414]">
-                      {formatoMoneda(p.precio)}
-                    </span>
-                  )}
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-
+          </section>
+        </>
+      )}
+      <BandaPromo diseno={diseno} />
       {/* Cinta que corre de lado (dos copias para que no tenga corte) */}
       {frases.length > 0 && (
         <div className={`overflow-hidden py-3.5 ${cinta}`} aria-hidden="true">
@@ -206,7 +215,7 @@ export default function VitrinaModerna({ tienda, diseno, subdominio, paises, tod
                   {!p.disponible ? (
                     <span className="absolute right-3 top-3 rounded-full bg-[#141414] px-3 py-1 text-xs font-semibold text-white">Agotado</span>
                   ) : enOferta(p) && (
-                    <span className="absolute right-3 top-3 rounded-full bg-[var(--acento)] px-3 py-1 text-xs font-semibold text-[var(--acento-texto)]">Oferta</span>
+                    <span className="absolute right-3 top-3 rounded-full bg-[var(--acento)] px-3 py-1 text-xs font-semibold text-[var(--acento-texto)]">{etiquetaOferta(p, diseno)}</span>
                   )}
                 </Link>
                 <div className="flex flex-1 flex-col justify-between gap-3 px-1.5 pb-1 pt-3">

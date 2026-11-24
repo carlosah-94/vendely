@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useOutletContext, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useOutletContext, useSearchParams } from 'react-router-dom';
 import ImagenProducto from '../../components/ImagenProducto';
 import Mensaje from '../../components/Mensaje';
 import FiltrosCatalogo from '../../components/tienda/FiltrosCatalogo';
 import Paginador from '../../components/tienda/Paginador';
 import PrecioTienda from '../../components/tienda/PrecioTienda';
+import { BandaPromo, PortadaPro } from '../../components/tienda/BloquesPro';
 import VitrinaBoutique from '../../components/tienda/VitrinaBoutique';
 import VitrinaModerna from '../../components/tienda/VitrinaModerna';
 import { BotonComprar, tieneVariosPrecios } from '../../components/tienda/comprar';
@@ -18,7 +19,7 @@ import { enOferta, formatoMoneda } from '../../utils/formato';
 import { claseGrilla, hayFiltros, productoEstrella } from '../../utils/catalogo';
 import Destacado from '../../components/tienda/Destacado';
 import Garantias from '../../components/tienda/Garantias';
-import { disenoDe } from '../../utils/diseno';
+import { disenoDe, etiquetaOferta } from '../../utils/diseno';
 
 /**
  * Portada de la tienda. Carga productos y categorías y los dibuja con la plantilla elegida:
@@ -104,6 +105,16 @@ export default function Vitrina() {
     };
   }, [subdominio, consulta, categorias, elegida?.idCategoria, filtros, version]);
 
+  // Llegó con #catalogo ("Catálogo" del menú, desde otra página): cuando los productos ya
+  // cargaron, baja al catálogo. Antes de cargar, la página aún no tiene su alto final.
+  const location = useLocation();
+  const cargandoProductos = estado.clave !== `${subdominio}?${consulta}`;
+  useEffect(() => {
+    if (cargandoProductos || location.hash !== '#catalogo') return undefined;
+    const id = setTimeout(() => document.getElementById('catalogo')?.scrollIntoView({ behavior: 'smooth' }), 50);
+    return () => clearTimeout(id);
+  }, [cargandoProductos, location.hash, location.key]);
+
   /** Cambia filtros en la URL. Cualquier cambio vuelve a la página 1, salvo el de página. */
   function cambiarFiltro(cambios) {
     const siguiente = { ...filtros, pagina: 1, ...cambios };
@@ -128,7 +139,7 @@ export default function Vitrina() {
     productos: estado.productos,
     categorias: categorias ?? [],
     elegida,
-    cargando: estado.clave !== `${subdominio}?${consulta}`,
+    cargando: cargandoProductos,
     error: estado.error,
     filtros,
     total: estado.total,
@@ -179,56 +190,63 @@ function VitrinaClasica({ tienda, diseno, subdominio, paises, todos, productos, 
 
   return (
     <>
-      <section className="px-3 pt-3 sm:px-5 sm:pt-5">
-        <div className="relative isolate mx-auto max-w-7xl overflow-hidden bg-[var(--tienda)] text-[var(--tienda-texto)]" style={radioPortada}>
-          {banner ? (
-            <>
-              {/* Imagen de portada con un velo del color de la tienda para que el texto se lea */}
-              <img src={banner} alt="" className="absolute inset-0 -z-20 h-full w-full object-cover" />
-              <span className="absolute inset-0 -z-10 bg-[linear-gradient(100deg,var(--tienda)_15%,color-mix(in_srgb,var(--tienda)_55%,transparent)_55%,transparent)]" />
-              <div className="flex min-h-[460px] max-w-2xl flex-col justify-center gap-6 px-6 py-16 sm:min-h-[540px] sm:px-14">
-                {tienda.logoUrl && <img src={tienda.logoUrl} alt="" className="h-16 w-16 rounded-2xl bg-white object-contain p-1.5" />}
-                <h1 className="break-words text-[clamp(2.6rem,6vw,4.75rem)] font-semibold leading-[1.02] tracking-tight">{tienda.nombre}</h1>
-                {tienda.descripcion && <p className="max-w-md text-lg leading-relaxed opacity-90">{tienda.descripcion}</p>}
-                {botones}
-              </div>
-            </>
-          ) : estrella?.imagenUrl ? (
-            <>
-              <span className="absolute -right-24 -top-24 -z-10 h-96 w-96 rounded-full bg-[var(--tienda-texto)] opacity-[0.07]" />
-              <span className="absolute -bottom-32 left-1/3 -z-10 h-80 w-80 rounded-full bg-[var(--acento)] opacity-[0.22] blur-2xl" />
-              <div className="grid items-center gap-12 px-6 py-14 sm:px-14 md:grid-cols-2 md:py-20">
-                <div className="space-y-6">
-                  {tienda.logoUrl && <img src={tienda.logoUrl} alt="" className="h-16 w-16 rounded-2xl bg-white object-contain p-1.5" />}
-                  <h1 className="break-words text-[clamp(2.6rem,6vw,4.5rem)] font-semibold leading-[1.02] tracking-tight">{tienda.nombre}</h1>
-                  {tienda.descripcion && <p className="max-w-md text-lg leading-relaxed opacity-85">{tienda.descripcion}</p>}
-                  {botones}
-                </div>
-                <Link to={`${base}/producto/${estrella.idProducto}`} className="group relative mx-auto block w-full max-w-md pb-5">
-                  <div className="tarjeta-tienda overflow-hidden bg-white shadow-[0_40px_80px_-30px_rgba(0,0,0,0.55)]">
-                    <img src={estrella.imagenUrl} alt={estrella.nombre} className="aspect-[4/5] w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]" />
+      {/* Plan Pro: portada a medida (Personalizar → Diseño Pro); si no, la de la plantilla */}
+      {diseno.pro.portada.activa ? (
+        <PortadaPro tienda={tienda} diseno={diseno} />
+      ) : (
+        <>
+          <section className="px-3 pt-3 sm:px-5 sm:pt-5">
+            <div className="relative isolate mx-auto max-w-7xl overflow-hidden bg-[var(--tienda)] text-[var(--tienda-texto)]" style={radioPortada}>
+              {banner ? (
+                <>
+                  {/* Imagen de portada con un velo del color de la tienda para que el texto se lea */}
+                  <img src={banner} alt="" className="absolute inset-0 -z-20 h-full w-full object-cover" />
+                  <span className="absolute inset-0 -z-10 bg-[linear-gradient(100deg,var(--tienda)_15%,color-mix(in_srgb,var(--tienda)_55%,transparent)_55%,transparent)]" />
+                  <div className="flex min-h-[460px] max-w-2xl flex-col justify-center gap-6 px-6 py-16 sm:min-h-[540px] sm:px-14">
+                    {tienda.logoUrl && <img src={tienda.logoUrl} alt="" className="h-16 w-16 rounded-2xl bg-white object-contain p-1.5" />}
+                    <h1 className="break-words text-[clamp(2.6rem,6vw,4.75rem)] font-semibold leading-[1.02] tracking-tight">{tienda.nombre}</h1>
+                    {tienda.descripcion && <p className="max-w-md text-lg leading-relaxed opacity-90">{tienda.descripcion}</p>}
+                    {botones}
                   </div>
-                  <span className="tarjeta-tienda absolute bottom-0 left-6 right-6 flex items-center justify-between gap-3 bg-white px-5 py-3.5 text-[#1a1a1a] shadow-xl">
-                    <span className="truncate font-medium">{estrella.nombre}</span>
-                    <span className="shrink-0 font-semibold">{formatoMoneda(estrella.precio)}</span>
-                  </span>
-                </Link>
-              </div>
-            </>
-          ) : (
-            <div className="mx-auto max-w-3xl space-y-5 px-5 py-20 text-center sm:py-28">
-              <span className="absolute -right-24 -top-24 -z-10 h-96 w-96 rounded-full bg-[var(--tienda-texto)] opacity-[0.07]" />
-              {tienda.logoUrl && <img src={tienda.logoUrl} alt="" className="mx-auto h-16 w-16 rounded-2xl bg-white object-contain p-1.5" />}
-              <h1 className="break-words text-[clamp(2.6rem,7vw,4.75rem)] font-semibold leading-[1.02] tracking-tight">{tienda.nombre}</h1>
-              {tienda.descripcion && <p className="mx-auto max-w-xl text-lg opacity-85">{tienda.descripcion}</p>}
-              <a href="#catalogo" className="boton-tienda inline-block bg-[var(--tienda-texto)] px-8 py-3.5 font-semibold text-[var(--tienda)] hover:opacity-90">
-                Ver productos
-              </a>
+                </>
+              ) : estrella?.imagenUrl ? (
+                <>
+                  <span className="absolute -right-24 -top-24 -z-10 h-96 w-96 rounded-full bg-[var(--tienda-texto)] opacity-[0.07]" />
+                  <span className="absolute -bottom-32 left-1/3 -z-10 h-80 w-80 rounded-full bg-[var(--acento)] opacity-[0.22] blur-2xl" />
+                  <div className="grid items-center gap-12 px-6 py-14 sm:px-14 md:grid-cols-2 md:py-20">
+                    <div className="space-y-6">
+                      {tienda.logoUrl && <img src={tienda.logoUrl} alt="" className="h-16 w-16 rounded-2xl bg-white object-contain p-1.5" />}
+                      <h1 className="break-words text-[clamp(2.6rem,6vw,4.5rem)] font-semibold leading-[1.02] tracking-tight">{tienda.nombre}</h1>
+                      {tienda.descripcion && <p className="max-w-md text-lg leading-relaxed opacity-85">{tienda.descripcion}</p>}
+                      {botones}
+                    </div>
+                    <Link to={`${base}/producto/${estrella.idProducto}`} className="group relative mx-auto block w-full max-w-md pb-5">
+                      <div className="tarjeta-tienda overflow-hidden bg-white shadow-[0_40px_80px_-30px_rgba(0,0,0,0.55)]">
+                        <img src={estrella.imagenUrl} alt={estrella.nombre} className="aspect-[4/5] w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]" />
+                      </div>
+                      <span className="tarjeta-tienda absolute bottom-0 left-6 right-6 flex items-center justify-between gap-3 bg-white px-5 py-3.5 text-[#1a1a1a] shadow-xl">
+                        <span className="truncate font-medium">{estrella.nombre}</span>
+                        <span className="shrink-0 font-semibold">{formatoMoneda(estrella.precio)}</span>
+                      </span>
+                    </Link>
+                  </div>
+                </>
+              ) : (
+                <div className="mx-auto max-w-3xl space-y-5 px-5 py-20 text-center sm:py-28">
+                  <span className="absolute -right-24 -top-24 -z-10 h-96 w-96 rounded-full bg-[var(--tienda-texto)] opacity-[0.07]" />
+                  {tienda.logoUrl && <img src={tienda.logoUrl} alt="" className="mx-auto h-16 w-16 rounded-2xl bg-white object-contain p-1.5" />}
+                  <h1 className="break-words text-[clamp(2.6rem,7vw,4.75rem)] font-semibold leading-[1.02] tracking-tight">{tienda.nombre}</h1>
+                  {tienda.descripcion && <p className="mx-auto max-w-xl text-lg opacity-85">{tienda.descripcion}</p>}
+                  <a href="#catalogo" className="boton-tienda inline-block bg-[var(--tienda-texto)] px-8 py-3.5 font-semibold text-[var(--tienda)] hover:opacity-90">
+                    Ver productos
+                  </a>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      </section>
-
+          </section>
+        </>
+      )}
+      <BandaPromo diseno={diseno} />
       {diseno.mostrarGarantias && <Garantias tienda={tienda} paises={paises} estilo="clasica" />}
 
       {unico ? (
@@ -288,7 +306,7 @@ function VitrinaClasica({ tienda, diseno, subdominio, paises, todos, productos, 
                           {!p.disponible ? (
                             <span className="absolute left-3 top-3 rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#303030] shadow-sm">Agotado</span>
                           ) : enOferta(p) && (
-                            <span className="absolute left-3 top-3 rounded-full bg-[var(--acento)] px-3 py-1 text-xs font-semibold text-[var(--acento-texto)]">Oferta</span>
+                            <span className="absolute left-3 top-3 rounded-full bg-[var(--acento)] px-3 py-1 text-xs font-semibold text-[var(--acento-texto)]">{etiquetaOferta(p, diseno)}</span>
                           )}
                         </div>
                         <h3 className={`mt-3.5 font-medium text-[#1a1a1a] group-hover:underline ${productos.length <= 2 ? 'text-lg' : 'text-[15px]'}`}>{p.nombre}</h3>
