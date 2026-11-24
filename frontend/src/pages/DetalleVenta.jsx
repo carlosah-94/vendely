@@ -372,7 +372,18 @@ export default function DetalleVenta() {
                   {l.nombreVariante && <p className="text-xs text-slate-500">{l.nombreVariante}</p>}
                 </td>
                 <td className="px-4 py-3 text-right">{l.cantidad}</td>
-                <td className="px-4 py-3 text-right">{formatoMoneda(l.precioUnitario, venta.moneda)}</td>
+                <td className="px-4 py-3 text-right">
+                  {/* Con oferta automática: el precio de lista tachado y el cobrado */}
+                  {Number(l.descuentoUnitario) > 0 ? (
+                    <>
+                      <span className="mr-1 text-xs text-slate-400 line-through">{formatoMoneda(l.precioUnitario, venta.moneda)}</span>
+                      {formatoMoneda(Number(l.precioUnitario) - Number(l.descuentoUnitario), venta.moneda)}
+                      {l.nombreOferta && <p className="text-xs text-emerald-700">{l.nombreOferta}</p>}
+                    </>
+                  ) : (
+                    formatoMoneda(l.precioUnitario, venta.moneda)
+                  )}
+                </td>
                 <td className="px-4 py-3 text-right font-medium">{formatoMoneda(l.importe, venta.moneda)}</td>
               </tr>
             ))}

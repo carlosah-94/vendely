@@ -43,6 +43,7 @@ public class PedidoService {
     private final DetallePedidoRepository detallePedidoRepository;
     private final TiendaRepository tiendaRepository;
     private final PagoRepository pagoRepository;
+    private final OfertaRepository ofertaRepository;
     private final ApplicationEventPublisher eventos;
 
     @PersistenceContext
@@ -53,8 +54,9 @@ public class PedidoService {
                          PrecioRepository precioRepository, InventarioRepository inventarioRepository,
                          PedidoRepository pedidoRepository, DetallePedidoRepository detallePedidoRepository,
                          TiendaRepository tiendaRepository, PagoRepository pagoRepository,
-                         ApplicationEventPublisher eventos) {
+                         OfertaRepository ofertaRepository, ApplicationEventPublisher eventos) {
         this.eventos = eventos;
+        this.ofertaRepository = ofertaRepository;
         this.tiendaRepository = tiendaRepository;
         this.pagoRepository = pagoRepository;
         this.verificadorTienda = verificadorTienda;
@@ -122,7 +124,8 @@ public class PedidoService {
             cantidades.merge(l.idVariante(), l.cantidad(), Integer::sum);
         }
 
-        // 3. Por cada producto: validar, descontar stock y tomar el precio vigente
+        // 3. Por cada producto: validar, descontar stock, tomar el precio vigente y la mejor oferta vigente
+        Ofertas ofertas = new Ofertas(idTienda);
         BigDecimal subtotal = BigDecimal.ZERO;
         List<DetallePedido> detalles = new ArrayList<>();
         List<LineaVentaResponse> lineas = new ArrayList<>();
@@ -152,7 +155,10 @@ public class PedidoService {
             Integer quedan = inventarioRepository.cantidadDe(idVariante);
             eventos.publishEvent(new StockCambiadoEvent(idTienda, idVariante, quedan == null ? 0 : quedan));
 
-            BigDecimal importe = precio.getMonto().multiply(BigDecimal.valueOf(cantidad));
+            // La oferta que más rebaja ese precio; el trigger T7 revisa que el descuento sea exactamente ese.
+            Optional<OfertaRepository.Vigente> oferta = ofertas.mejor(info.getIdProducto(), precio.getMonto());
+            BigDecimal descuento = oferta.map(o -> ofertas.descuento(o, precio.getMonto())).orElse(BigDecimal.ZERO);
+            BigDecimal importe = precio.getMonto().subtract(descuento).multiply(BigDecimal.valueOf(cantidad));
             subtotal = subtotal.add(importe);
 
             DetallePedido d = new DetallePedido();
@@ -161,10 +167,15 @@ public class PedidoService {
             d.setNombreProducto(info.getNombreProducto());
             d.setNombreVariante(info.getNombreVariante());
             d.setCantidad(cantidad);
+            oferta.ifPresent(o -> {
+                d.setIdOferta(o.getIdOferta());
+                d.setDescuentoUnitario(descuento);
+            });
             detalles.add(d);
 
             lineas.add(new LineaVentaResponse(idVariante, info.getNombreProducto(), info.getNombreVariante(),
-                    cantidad, precio.getMonto(), importe));
+                    cantidad, precio.getMonto(), importe, descuento,
+                    oferta.map(OfertaRepository.Vigente::getNombre).orElse(null)));
         }
 
         // 4. Guardar el pedido: Java manda el subtotal; el trigger pone número, envío, total e impuesto (IGV, IVA)
@@ -390,10 +401,15 @@ public class PedidoService {
         Map<Long, Precio> precios = precioRepository.findAllById(
                         detalles.stream().map(DetallePedido::getIdPrecio).toList()).stream()
                 .collect(Collectors.toMap(Precio::getIdPrecio, Function.identity()));
+        Map<Long, String> nombresOferta = ofertaRepository.findAllById(detalles.stream()
+                        .map(DetallePedido::getIdOferta).filter(Objects::nonNull).distinct().toList()).stream()
+                .collect(Collectors.toMap(Oferta::getIdOferta, Oferta::getNombre));
         List<LineaVentaResponse> lineas = detalles.stream().map(d -> {
             BigDecimal precio = precios.get(d.getIdPrecio()).getMonto();
+            BigDecimal descuento = d.getDescuentoUnitario() == null ? BigDecimal.ZERO : d.getDescuentoUnitario();
             return new LineaVentaResponse(d.getIdVariante(), d.getNombreProducto(), d.getNombreVariante(),
-                    d.getCantidad(), precio, precio.multiply(BigDecimal.valueOf(d.getCantidad())));
+                    d.getCantidad(), precio, precio.subtract(descuento).multiply(BigDecimal.valueOf(d.getCantidad())),
+                    descuento, nombresOferta.get(d.getIdOferta()));
         }).toList();
         Short estadoPago = estadosDePago(List.of(p.getIdPedido())).get(p.getIdPedido());
         return VentaResponse.desde(p, lineas, PedidoResumenResponse.nombreEstadoPago(estadoPago));
@@ -406,5 +422,37 @@ public class PedidoService {
         }
         return pagoRepository.estadosDe(idsPedidos).stream()
                 .collect(Collectors.toMap(PagoRepository.EstadoPedido::getIdPedido, PagoRepository.EstadoPedido::getEstado));
+    }
+
+    /**
+     * Ofertas vigentes de la tienda durante la creación de UN pedido: los decimales de la moneda se
+     * leen una vez y las ofertas de cada producto también (now() es el mismo en toda la transacción).
+     */
+    private final class Ofertas {
+        private final Long idTienda;
+        private final Map<Long, List<OfertaRepository.Vigente>> porProducto = new HashMap<>();
+        private Integer decimales;
+
+        Ofertas(Long idTienda) {
+            this.idTienda = idTienda;
+        }
+
+        Optional<OfertaRepository.Vigente> mejor(Long idProducto, BigDecimal precio) {
+            List<OfertaRepository.Vigente> vigentes = porProducto.computeIfAbsent(idProducto,
+                    id -> ofertaRepository.vigentesDeProductos(idTienda, List.of(id)));
+            return vigentes.isEmpty() ? Optional.empty() : CalculoOferta.mejor(vigentes, precio, decimales());
+        }
+
+        BigDecimal descuento(OfertaRepository.Vigente o, BigDecimal precio) {
+            return CalculoOferta.descuento(o, precio, decimales());
+        }
+
+        private int decimales() {
+            if (decimales == null) {
+                Integer d = ofertaRepository.decimalesDeTienda(idTienda);
+                decimales = d == null ? 2 : d;
+            }
+            return decimales;
+        }
     }
 }

@@ -134,6 +134,8 @@ export default function DetalleProducto() {
               <span className="rounded-full bg-[var(--acento)] px-2.5 py-0.5 text-xs font-medium text-[var(--acento-texto)]">Oferta</span>
             )}
           </div>
+          {/* Oferta automática del panel (Descuentos): su nombre, como "Fin de temporada" */}
+          {p.oferta && enOferta(elegido) && <p className="text-sm font-medium">{p.oferta.nombre}</p>}
           <p className="text-sm text-[#616161]">Impuestos incluidos.</p>
         </div>
 

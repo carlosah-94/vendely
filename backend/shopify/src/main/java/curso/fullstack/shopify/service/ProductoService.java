@@ -19,6 +19,7 @@ import curso.fullstack.shopify.entity.Variante;
 import curso.fullstack.shopify.exception.ApiException;
 import curso.fullstack.shopify.repository.ImagenProductoRepository;
 import curso.fullstack.shopify.repository.InventarioRepository;
+import curso.fullstack.shopify.repository.OfertaRepository;
 import curso.fullstack.shopify.repository.PrecioRepository;
 import curso.fullstack.shopify.repository.ProductoRepository;
 import curso.fullstack.shopify.repository.TiendaRepository;
@@ -72,13 +73,15 @@ public class ProductoService {
     private final CloudinaryClient cloudinary;
     private final CategoriaService categoriaService;
     private final PlanService planService;
+    private final OfertaRepository ofertaRepository;
 
     public ProductoService(VerificadorTienda verificadorTienda, TiendaRepository tiendaRepository,
                            ProductoRepository productoRepository, VarianteRepository varianteRepository,
                            PrecioRepository precioRepository, InventarioRepository inventarioRepository,
                            ImagenProductoRepository imagenProductoRepository, CategoriaService categoriaService,
-                           PlanService planService, CloudinaryClient cloudinary) {
+                           PlanService planService, CloudinaryClient cloudinary, OfertaRepository ofertaRepository) {
         this.cloudinary = cloudinary;
+        this.ofertaRepository = ofertaRepository;
         this.planService = planService;
         this.verificadorTienda = verificadorTienda;
         this.tiendaRepository = tiendaRepository;
@@ -265,7 +268,7 @@ public class ProductoService {
                 .map(x -> ProductoPublicoResponse.desde(x, d.opciones(x.getIdProducto()),
                         d.variantesPublicas(x.getIdProducto())))
                 .toList();
-        return PaginaResponse.de(contenido, f.pagina(), f.tamano(), total);
+        return PaginaResponse.de(conOfertas(t.getIdTienda(), contenido), f.pagina(), f.tamano(), total);
     }
 
     /** Detalle público de un producto: 404 si la tienda o el producto no existen o no están activos. */
@@ -277,7 +280,30 @@ public class ProductoService {
         ProductoRepository.Fila f = productoRepository.filaPublica(t.getIdTienda(), idProducto)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El producto no existe"));
         Detalle d = detalle(List.of(idProducto));
-        return ProductoPublicoResponse.desde(f, d.opciones(idProducto), d.variantesPublicas(idProducto));
+        return conOfertas(t.getIdTienda(),
+                List.of(ProductoPublicoResponse.desde(f, d.opciones(idProducto), d.variantesPublicas(idProducto)))).get(0);
+    }
+
+    /**
+     * Aplica la oferta automática vigente de cada producto (precio rebajado y precio de antes tachado).
+     * Es el mismo cálculo que hace PedidoService al cobrar.
+     */
+    private List<ProductoPublicoResponse> conOfertas(Long idTienda, List<ProductoPublicoResponse> productos) {
+        if (productos.isEmpty()) {
+            return productos;
+        }
+        Map<Long, List<OfertaRepository.Vigente>> vigentes = ofertaRepository
+                .vigentesDeProductos(idTienda, productos.stream().map(ProductoPublicoResponse::idProducto).toList())
+                .stream().collect(Collectors.groupingBy(OfertaRepository.Vigente::getIdProducto));
+        if (vigentes.isEmpty()) {
+            return productos;
+        }
+        Integer d = ofertaRepository.decimalesDeTienda(idTienda);
+        int decimales = d == null ? 2 : d;
+        return productos.stream()
+                .map(p -> p.conOferta(CalculoOferta.mejor(vigentes.get(p.idProducto()), p.precio(), decimales)
+                        .orElse(null), decimales))
+                .toList();
     }
 
     // ------------------------------------------------------------------ apoyo
