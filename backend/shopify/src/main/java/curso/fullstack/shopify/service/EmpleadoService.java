@@ -54,7 +54,7 @@ public class EmpleadoService {
 
     @Transactional(readOnly = true)
     public EmpleadosResponse listar(UsuarioAutenticado yo, Long idTienda) {
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.soloElDueno(yo, idTienda);
         Plan plan = planService.planDe(idTienda);
         // La lista viene ordenada por antigüedad: los primeros activos hasta el máximo del plan
         // pueden entrar; si la tienda bajó de plan, los que sobran quedan marcados (no se borran).
@@ -77,7 +77,7 @@ public class EmpleadoService {
      */
     @Transactional
     public EmpleadoResponse crear(UsuarioAutenticado yo, Long idTienda, EmpleadoCrearRequest r) {
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.soloElDueno(yo, idTienda);
         exigirAlgunPermiso(r.puedePedidos(), r.puedeProductos(), r.puedeInventario(), r.puedeClientes());
         planService.exigir(idTienda, FuncionPlan.AGREGAR_EMPLEADO);
 
@@ -115,7 +115,7 @@ public class EmpleadoService {
     /** Cambia los permisos o suspende / reactiva al empleado en esta tienda. */
     @Transactional
     public EmpleadoResponse editar(UsuarioAutenticado yo, Long idTienda, Long idLogin, EmpleadoEditarRequest r) {
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.soloElDueno(yo, idTienda);
         EmpleadoTienda e = buscar(idTienda, idLogin);
         exigirAlgunPermiso(r.puedePedidos(), r.puedeProductos(), r.puedeInventario(), r.puedeClientes());
         boolean reactiva = !e.estaActivo() && Boolean.TRUE.equals(r.activo());
@@ -134,7 +134,7 @@ public class EmpleadoService {
     /** Lo quita de esta tienda. Su cuenta sigue existiendo (puede trabajar en otra tienda). */
     @Transactional
     public void quitar(UsuarioAutenticado yo, Long idTienda, Long idLogin) {
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.soloElDueno(yo, idTienda);
         empleadoRepository.delete(buscar(idTienda, idLogin));
         empleadoRepository.flush();
         log.info("Empleado quitado: tienda={}, idLogin={}", idTienda, idLogin);

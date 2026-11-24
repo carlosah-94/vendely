@@ -38,7 +38,9 @@ public record TiendaResponse(
         DisenoTienda diseno,        // letra, botones, acento, fondo, portada, anuncio y secciones (lo guardado)
         String tema,                // tema aplicado (Tienda online → Temas) o null
         OffsetDateTime temaAplicadoEl,
-        Integer maxProductos        // límite de productos del plan (null = sin límite)
+        Integer maxProductos,       // límite de productos del plan (null = sin límite)
+        Boolean soporte,            // true: quien la mira es soporte de Vendely, con permiso del dueño
+        OffsetDateTime soporteHasta // hasta cuándo soporte de Vendely puede entrar (null = sin permiso)
 ) {
     private static final List<String> TODOS = Arrays.stream(PermisoTienda.values()).map(Enum::name).toList();
 
@@ -48,13 +50,13 @@ public record TiendaResponse(
 
     /** Para el dueño: puede todo. */
     public static TiendaResponse desde(Tienda t, DireccionRepository.PaisInfo p, Plan plan) {
-        return desde(t, p, plan, true, null);
+        return desde(t, p, plan, true, false, null);
     }
 
     /** Con lo que puede hacer quien la mira (el dueño, o un empleado con sus permisos). */
     public static TiendaResponse desde(Tienda t, DireccionRepository.PaisInfo p, Plan plan, boolean esDueno,
-            Set<PermisoTienda> permisos) {
-        List<String> lista = esDueno || permisos == null ? TODOS : permisos.stream().map(Enum::name).toList();
+            boolean soporte, Set<PermisoTienda> permisos) {
+        List<String> lista = esDueno || soporte || permisos == null ? TODOS : permisos.stream().map(Enum::name).toList();
         return new TiendaResponse(t.getIdTienda(), t.getNombre(), t.getSubdominio(), t.getIdPais(),
                 p.getNombre(), p.getIdMoneda(), p.getDecimales(), p.getImpuesto(), p.getTasaImpuesto(), p.getNivelFinal(),
                 t.getDescripcion(), t.getCorreoContacto(), t.getLogoUrl(), t.getColorPrincipal(), t.getPermiteInvitados(),
@@ -64,6 +66,7 @@ public record TiendaResponse(
                 plan == null || Boolean.TRUE.equals(plan.getPermitePlantillas()),
                 esDueno, lista, DisenoTienda.de(t),
                 t.getTema(), t.getTemaAplicadoEl(),
-                plan == null ? null : plan.getMaxProductos() == null ? null : plan.getMaxProductos().intValue());
+                plan == null ? null : plan.getMaxProductos() == null ? null : plan.getMaxProductos().intValue(),
+                soporte, t.soporteActivo() ? t.getSoporteHasta() : null);
     }
 }

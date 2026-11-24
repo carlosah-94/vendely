@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTiendaActual } from '../hooks/useTiendaActual';
 import { IconoCandado, IconoCheck, IconoCuenta, IconoMas, IconoSalir, IconoSelector, IconoTienda } from './Iconos';
@@ -45,7 +45,10 @@ export function AvatarTienda({ tienda, tamano = 28 }) {
 export default function MenuCuenta({ alNavegar }) {
   const { usuario, cerrarSesion } = useAuth();
   const navigate = useNavigate();
-  const esPanelTienda = usuario.rol === 'ADMIN_TIENDA' || usuario.rol === 'EMPLEADO';
+  const { pathname } = useLocation();
+  // Modo soporte: el superadmin trabaja en las tiendas que le dieron permiso (como un empleado).
+  const enSoporte = usuario.rol === 'SUPERADMIN' && pathname.startsWith('/panel');
+  const esPanelTienda = usuario.rol === 'ADMIN_TIENDA' || usuario.rol === 'EMPLEADO' || enSoporte;
   const { tiendas, tienda, cambiarTienda } = useTiendaActual(esPanelTienda);
   const [abierto, setAbierto] = useState(false);
   const caja = useRef(null);
@@ -105,7 +108,7 @@ export default function MenuCuenta({ alNavegar }) {
                       <span className="min-w-0 flex-1">
                         <span className="block truncate">{t.nombre}</span>
                         <span className="block truncate text-[11px] font-normal text-[#8a8a8a]">
-                          {t.esDueno === false ? 'Empleado' : `Plan ${t.plan ?? 'Gratis'}`}
+                          {t.soporte ? 'Soporte de Vendely' : t.esDueno === false ? 'Empleado' : `Plan ${t.plan ?? 'Gratis'}`}
                           {t.estado === 'SUSPENDIDA' ? ' · Suspendida' : ''}
                         </span>
                       </span>
@@ -120,9 +123,15 @@ export default function MenuCuenta({ alNavegar }) {
                   <IconoMas tamano={17} /> Crear tienda
                 </button>
               )}
-              <button type="button" role="menuitem" onClick={() => ir('/panel/tiendas')} className={opcion}>
-                <IconoTienda tamano={17} /> Ver todas mis tiendas
-              </button>
+              {enSoporte ? (
+                <button type="button" role="menuitem" onClick={() => ir('/admin/soporte')} className={opcion}>
+                  <IconoTienda tamano={17} /> Salir del modo soporte
+                </button>
+              ) : (
+                <button type="button" role="menuitem" onClick={() => ir('/panel/tiendas')} className={opcion}>
+                  <IconoTienda tamano={17} /> Ver todas mis tiendas
+                </button>
+              )}
               <hr className="my-1.5 border-[#ebebeb]" />
             </>
           )}
@@ -166,7 +175,7 @@ export default function MenuCuenta({ alNavegar }) {
           <span className="block truncate font-semibold text-white">
             {esPanelTienda ? (tienda?.nombre ?? 'Elige una tienda') : nombre}
           </span>
-          <span className="block truncate text-[11px] text-[#8a8a8a]">{NOMBRE_ROL[usuario.rol] ?? usuario.rol}</span>
+          <span className="block truncate text-[11px] text-[#8a8a8a]">{enSoporte ? 'Modo soporte' : NOMBRE_ROL[usuario.rol] ?? usuario.rol}</span>
         </span>
         <IconoSelector tamano={16} />
       </button>

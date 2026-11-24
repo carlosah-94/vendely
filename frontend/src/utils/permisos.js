@@ -15,6 +15,11 @@ export function esDuenoDe(tienda) {
   return Boolean(tienda) && tienda.esDueno !== false;
 }
 
+/** true si quien mira la tienda es soporte de Vendely, entrando con permiso de su dueño. */
+export function esSoporte(tienda) {
+  return Boolean(tienda?.soporte);
+}
+
 /** true si en esta tienda puede usar ALGUNO de estos permisos. */
 export function puede(tienda, ...permisos) {
   if (!tienda) {

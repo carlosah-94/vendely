@@ -89,7 +89,7 @@ public class SuscripcionService {
 
     @Transactional
     public PagoPlanIniciadoResponse iniciar(UsuarioAutenticado yo, Long idTienda, Short idPlan) {
-        Tienda tienda = verificadorTienda.delDueno(yo, idTienda);
+        Tienda tienda = verificadorTienda.soloElDueno(yo, idTienda);
         Plan plan = planRepository.findById(idPlan)
                 .filter(p -> p.getEstado() != null && p.getEstado() == 1)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El plan no existe"));
@@ -138,7 +138,7 @@ public class SuscripcionService {
 
     @Transactional
     public SuscripcionResponse confirmar(UsuarioAutenticado yo, Long idTienda, Long idSuscripcion) {
-        Tienda tienda = verificadorTienda.delDueno(yo, idTienda);
+        Tienda tienda = verificadorTienda.soloElDueno(yo, idTienda);
         Suscripcion s = suscripcionRepository.bloquear(idSuscripcion, idTienda)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El pago de plan no existe"));
         if (s.getEstado() != Suscripcion.PENDIENTE || s.getReferenciaPago() == null) {
@@ -232,7 +232,7 @@ public class SuscripcionService {
     /** El dueno cancelo en PayPal: la suscripcion queda cancelada y el plan no cambia. */
     @Transactional
     public SuscripcionResponse cancelarPorUsuario(UsuarioAutenticado yo, Long idTienda, Long idSuscripcion) {
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.soloElDueno(yo, idTienda);
         Suscripcion s = suscripcionRepository.bloquear(idSuscripcion, idTienda)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El pago de plan no existe"));
         if (s.getEstado() != Suscripcion.PENDIENTE) {

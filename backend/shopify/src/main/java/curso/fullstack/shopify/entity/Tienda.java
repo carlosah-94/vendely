@@ -151,6 +151,11 @@ public class Tienda {
     @Column(name = "diseno_pro", columnDefinition = "jsonb")
     private DisenoPro disenoPro;
 
+    /** Hasta cuándo el equipo de Vendely puede entrar a armar la tienda (V16). null = sin permiso. */
+    @Setter
+    @Column(name = "soporte_hasta")
+    private OffsetDateTime soporteHasta;
+
     /** 1 activa · 0 suspendida */
     @Setter
     @Column(name = "estado", nullable = false)
@@ -164,5 +169,10 @@ public class Tienda {
 
     public boolean estaActiva() {
         return estado != null && estado == 1;
+    }
+
+    /** true si el dueño dio permiso a soporte de Vendely y todavía no vence. */
+    public boolean soporteActivo() {
+        return soporteHasta != null && soporteHasta.isAfter(OffsetDateTime.now());
     }
 }

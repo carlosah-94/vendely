@@ -1,15 +1,17 @@
 import { Outlet } from 'react-router-dom';
 import Mensaje from './Mensaje';
 import { useTiendaActual } from '../hooks/useTiendaActual';
-import { esDuenoDe, puede } from '../utils/permisos';
+import { esDuenoDe, esSoporte, puede } from '../utils/permisos';
 
 /**
  * Portero de las secciones del panel según la tienda elegida.
  * - permiso: la sección la usa el dueño o un empleado con ese permiso (o alguno de la lista).
- * - soloDueno: la sección es solo del dueño (plan, personalizar, envíos, empleados).
+ * - soloDueno: la sección es del dueño (personalizar, envíos...). Soporte de Vendely, con
+ *   permiso del dueño, también entra.
+ * - sinSoporte: soporte de Vendely no entra (plan, empleados, el propio permiso de soporte).
  * Sin tiendas todavía, deja pasar: cada página ya muestra su propio aviso.
  */
-export default function RequierePermiso({ permiso, soloDueno = false }) {
+export default function RequierePermiso({ permiso, soloDueno = false, sinSoporte = false }) {
   const { tiendas, tienda, cargando } = useTiendaActual();
 
   if (cargando) {
@@ -18,8 +20,17 @@ export default function RequierePermiso({ permiso, soloDueno = false }) {
   if (tiendas.length === 0 || !tienda) {
     return <Outlet />;
   }
+  if (sinSoporte && esSoporte(tienda)) {
+    return (
+      <Mensaje
+        tipo="info"
+        texto={`Esta sección la decide el dueño de ${tienda.nombre}: soporte de Vendely no puede entrar aquí.`}
+      />
+    );
+  }
   const lista = Array.isArray(permiso) ? permiso : [permiso];
-  const permitido = soloDueno ? esDuenoDe(tienda) : puede(tienda, ...lista);
+  const permitido = soloDueno ? esDuenoDe(tienda) || esSoporte(tienda)
+    : permiso ? puede(tienda, ...lista) : true;
   if (!permitido) {
     return (
       <Mensaje

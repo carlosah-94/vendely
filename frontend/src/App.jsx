@@ -5,6 +5,7 @@ import RutaProtegida from './components/RutaProtegida';
 import AccesoDenegado from './pages/AccesoDenegado';
 import AdminCuentas from './pages/admin/AdminCuentas';
 import AdminPlanes from './pages/admin/AdminPlanes';
+import AdminSoporte from './pages/admin/AdminSoporte';
 import AdminTiendas from './pages/admin/AdminTiendas';
 import Clientes from './pages/Clientes';
 import Descuentos from './pages/Descuentos';
@@ -28,6 +29,7 @@ import Productos from './pages/Productos';
 import RecuperarContrasena from './pages/RecuperarContrasena';
 import Registro from './pages/Registro';
 import Seguridad from './pages/Seguridad';
+import Soporte from './pages/Soporte';
 import Ventas from './pages/Ventas';
 import LayoutTienda from './components/tienda/LayoutTienda';
 import RequiereCliente from './components/tienda/RequiereCliente';
@@ -68,11 +70,14 @@ export default function App() {
 
       {/* Panel del dueño de tienda */}
       {/* Panel de la tienda: el dueño ve todo; un empleado, solo las secciones que su dueño
-          le permitió en la tienda elegida (RequierePermiso). El backend lo vuelve a revisar. */}
-      <Route element={<RutaProtegida roles={['ADMIN_TIENDA', 'EMPLEADO']} />}>
+          le permitió en la tienda elegida (RequierePermiso). Soporte de Vendely (SUPERADMIN) entra
+          a las tiendas cuyo dueño le dio permiso. El backend lo vuelve a revisar. */}
+      <Route element={<RutaProtegida roles={['ADMIN_TIENDA', 'EMPLEADO', 'SUPERADMIN']} />}>
         <Route element={<LayoutPanel />}>
           <Route path="/panel" element={<InicioPanel />} />
-          <Route path="/panel/tiendas" element={<MisTiendas />} />
+          <Route element={<RequierePermiso sinSoporte />}>
+            <Route path="/panel/tiendas" element={<MisTiendas />} />
+          </Route>
           <Route element={<RequierePermiso permiso="PRODUCTOS" />}>
             <Route path="/panel/productos" element={<Productos />} />
             <Route path="/panel/productos/categorias" element={<Categorias />} />
@@ -94,8 +99,11 @@ export default function App() {
             <Route path="/panel/informes" element={<Informes />} />
             <Route path="/panel/temas" element={<Temas />} />
             <Route path="/panel/personalizar" element={<PersonalizarTienda />} />
+          </Route>
+          <Route element={<RequierePermiso soloDueno sinSoporte />}>
             <Route path="/panel/plan" element={<Plan />} />
             <Route path="/panel/empleados" element={<Empleados />} />
+            <Route path="/panel/soporte" element={<Soporte />} />
           </Route>
         </Route>
       </Route>
@@ -114,6 +122,7 @@ export default function App() {
           <Route path="/admin/tiendas" element={<AdminTiendas />} />
           <Route path="/admin/cuentas" element={<AdminCuentas />} />
           <Route path="/admin/planes" element={<AdminPlanes />} />
+          <Route path="/admin/soporte" element={<AdminSoporte />} />
         </Route>
       </Route>
 

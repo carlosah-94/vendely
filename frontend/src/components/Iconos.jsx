@@ -90,6 +90,9 @@ export const IconoSelector = (p) => (
 export const IconoCandado = (p) => (
   <Icono {...p}><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></Icono>
 );
+export const IconoSoporte = (p) => (
+  <Icono {...p}><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="3.5" /><path d="M5.6 5.6l3.9 3.9M14.5 14.5l3.9 3.9M18.4 5.6l-3.9 3.9M9.5 14.5l-3.9 3.9" /></Icono>
+);
 export const IconoMas = (p) => (
   <Icono {...p}><path d="M12 5v14M5 12h14" /></Icono>
 );
