@@ -10,7 +10,7 @@ import { useTiendaActual } from '../hooks/useTiendaActual';
 import { api, mensajeDeError } from '../services/api';
 import { revisarArchivo, subirImagen } from '../services/imagenes';
 import { BOTONES, DISENO_INICIAL, FONDOS, FUENTES, disenoDe } from '../utils/diseno';
-import { PLANTILLAS } from '../utils/plantillas';
+import { temaActual } from '../utils/temas';
 import { BOTON, TARJETA, inputPanel } from '../utils/panel';
 
 const COLORES = ['#303030', '#1D4ED8', '#0F766E', '#B91C1C', '#7C3AED', '#C2410C', '#DB2777', '#F59E0B'];
@@ -44,13 +44,16 @@ function desdeTienda(t) {
 }
 
 /**
- * "Tienda online → Personalizar": datos, marca, portada, estilo, plantilla y secciones de la
- * tienda pública, con una vista previa de la tienda real que cambia mientras editas (como el
+ * "Tienda online → Personalizar": datos, marca, portada, estilo y secciones del tema que la
+ * tienda tiene publicado, con una vista previa de la tienda real que cambia mientras editas (como el
  * editor de temas de Shopify). Se guarda con PUT /api/panel/tiendas/{id}.
+ *
+ * La plantilla (Clásica, Moderna o Boutique) NO se elige aquí: viene del tema, y el tema se cambia
+ * en "Temas". Como en Shopify: en la biblioteca eliges el tema y aquí lo personalizas.
  *
  * Qué entra en cada plan (el backend lo vuelve a validar y responde "Mejora tu plan"):
  *   Gratis: datos y secciones · Básico: + marca, portada, anuncio, letra y botones ·
- *   Pro: + plantillas Moderna y Boutique y color de fondo. Ver utils/diseno.js.
+ *   Pro: + color de fondo (y, en Temas, los temas con plantilla Moderna o Boutique). Ver utils/diseno.js.
  */
 export default function PersonalizarTienda() {
   const { tiendas, tienda, idTienda, cambiarTienda, cargando, error: errorTiendas } = useTiendaActual();
@@ -206,6 +209,9 @@ function Editor({ tienda, tiendas, idTienda, onCambiarTienda }) {
 
       <div className="grid items-start gap-4 lg:grid-cols-[400px_1fr]">
         <form onSubmit={guardar} noValidate className="space-y-4">
+          {/* ---------------------------------------------------------------- Tema */}
+          <TemaActual tienda={tienda} conPlantillas={conPlantillas} />
+
           {/* ---------------------------------------------------------------- Datos */}
           <Seccion titulo="Datos de la tienda">
             <CampoPanel etiqueta="Nombre de la tienda" error={errores.nombre}>
@@ -323,29 +329,6 @@ function Editor({ tienda, tiendas, idTienda, onCambiarTienda }) {
                 ))}
               </div>
             </div>
-          </Seccion>
-
-          {/* ---------------------------------------------------------------- Plantilla (Pro) */}
-          <Seccion titulo="Plantilla" plan="Pro" bloqueada={false} etiquetaPlan={!conPlantillas}>
-            <div className="grid gap-2">
-              {PLANTILLAS.map((p) => {
-                const bloqueada = !conPlantillas && p.valor !== 'clasica';
-                return (
-                  <Opcion key={p.valor} elegida={v.plantilla === p.valor} disabled={bloqueada} onClick={() => cambiar('plantilla', p.valor)}>
-                    <span className="flex items-center justify-between text-[13px] font-semibold text-[#101010]">
-                      {p.nombre}
-                      {bloqueada && <span className="text-[11px] font-medium text-[#8a8a8a]">Solo plan Pro</span>}
-                    </span>
-                    <span className="block text-[12px] text-[#616161]">{p.descripcion}</span>
-                  </Opcion>
-                );
-              })}
-            </div>
-            {!conPlantillas && (
-              <p className="text-[12px] text-[#616161]">
-                <Link to="/panel/plan" className="font-semibold underline">Mejora a Pro</Link> para elegir Moderna o Boutique y el color de fondo.
-              </p>
-            )}
           </Seccion>
 
           {/* ---------------------------------------------------------------- Secciones (todos) */}
@@ -521,5 +504,38 @@ function CampoImagen({ etiqueta, ayuda, valor, error, subiendo, ancha, onCambiar
         />
       </div>
     </CampoPanel>
+  );
+}
+
+/**
+ * Qué tema se está personalizando y el camino para cambiarlo. Reemplaza al antiguo selector de
+ * plantilla: tenerlo aquí Y en Temas confundía (elegías Pop en Temas y aquí aparecía "Moderna").
+ */
+function TemaActual({ tienda, conPlantillas }) {
+  const { tema, personalizado } = temaActual(tienda);
+  const plantilla = tienda.plantilla === 'moderna' ? 'Moderna' : tienda.plantilla === 'boutique' ? 'Boutique' : 'Clásica';
+  const oculta = !conPlantillas && tienda.plantilla !== 'clasica';
+  return (
+    <div className={`${TARJETA} space-y-2 p-4`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[12px] text-[#616161]">Estás personalizando</p>
+          <p className="text-[15px] font-semibold text-[#101010]">
+            Tema {tema.nombre}
+            {personalizado && <span className="font-normal text-[#616161]"> (con tus cambios)</span>}
+          </p>
+          <p className="text-[12px] text-[#616161]">Plantilla {plantilla}</p>
+        </div>
+        <Link to="/panel/temas" className="shrink-0 rounded-lg border border-[#ddd] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#303030] hover:bg-[#f7f7f7]">
+          Cambiar tema
+        </Link>
+      </div>
+      {oculta && (
+        <p className="rounded-lg bg-[#fff4e5] px-3 py-2 text-[12px] text-[#7a4b00]">
+          Tu plan ya no incluye la plantilla {plantilla}: tus clientes ven la Clásica. Lo que elegiste queda
+          guardado y vuelve si <Link to="/panel/plan" className="font-semibold underline">mejoras a Pro</Link>.
+        </p>
+      )}
+    </div>
   );
 }
