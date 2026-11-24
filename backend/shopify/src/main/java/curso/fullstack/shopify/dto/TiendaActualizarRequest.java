@@ -1,5 +1,6 @@
 package curso.fullstack.shopify.dto;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -63,5 +64,9 @@ public record TiendaActualizarRequest(
         // nombre: los colores, la letra, la plantilla... del tema llegan en los campos de arriba,
         // y con ellos se valida el plan.
         @Pattern(regexp = "^(esencial|mercado|minimal|escaparate|pop|atelier|arena)$", message = "Ese tema no existe")
-        String tema
+        String tema,
+
+        // Diseño avanzado del plan Pro (V15). null = no cambia. Quitarlo todo (portada de siempre,
+        // sin promoción...) lo puede cualquier plan; usar algo de él, solo PLANTILLAS (Pro).
+        @Valid DisenoPro disenoPro
 ) {}

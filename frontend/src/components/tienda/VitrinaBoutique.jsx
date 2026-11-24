@@ -1,4 +1,6 @@
 import { Link } from 'react-router-dom';
+import { BandaPromo, PortadaPro } from './BloquesPro';
+import { etiquetaOferta } from '../../utils/diseno';
 import { enOferta, formatoMoneda } from '../../utils/formato';
 import ImagenProducto from '../ImagenProducto';
 import Mensaje from '../Mensaje';
@@ -26,25 +28,32 @@ export default function VitrinaBoutique({ tienda, diseno, subdominio, paises, to
 
   return (
     <div className="text-[#222]">
-      {/* Portada: foto a pantalla completa (o el color de la tienda si todavía no hay fotos) */}
-      <section className="relative isolate flex min-h-[78vh] items-end overflow-hidden bg-[var(--tienda)]">
-        {foto && <img src={foto} alt="" className="absolute inset-0 -z-10 h-full w-full object-cover" />}
-        {foto && <div className="absolute inset-0 -z-10 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />}
-        <div className={`mx-auto w-full max-w-6xl px-6 pb-14 sm:pb-20 ${foto ? 'text-white' : 'text-[var(--tienda-texto)]'}`}>
-          <h1 className="letra-serifa max-w-4xl text-[clamp(3rem,9vw,7.5rem)] font-normal leading-[0.9]">{tienda.nombre}</h1>
-          <div className="mt-8 flex flex-wrap items-center gap-6">
-            <a href="#catalogo" className="boton-tienda border border-current px-9 py-3.5 text-sm tracking-[0.12em] transition hover:bg-white hover:text-[#222]">
-              {unico ? 'Comprar ahora' : 'Ver la colección'}
-            </a>
-            {!banner && producto && (
-              <Link to={`${base}/producto/${producto.idProducto}`} className="text-sm text-white/85 underline-offset-4 hover:underline">
-                En la foto: {producto.nombre}
-              </Link>
-            )}
-          </div>
-        </div>
-      </section>
-
+      {/* Plan Pro: portada a medida (Personalizar → Diseño Pro); si no, la de la plantilla */}
+      {diseno.pro.portada.activa ? (
+        <PortadaPro tienda={tienda} diseno={diseno} />
+      ) : (
+        <>
+          {/* Portada: foto a pantalla completa (o el color de la tienda si todavía no hay fotos) */}
+          <section className="relative isolate flex min-h-[78vh] items-end overflow-hidden bg-[var(--tienda)]">
+            {foto && <img src={foto} alt="" className="absolute inset-0 -z-10 h-full w-full object-cover" />}
+            {foto && <div className="absolute inset-0 -z-10 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />}
+            <div className={`mx-auto w-full max-w-6xl px-6 pb-14 sm:pb-20 ${foto ? 'text-white' : 'text-[var(--tienda-texto)]'}`}>
+              <h1 className="letra-serifa max-w-4xl text-[clamp(3rem,9vw,7.5rem)] font-normal leading-[0.9]">{tienda.nombre}</h1>
+              <div className="mt-8 flex flex-wrap items-center gap-6">
+                <a href="#catalogo" className="boton-tienda border border-current px-9 py-3.5 text-sm tracking-[0.12em] transition hover:bg-white hover:text-[#222]">
+                  {unico ? 'Comprar ahora' : 'Ver la colección'}
+                </a>
+                {!banner && producto && (
+                  <Link to={`${base}/producto/${producto.idProducto}`} className="text-sm text-white/85 underline-offset-4 hover:underline">
+                    En la foto: {producto.nombre}
+                  </Link>
+                )}
+              </div>
+            </div>
+          </section>
+        </>
+      )}
+      <BandaPromo diseno={diseno} />
       {/* La descripción de la tienda, como una carta de presentación */}
       {tienda.descripcion && (
         <section className="mx-auto max-w-3xl px-6 py-20 text-center">
@@ -146,7 +155,7 @@ export default function VitrinaBoutique({ tienda, diseno, subdominio, paises, to
                   {!p.disponible ? (
                     <span className="absolute left-3 top-3 bg-white px-3 py-1 text-xs text-[#222]">Agotado</span>
                   ) : enOferta(p) && (
-                    <span className="absolute left-3 top-3 bg-[var(--acento)] px-3 py-1 text-xs text-[var(--acento-texto)]">Oferta</span>
+                    <span className="absolute left-3 top-3 bg-[var(--acento)] px-3 py-1 text-xs text-[var(--acento-texto)]">{etiquetaOferta(p, diseno)}</span>
                   )}
                 </Link>
                 <Link to={`${base}/producto/${p.idProducto}`} className="mt-4 block text-center">
