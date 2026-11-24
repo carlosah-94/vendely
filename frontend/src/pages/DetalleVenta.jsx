@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import EtiquetaPago from '../components/EtiquetaPago';
 import Mensaje from '../components/Mensaje';
 import { useTiendaActual } from '../hooks/useTiendaActual';
+import { esDuenoDe } from '../utils/permisos';
 import { api, mensajeDeError } from '../services/api';
 import {
   cancelarPedido,
@@ -32,7 +33,7 @@ const NOMBRE_CORREO = {
 /** Detalle de una venta con todos sus productos (RF3.2), y eliminarla (RF3.4). */
 export default function DetalleVenta() {
   const { idPedido } = useParams();
-  const { idTienda, cargando: cargandoTiendas, error: errorTiendas } = useTiendaActual();
+  const { tienda, idTienda, cargando: cargandoTiendas, error: errorTiendas } = useTiendaActual();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -206,7 +207,8 @@ export default function DetalleVenta() {
                 No
               </button>
             </div>
-          ) : (
+          ) : esDuenoDe(tienda) && (
+            // Eliminar lo hace solo el dueño; un empleado con permiso de pedidos puede cancelar.
             <button
               onClick={() => setConfirmando(true)}
               className="rounded-md border border-red-300 px-4 py-2 text-sm text-red-600 hover:bg-red-50"

@@ -4,13 +4,16 @@ import EtiquetaPago from '../components/EtiquetaPago';
 import { IconoCheck, IconoPedidos } from '../components/Iconos';
 import Mensaje from '../components/Mensaje';
 import SelectorTienda from '../components/SelectorTienda';
+import { useAuth } from '../context/AuthContext';
 import { useTiendaActual } from '../hooks/useTiendaActual';
 import { api, mensajeDeError } from '../services/api';
 import { formatoFecha, formatoMoneda } from '../utils/formato';
+import { esDuenoDe, puede } from '../utils/permisos';
 
 /** Inicio del panel: cuatro números y los últimos 5 pedidos, con las listas que ya existen. */
 export default function InicioPanel() {
   const { tiendas, tienda, idTienda, cambiarTienda, cargando: cargandoTiendas, error: errorTiendas } = useTiendaActual();
+  const { usuario } = useAuth();
   const [datos, setDatos] = useState({ idTienda: null, pedidos: [], productos: [], clientes: [], inventario: [], error: '' });
 
   useEffect(() => {
@@ -19,8 +22,13 @@ export default function InicioPanel() {
     }
     let vigente = true;
     const base = `/panel/tiendas/${idTienda}`;
+    // Un empleado solo pide las listas que su permiso le deja leer; las demás quedan vacías.
+    const pedir = (permitido, ruta) => (permitido ? api.get(`${base}/${ruta}`) : Promise.resolve({ data: [] }));
     Promise.all([
-      api.get(`${base}/pedidos`), api.get(`${base}/productos`), api.get(`${base}/clientes`), api.get(`${base}/inventario`),
+      pedir(puede(tienda, 'PEDIDOS'), 'pedidos'),
+      pedir(puede(tienda, 'PRODUCTOS', 'PEDIDOS', 'INVENTARIO'), 'productos'),
+      pedir(puede(tienda, 'CLIENTES', 'PEDIDOS'), 'clientes'),
+      pedir(puede(tienda, 'INVENTARIO', 'PRODUCTOS'), 'inventario'),
     ])
       .then(([pedidos, productos, clientes, inventario]) => {
         if (vigente) {
@@ -36,14 +44,24 @@ export default function InicioPanel() {
     return () => {
       vigente = false;
     };
-  }, [idTienda]);
+  }, [idTienda, tienda]);
 
   if (errorTiendas) {
     return <Mensaje tipo="error" texto={errorTiendas} />;
   }
   if (!cargandoTiendas && tiendas.length === 0) {
-    return <Mensaje tipo="info" texto="Todavía no tienes tiendas. Crea una para empezar a vender." />;
+    // Un empleado sin tiendas: nunca lo agregaron, o el dueño lo suspendió o lo quitó.
+    return usuario?.rol === 'EMPLEADO' ? (
+      <Mensaje
+        tipo="info"
+        texto="Ahora no tienes acceso a ninguna tienda. Si el dueño te suspendió o te quitó de su tienda, pídele que te vuelva a activar."
+      />
+    ) : (
+      <Mensaje tipo="info" texto="Todavía no tienes tiendas. Crea una para empezar a vender." />
+    );
   }
+
+  const dueno = esDuenoDe(tienda);
 
   const cargando = cargandoTiendas || datos.idTienda !== idTienda;
   const hoy = new Date().toDateString();
@@ -70,12 +88,13 @@ export default function InicioPanel() {
   ];
   const completados = pasos.filter((p) => p.hecho).length;
 
+  // Cada tarjeta se muestra solo si la cuenta puede ver ese dato en esta tienda.
   const tarjetas = [
-    ['Ventas de hoy (pagadas)', formatoMoneda(ventasHoy)],
-    ['Pedidos', datos.pedidos.length],
-    ['Productos activos', activos],
-    ['Clientes', datos.clientes.length],
-  ];
+    puede(tienda, 'PEDIDOS') && ['Ventas de hoy (pagadas)', formatoMoneda(ventasHoy)],
+    puede(tienda, 'PEDIDOS') && ['Pedidos', datos.pedidos.length],
+    puede(tienda, 'PRODUCTOS', 'PEDIDOS', 'INVENTARIO') && ['Productos activos', activos],
+    puede(tienda, 'CLIENTES', 'PEDIDOS') && ['Clientes', datos.clientes.length],
+  ].filter(Boolean);
 
   return (
     <section className="max-w-5xl space-y-4">
@@ -86,7 +105,13 @@ export default function InicioPanel() {
 
       {datos.error && <Mensaje tipo="error" texto={datos.error} />}
 
-      {!cargando && completados < pasos.length && (
+      {!dueno && tienda && (
+        <p className="text-[13px] text-[#616161]">
+          Trabajas en {tienda.nombre} como empleado. Ves las secciones que el dueño te permitió.
+        </p>
+      )}
+
+      {!cargando && dueno && completados < pasos.length && (
         <div className="rounded-xl bg-white shadow-[0_1px_0_rgba(0,0,0,0.08),0_0_0_1px_rgba(0,0,0,0.05)]">
           <div className="border-b border-[#ebebeb] px-4 py-3">
             <h2 className="font-semibold text-[#101010]">Primeros pasos</h2>
@@ -120,7 +145,7 @@ export default function InicioPanel() {
         </div>
       )}
 
-      {!cargando && porReponer.length > 0 && (
+      {!cargando && puede(tienda, 'INVENTARIO') && porReponer.length > 0 && (
         <Link
           to="/panel/productos/inventario"
           className="flex items-center justify-between gap-3 rounded-xl border border-[#ffd79d] bg-[#fff5c5] px-4 py-3 text-[13px] text-[#4f4700] hover:brightness-[0.98]"
@@ -142,6 +167,7 @@ export default function InicioPanel() {
         ))}
       </div>
 
+      {puede(tienda, 'PEDIDOS') && (
       <div className="overflow-hidden rounded-xl bg-white shadow-[0_1px_0_rgba(0,0,0,0.08),0_0_0_1px_rgba(0,0,0,0.05)]">
         <div className="flex items-center justify-between border-b border-[#e3e3e3] px-4 py-3">
           <h2 className="font-semibold">Últimos pedidos</h2>
@@ -177,6 +203,7 @@ export default function InicioPanel() {
           </table>
         )}
       </div>
+      )}
     </section>
   );
 }

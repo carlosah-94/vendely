@@ -1,5 +1,6 @@
 package curso.fullstack.shopify.service;
 
+import curso.fullstack.shopify.entity.PermisoTienda;
 import curso.fullstack.shopify.dto.ImagenSubidaResponse;
 import curso.fullstack.shopify.exception.ApiException;
 import curso.fullstack.shopify.security.UsuarioAutenticado;
@@ -39,7 +40,7 @@ public class ImagenService {
      * (vendely/t12): en el panel de Cloudinary se ve de quién es cada una.
      */
     public ImagenSubidaResponse subir(UsuarioAutenticado yo, Long idTienda, MultipartFile archivo) {
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.PRODUCTOS);
         exigirConfigurado();
         byte[] contenido = validar(archivo);
 
@@ -66,7 +67,7 @@ public class ImagenService {
      * borrar las fotos de otra tienda mandando su identificador.
      */
     public void borrar(UsuarioAutenticado yo, Long idTienda, String publicId) {
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.PRODUCTOS);
         exigirConfigurado();
         if (publicId == null || !publicId.startsWith("vendely/t" + idTienda + "/")) {
             throw new ApiException(HttpStatus.NOT_FOUND, "Esa foto no es de esta tienda");

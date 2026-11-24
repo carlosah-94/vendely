@@ -1,5 +1,6 @@
 package curso.fullstack.shopify.service;
 
+import curso.fullstack.shopify.entity.PermisoTienda;
 import curso.fullstack.shopify.dto.EnvioPedidoRequest;
 import curso.fullstack.shopify.dto.LineaVentaRequest;
 import curso.fullstack.shopify.dto.LineaVentaResponse;
@@ -74,7 +75,7 @@ public class PedidoService {
     @Transactional
     public VentaResponse registrar(UsuarioAutenticado yo, Long idTienda, VentaRequest r) {
         // 1. La tienda es del dueño (404 / 403) y está activa
-        Tienda tienda = verificadorTienda.delDueno(yo, idTienda);
+        Tienda tienda = verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.PEDIDOS);
         if (!tienda.estaActiva()) {
             throw new ApiException(HttpStatus.CONFLICT, "La tienda está suspendida");
         }
@@ -199,14 +200,14 @@ public class PedidoService {
     @Transactional(readOnly = true)
     public List<PedidoResumenResponse> listar(UsuarioAutenticado yo, Long idTienda) {
         // Primero se comprueba que la tienda sea del dueño: 404 si no existe, 403 si es de otro.
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.PEDIDOS);
         return resumenes(pedidoRepository.findByIdTiendaOrderByFechaCreacionDesc(idTienda));
     }
 
     /** Detalle de una venta con sus productos, cantidades y precios (RF3.2). */
     @Transactional(readOnly = true)
     public VentaResponse detalle(UsuarioAutenticado yo, Long idTienda, Long idPedido) {
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.PEDIDOS);
         // buscarEnTienda: si el pedido es de otra tienda responde 404 (no revela que existe).
         return conLineas(buscarEnTienda(idPedido, idTienda));
     }
@@ -253,7 +254,7 @@ public class PedidoService {
      */
     @Transactional
     public VentaResponse enviar(UsuarioAutenticado yo, Long idTienda, Long idPedido, EnvioPedidoRequest r) {
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.PEDIDOS);
         Pedido p = buscarEnTienda(idPedido, idTienda);
         exigirEstado(p, (short) 0, "Solo un pedido sin enviar puede marcarse como enviado");
         if (!pedidoRepository.tienePagoAprobado(idPedido)) {
@@ -269,7 +270,7 @@ public class PedidoService {
     /** De ENVIADO a ENTREGADO: el cliente ya recibió su paquete. */
     @Transactional
     public VentaResponse entregar(UsuarioAutenticado yo, Long idTienda, Long idPedido) {
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.PEDIDOS);
         Pedido p = buscarEnTienda(idPedido, idTienda);
         exigirEstado(p, (short) 1, "Solo un pedido enviado puede marcarse como entregado");
         p.setFechaEntrega(OffsetDateTime.now());
@@ -285,7 +286,7 @@ public class PedidoService {
      */
     @Transactional
     public VentaResponse cancelar(UsuarioAutenticado yo, Long idTienda, Long idPedido) {
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.PEDIDOS);
         Pedido p = buscarEnTienda(idPedido, idTienda);
         exigirEstado(p, (short) 0, "Un pedido que ya se envió no se puede cancelar");
 

@@ -1,9 +1,9 @@
 -- ---------------------------------------------------------------------
---  MIGRACIÓN FLYWAY V10 · Intentos de pago vencidos
+--  MIGRACIÓN FLYWAY V11 · Intentos de pago vencidos
 --
 --  Flyway la aplica UNA sola vez y guarda su checksum en la tabla
 --  flyway_schema_history. Por eso este archivo ya NO se edita: los
---  cambios van en una migración nueva (V11, V12…).
+--  cambios van en una migración nueva (V12, V13…).
 -- ---------------------------------------------------------------------
 --
 --  Cada vez que el cliente pulsa "Pagar" se guarda un intento PENDIENTE. Si va a Mercado Pago y

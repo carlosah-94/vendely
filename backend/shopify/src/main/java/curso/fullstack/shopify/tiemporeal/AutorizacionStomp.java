@@ -1,6 +1,7 @@
 package curso.fullstack.shopify.tiemporeal;
 
 import curso.fullstack.shopify.entity.Login;
+import curso.fullstack.shopify.entity.PermisoTienda;
 import curso.fullstack.shopify.exception.ApiException;
 import curso.fullstack.shopify.repository.LoginRepository;
 import curso.fullstack.shopify.security.JwtAuthFilter;
@@ -87,19 +88,27 @@ public class AutorizacionStomp implements ChannelInterceptor {
     private void autorizar(StompHeaderAccessor stomp) {
         UsuarioAutenticado usuario = stomp.getUser() instanceof UsuarioConectado c ? c.usuario() : null;
         String destino = stomp.getDestination();
-        if (!Canales.puedeEscuchar(usuario, destino, this::esDueno)) {
+        if (!Canales.puedeEscuchar(usuario, destino, this::puedeVer)) {
             log.warn("Suscripción rechazada: {} a {}",
                     usuario == null ? "visitante" : "idLogin=" + usuario.idLogin(), destino);
             throw new MessageDeliveryException("No tienes permiso para escuchar este canal");
         }
     }
 
-    private boolean esDueno(UsuarioAutenticado usuario, Long idTienda) {
+    /**
+     * El dueño escucha todo lo de su tienda. Un empleado, los pedidos si tiene ese permiso, y el
+     * inventario si cuida el stock o los productos (issue de empleados).
+     */
+    private boolean puedeVer(UsuarioAutenticado usuario, Long idTienda, String canal) {
         try {
-            verificadorTienda.delDueno(usuario, idTienda);
+            if ("pedidos".equals(canal)) {
+                verificadorTienda.conPermiso(usuario, idTienda, PermisoTienda.PEDIDOS);
+            } else {
+                verificadorTienda.conPermiso(usuario, idTienda, PermisoTienda.INVENTARIO, PermisoTienda.PRODUCTOS);
+            }
             return true;
         } catch (ApiException e) {
-            return false;   // 404 (no existe) o 403 (es de otro): en los dos casos, no
+            return false;   // 404 (no existe) o 403 (no es suya, o sin ese permiso): en todos los casos, no
         }
     }
 }

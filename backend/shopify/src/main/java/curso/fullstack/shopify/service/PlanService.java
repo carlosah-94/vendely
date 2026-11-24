@@ -1,8 +1,10 @@
 package curso.fullstack.shopify.service;
 
+import curso.fullstack.shopify.entity.EmpleadoTienda;
 import curso.fullstack.shopify.entity.Plan;
 import curso.fullstack.shopify.entity.Tienda;
 import curso.fullstack.shopify.exception.ApiException;
+import curso.fullstack.shopify.repository.EmpleadoTiendaRepository;
 import curso.fullstack.shopify.repository.PlanRepository;
 import curso.fullstack.shopify.repository.ProductoRepository;
 import curso.fullstack.shopify.repository.TiendaRepository;
@@ -14,7 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Limites del plan de cada tienda. Es el "portero": antes de crear un producto, personalizar,
- * elegir plantilla, vender a otro pais o activar otro metodo de pago, se pregunta aqui
+ * elegir plantilla, vender a otro pais, activar otro metodo de pago o agregar un empleado, se pregunta aqui
  * si el plan lo permite. Si no, responde 403 con "Mejora tu plan para usar esto".
  * Al bajar de plan no se borra nada: solo no se puede crear mas de lo que permite.
  */
@@ -27,9 +29,11 @@ public class PlanService {
     private final TiendaRepository tiendaRepository;
     private final PlanRepository planRepository;
     private final ProductoRepository productoRepository;
+    private final EmpleadoTiendaRepository empleadoRepository;
 
     public PlanService(TiendaRepository tiendaRepository, PlanRepository planRepository,
-                       ProductoRepository productoRepository) {
+                       ProductoRepository productoRepository, EmpleadoTiendaRepository empleadoRepository) {
+        this.empleadoRepository = empleadoRepository;
         this.tiendaRepository = tiendaRepository;
         this.planRepository = planRepository;
         this.productoRepository = productoRepository;
@@ -83,6 +87,8 @@ public class PlanService {
             case PLANTILLAS -> Boolean.TRUE.equals(p.getPermitePlantillas());
             case ENVIO_INTERNACIONAL -> Boolean.TRUE.equals(p.getPermiteEnvioInternacional());
             case METODOS_PAGO -> Boolean.TRUE.equals(p.getPermiteMasMetodosPago());
+            case AGREGAR_EMPLEADO -> empleadoRepository.countByIdTiendaAndEstado(idTienda, EmpleadoTienda.ACTIVO)
+                    < p.getMaxEmpleados();
         };
     }
 
@@ -97,6 +103,10 @@ public class PlanService {
             // Un solo método y no "solo PayPal": el método base es el primero configurado en el
             // servidor (MetodoPagoService), que puede ser Mercado Pago si PayPal no tiene credenciales.
             case METODOS_PAGO -> plan + " incluye un solo método de pago. " + MEJORA_TU_PLAN;
+            case AGREGAR_EMPLEADO -> p.getMaxEmpleados() == 0
+                    ? plan + " no incluye empleados. " + MEJORA_TU_PLAN
+                    : plan + " permite hasta " + p.getMaxEmpleados()
+                            + (p.getMaxEmpleados() == 1 ? " empleado. " : " empleados. ") + MEJORA_TU_PLAN;
         };
     }
 }

@@ -4,6 +4,7 @@ import EtiquetaPago from '../components/EtiquetaPago';
 import Mensaje from '../components/Mensaje';
 import SelectorTienda from '../components/SelectorTienda';
 import { useTiendaActual } from '../hooks/useTiendaActual';
+import { esDuenoDe } from '../utils/permisos';
 import { api, mensajeDeError } from '../services/api';
 import { useTiempoReal } from '../hooks/useTiempoReal';
 import { canales } from '../services/tiempoReal';
@@ -18,7 +19,9 @@ const NOMBRE_ESTADO = {
 
 /** Lista de ventas de la tienda (RF3.2), con eliminar (RF3.4). */
 export default function Ventas() {
-  const { tiendas, idTienda, cambiarTienda, cargando: cargandoTiendas, error: errorTiendas } = useTiendaActual();
+  const { tiendas, tienda, idTienda, cambiarTienda, cargando: cargandoTiendas, error: errorTiendas } = useTiendaActual();
+  // Eliminar una venta lo hace solo el dueño (un empleado puede cancelarla desde el detalle).
+  const puedeEliminar = esDuenoDe(tienda);
   const location = useLocation();
 
   // Se guarda de qué tienda son las ventas: si no coincide con la elegida, todavía se están cargando.
@@ -186,9 +189,11 @@ export default function Ventas() {
                         <Link to={`/panel/ventas/${v.idPedido}`} className="text-violet-600 hover:underline">
                           Ver detalle
                         </Link>
-                        <button onClick={() => setPorEliminar(v.idPedido)} className="text-red-600 hover:underline">
-                          Eliminar
-                        </button>
+                        {puedeEliminar && (
+                          <button onClick={() => setPorEliminar(v.idPedido)} className="text-red-600 hover:underline">
+                            Eliminar
+                          </button>
+                        )}
                       </span>
                     )}
                   </td>

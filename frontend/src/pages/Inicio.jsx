@@ -14,7 +14,7 @@ export default function Inicio() {
   if (usuario.rol === 'SUPERADMIN') {
     return <Navigate to="/admin/tiendas" replace />;
   }
-  if (usuario.rol === 'ADMIN_TIENDA') {
+  if (usuario.rol === 'ADMIN_TIENDA' || usuario.rol === 'EMPLEADO') {
     return <Navigate to="/panel" replace />;
   }
   return <Navigate to="/acceso-denegado" replace />;

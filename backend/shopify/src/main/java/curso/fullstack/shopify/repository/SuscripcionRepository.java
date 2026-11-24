@@ -21,6 +21,9 @@ public interface SuscripcionRepository extends JpaRepository<Suscripcion, Long> 
 
     Optional<Suscripcion> findByReferenciaPago(String referenciaPago);
 
+    /** Para la conciliacion: pagos de plan que siguen pendientes desde antes de "limite". */
+    List<Suscripcion> findTop50ByEstadoAndFechaCreacionBeforeOrderByIdSuscripcionAsc(Short estado, OffsetDateTime limite);
+
     /** Pagos de plan que todavia no terminan (el que corre hoy y los programados), en orden. */
     List<Suscripcion> findByIdTiendaAndEstadoAndFechaFinAfterOrderByFechaInicioAsc(Long idTienda, Short estado,
                                                                                    OffsetDateTime ahora);

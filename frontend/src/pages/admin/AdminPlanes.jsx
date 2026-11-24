@@ -60,6 +60,7 @@ function FormularioPlan({ plan }) {
     permitePlantillas: plan.permitePlantillas,
     permiteMasMetodosPago: plan.permiteMasMetodosPago,
     permiteEnvioInternacional: plan.permiteEnvioInternacional,
+    maxEmpleados: String(plan.maxEmpleados ?? 0),
   });
   const [errores, setErrores] = useState({});
   const [error, setError] = useState('');
@@ -78,6 +79,7 @@ function FormularioPlan({ plan }) {
     else if (!gratis && Number(v.precioUsd) <= 0) er.precioUsd = 'Un plan pagado debe costar más de 0';
     if (!v.ilimitado && !/^[1-9]\d{0,6}$/.test(v.maxProductos.trim())) er.maxProductos = 'Número entero, 1 o más';
     if (!/^\d{1,3}(\.\d{1,2})?$/.test(v.comision.trim()) || Number(v.comision) > 100) er.comision = 'De 0 a 100, por ejemplo 2.5';
+    if (!/^\d{1,4}$/.test(v.maxEmpleados.trim()) || Number(v.maxEmpleados) > 1000) er.maxEmpleados = 'De 0 a 1000 (0 = solo el dueño)';
     setErrores(er);
     if (Object.keys(er).length) return;
     setGuardando(true);
@@ -91,6 +93,7 @@ function FormularioPlan({ plan }) {
         permitePlantillas: v.permitePlantillas,
         permiteMasMetodosPago: v.permiteMasMetodosPago,
         permiteEnvioInternacional: v.permiteEnvioInternacional,
+        maxEmpleados: Number(v.maxEmpleados),
       });
       avisar(`Plan ${plan.nombre} actualizado`);
     } catch (ex) {
@@ -134,6 +137,16 @@ function FormularioPlan({ plan }) {
         </div>
         {errores.maxProductos && <span className="mt-1 block text-[12px] text-[#8e1f0b]">{errores.maxProductos}</span>}
       </div>
+      <label className="block">
+        <span className="text-[#303030]">Empleados por tienda (0 = solo el dueño)</span>
+        <input
+          inputMode="numeric"
+          value={v.maxEmpleados}
+          onChange={(e) => cambiar('maxEmpleados', e.target.value)}
+          className={`${inputPanel(errores.maxEmpleados)} mt-1 !w-28`}
+        />
+        {errores.maxEmpleados && <span className="mt-1 block text-[12px] text-[#8e1f0b]">{errores.maxEmpleados}</span>}
+      </label>
       <label className="block">
         <span className="text-[#303030]">Comisión de Vendely por venta (%)</span>
         <input

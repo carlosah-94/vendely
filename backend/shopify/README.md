@@ -327,6 +327,17 @@ En el log nunca se escribe el cuerpo del aviso, solo el motivo del rechazo.
 
 **2. La revisión periódica** (`ConciliacionPagosService`). Cada 15 minutos busca los intentos de pago que llevan más de 30 minutos pendientes y le pregunta a la pasarela cómo terminaron. Es la red de seguridad si el aviso nunca llega, y en local es el único camino: sin una dirección pública, las pasarelas no pueden avisar. Se ajusta con `PAGOS_CONCILIACION_CADA_MS` y `PAGOS_CONCILIACION_EDAD_MINUTOS`.
 
+La misma revisión cierra los **pagos de plan** de los dueños (`SuscripcionService.conciliar`). Si el dueño abre PayPal para pagar su plan y cierra la pestaña sin volver, antes ese pago quedaba "Pendiente" para siempre en su historial. Ahora, pasados 30 minutos, se consulta la orden en PayPal y se hace lo mismo que si hubiera vuelto:
+
+| La orden en PayPal | Resultado |
+|---|---|
+| Cobrada (`COMPLETED`) | El pago queda **Pagado** y se activa el plan |
+| Aprobada pero sin cobrar (`APPROVED`): pagó y cerró antes de volver | Se cobra y se activa el plan |
+| Sin pagar, o ya no existe (PayPal responde 404: borra a las pocas horas las órdenes que nadie aprueba) | El pago queda **Cancelado** y el plan no cambia |
+| PayPal no responde | Sigue pendiente y se reintenta en 15 minutos |
+
+Sin credenciales de PayPal no se toca ningún pago de plan, porque no hay a quién preguntar.
+
 **Probarlo en local.** Hay que exponer el backend con `ngrok http 8080` (o similar) y registrar esa dirección en el panel de la pasarela. Sin eso, lo que sí se puede probar es la firma (un aviso con firma inválida responde 401) y la revisión periódica.
 
 **Intentos que nadie pagó (estado `VENCIDO`).** Cada "Pagar" guarda un intento pendiente. Si el cliente va a Mercado Pago y no paga, Mercado Pago no registra nada, así que antes ese intento quedaba pendiente para siempre y se volvía a consultar en cada revisión (y la revisión toma solo los 50 más antiguos: con muchos abandonados, los nuevos dejaban de revisarse). Ahora la revisión lo cierra como `VENCIDO` cuando ya no hay nada que esperar:
@@ -354,7 +365,8 @@ La base la construye **Flyway** al arrancar, antes de que Hibernate valide las e
 | `migration/V7__imagenes_public_id.sql` | `public_id` de la foto en Cloudinary, para poder borrarla |
 | `migration/V8__doble_autenticacion.sql` | Secreto y estado de la doble autenticación en `login` |
 | `migration/V9__verificacion_correo.sql` | Tabla `verificaciones_correo` (código del registro del dueño) |
-| `migration/V10__pago_vencido.sql` | Estado 4 = `VENCIDO` en `pagos` (intento abandonado) |
+| `migration/V10__empleados_tienda.sql` | Empleados de la tienda y sus permisos |
+| `migration/V11__pago_vencido.sql` | Estado 4 = `VENCIDO` en `pagos` (intento abandonado) |
 
 Flyway aplica cada una una sola vez y guarda su huella en `flyway_schema_history`. De ahí salen dos reglas:
 
@@ -384,6 +396,7 @@ Para correr una sola clase: `mvn test -Dtest=PagoServiceTest`. Desde NetBeans: c
 | `service/PlanServiceTest` | Los límites de cada plan y el texto "Mejora tu plan" del 403, del que depende `esErrorDePlan()` en el frontend. |
 | `security/SesionTest` | Que un token deje de servir si está firmado con otra clave, vencido, emitido antes del cambio de contraseña o si la cuenta se suspendió; y que el login no revele qué correos existen. |
 | `service/ConciliacionIntentosTest` | Que un intento de pago que nadie pagó se cierre como `VENCIDO` (Mercado Pago sin pago a los 3 días, orden de PayPal inexistente, pedido ya pagado con otro intento) sin tocar los recientes ni los que no se pueden consultar, que se muestre "Sin pago" y que un pago que llega tarde igual se registre. |
+| `service/ConciliacionPlanesTest` | Que un pago de plan abandonado en PayPal se cierre solo: cancelado si no se pagó o la orden ya no existe, pagado (y el plan activo) si PayPal lo cobró o el dueño lo aprobó sin volver; que no se toquen los recién iniciados y que un fallo de PayPal no frene a los demás. |
 | `security/VerificacionCorreoTest` | Que la cuenta del dueño solo se cree con el código enviado a su correo: sin código, equivocado, vencido o tras 5 intentos no se crea; que los intentos se guarden aunque el registro falle; que no se reenvíe antes de un minuto; y que un usuario ya ocupado no gaste el código. |
 | `security/TotpTest`, `tiemporeal/CanalesTest` | El generador de códigos de la doble autenticación y quién escucha cada canal de tiempo real. No levantan Spring. |
 

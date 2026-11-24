@@ -51,6 +51,9 @@ export const IconoProductos = (p) => (
 export const IconoClientes = (p) => (
   <Icono {...p}><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20c.8-3.2 3.3-5 6.5-5s5.7 1.8 6.5 5" /><path d="M16 5a3.5 3.5 0 0 1 0 6.5M18 15.2c1.7.7 2.8 2.2 3.5 4.8" /></Icono>
 );
+export const IconoEmpleados = (p) => (
+  <Icono {...p}><rect x="4" y="3" width="16" height="18" rx="2" /><circle cx="12" cy="10" r="3" /><path d="M7.5 18c.7-2.3 2.4-3.5 4.5-3.5s3.8 1.2 4.5 3.5" /></Icono>
+);
 export const IconoTienda = (p) => (
   <Icono {...p}><path d="M4 9 5.5 4h13L20 9" /><path d="M4 9v10h16V9" /><path d="M4 9a2.7 2.7 0 0 0 5.3 0 2.7 2.7 0 0 0 5.4 0A2.7 2.7 0 0 0 20 9" /></Icono>
 );

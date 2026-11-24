@@ -1,5 +1,6 @@
 package curso.fullstack.shopify.service;
 
+import curso.fullstack.shopify.entity.PermisoTienda;
 import curso.fullstack.shopify.dto.OpcionRequest;
 import curso.fullstack.shopify.dto.OpcionResponse;
 import curso.fullstack.shopify.dto.FiltroCatalogo;
@@ -50,8 +51,9 @@ import org.springframework.transaction.annotation.Transactional;
  * - Producto simple: UNA variante sin valores.
  * - Producto con opciones: una variante por combinación ("M / Negro"), cada una con su precio y stock.
  * Por eso crear y editar van en una transacción: o se guarda todo, o nada.
- * Todas las operaciones del panel empiezan con verificadorTienda.delDueno(...): un dueño solo
- * gestiona los productos de SUS tiendas (403 si la tienda es de otro, 404 si no existe).
+ * Todas las operaciones del panel empiezan con verificadorTienda.conPermiso(...): solo el dueño, o
+ * un empleado con permiso de productos, los cambia (403 si no, 404 si la tienda no existe).
+ * Leer la lista también se permite con pedidos o inventario: hace falta para vender y contar stock.
  */
 @Slf4j
 @Service
@@ -92,13 +94,13 @@ public class ProductoService {
 
     @Transactional(readOnly = true)
     public List<ProductoResponse> listar(UsuarioAutenticado yo, Long idTienda) {
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.PRODUCTOS, PermisoTienda.PEDIDOS, PermisoTienda.INVENTARIO);
         return respuestas(productoRepository.filasDeTienda(idTienda));
     }
 
     @Transactional(readOnly = true)
     public ProductoResponse ver(UsuarioAutenticado yo, Long idTienda, Long idProducto) {
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.PRODUCTOS, PermisoTienda.PEDIDOS, PermisoTienda.INVENTARIO);
         return fila(idTienda, idProducto);
     }
 
@@ -107,7 +109,7 @@ public class ProductoService {
     /** Crea producto + variante + precio + stock en una sola transacción. */
     @Transactional
     public ProductoResponse crear(UsuarioAutenticado yo, Long idTienda, ProductoRequest r) {
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.PRODUCTOS);
         planService.exigir(idTienda, FuncionPlan.CREAR_PRODUCTO);   // plan Gratis: hasta 10 productos
         validarPrecioComparacion(r);
         String nombre = r.nombre().trim();
@@ -143,7 +145,7 @@ public class ProductoService {
 
     @Transactional
     public ProductoResponse actualizar(UsuarioAutenticado yo, Long idTienda, Long idProducto, ProductoRequest r) {
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.PRODUCTOS);
         Producto p = buscarEnTienda(idProducto, idTienda);
         validarPrecioComparacion(r);
         String nombre = r.nombre().trim();
@@ -216,7 +218,7 @@ public class ProductoService {
      */
     @Transactional
     public void eliminar(UsuarioAutenticado yo, Long idTienda, Long idProducto) {
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.PRODUCTOS);
         Producto p = buscarEnTienda(idProducto, idTienda);
 
         if (productoRepository.tieneVentas(idProducto)) {
