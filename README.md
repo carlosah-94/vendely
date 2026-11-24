@@ -58,6 +58,7 @@ shopity/
 | Correos de confirmación, de envío y de stock bajo, con su registro | Sí | Sí (los correos del pedido, en el detalle de la venta) |
 | Comprobante de compra en PDF | Sí | Sí (se descarga desde el panel y desde "Mis pedidos") |
 | Panel del superadmin: resumen, tiendas y cuentas (suspender y reactivar) | Sí | Sí (`/admin/tiendas`, `/admin/cuentas`) |
+| Empleados de la tienda con permisos (pedidos, productos, inventario, clientes); límite por plan | Sí | Sí (`/panel/empleados`) |
 | Manejo de errores y logs | Sí | Mensajes de error en cada pantalla |
 | Pruebas automatizadas: aislamiento entre tiendas, pagos, stock, planes y sesión (JUnit, MockMvc y Testcontainers) | Sí | - (`mvn test`, corren en el CI en cada PR) |
 | Despliegue (Neon, Render y Vercel) | Sí | https://shopity-7zya.vercel.app |
@@ -507,6 +508,25 @@ Cada tarifa tiene `costo` (0 = gratis), `envioGratisDesde` (opcional), días de 
 
 - Una **venta al extranjero** es una exportación: **no lleva el impuesto** de la tienda (IGV o IVA); los impuestos de importación los paga el comprador al recibir.
 - La base calcula el costo de envío y el impuesto de cada pedido (trigger T2), así que el total siempre coincide con las tarifas.
+
+## Empleados de la tienda
+
+Como las cuentas de personal de Shopify: el dueño agrega empleados a su tienda y elige qué partes del panel puede usar cada uno. Es como una tienda física: el dueño tiene todas las llaves y a cada empleado le entrega solo las de las puertas que necesita.
+
+- La cuenta del empleado es del panel (rol `EMPLEADO`, 4). Las tiendas donde trabaja y sus permisos están en `empleados_tienda` (llave compuesta `id_login, id_tienda`): una misma persona puede trabajar en varias tiendas.
+- Permisos: **pedidos** (ver, registrar, enviar, entregar y cancelar), **productos** (productos, fotos y categorías), **inventario** (cambiar el stock) y **clientes**. Leer clientes y productos también se permite con el permiso de pedidos, porque hacen falta para vender.
+- Solo el dueño: plan, personalizar, envíos, eliminar ventas y agregar o quitar empleados.
+- Límite por plan (`planes.max_empleados`): Gratis 0, Básico 2, Pro 15. Si la tienda baja a un plan sin empleados, sus empleados dejan de entrar (no se borran).
+- Lo revisa `VerificadorTienda` en cada petición (`delDueno` para lo del dueño, `conPermiso` para lo demás) y el menú del panel muestra solo lo permitido.
+
+| Endpoint (solo el dueño) | Qué hace |
+|---|---|
+| `GET /api/panel/tiendas/{idTienda}/empleados` | Empleados de la tienda y cuántos más permite el plan |
+| `POST /api/panel/tiendas/{idTienda}/empleados` | Agregar uno (nombres, apellido, correo, contraseña inicial y permisos). Si el correo ya es de un empleado de otra tienda, se usa esa cuenta |
+| `PUT /api/panel/tiendas/{idTienda}/empleados/{idLogin}` | Cambiar permisos o suspender (`activo: false`) |
+| `DELETE /api/panel/tiendas/{idTienda}/empleados/{idLogin}` | Quitarlo de la tienda (su cuenta sigue existiendo) |
+
+Los superadmins, en cambio, no se crean desde la página: se agregan directamente en la base de datos, porque es la cuenta con más poder y no debe existir un camino público para obtenerla.
 
 ## Panel del superadmin
 

@@ -1,5 +1,6 @@
 package curso.fullstack.shopify.service;
 
+import curso.fullstack.shopify.entity.PermisoTienda;
 import curso.fullstack.shopify.dto.Comprobante;
 import curso.fullstack.shopify.dto.NotificacionResponse;
 import curso.fullstack.shopify.entity.DetallePedido;
@@ -79,7 +80,7 @@ public class NotificacionService {
     /** Los correos de un pedido, para el detalle de la venta en el panel. */
     @Transactional(readOnly = true)
     public List<NotificacionResponse> listarDePedido(UsuarioAutenticado yo, Long idTienda, Long idPedido) {
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.PEDIDOS);
         // El pedido tiene que ser de esta tienda: si no, 404 (no se revela que existe).
         pedidoRepository.findByIdPedidoAndIdTienda(idPedido, idTienda)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El pedido no existe"));

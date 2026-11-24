@@ -1,5 +1,6 @@
 package curso.fullstack.shopify.service;
 
+import curso.fullstack.shopify.entity.PermisoTienda;
 import com.lowagie.text.Document;
 import com.lowagie.text.DocumentException;
 import com.lowagie.text.Element;
@@ -102,7 +103,7 @@ public class ComprobanteService {
     /** El comprobante de una venta, desde el panel: la tienda tiene que ser del dueño. */
     @Transactional(readOnly = true)
     public Comprobante comprobanteDeLaTienda(UsuarioAutenticado yo, Long idTienda, Long idPedido) {
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.PEDIDOS);
         Pedido p = pedidoRepository.findByIdPedidoAndIdTienda(idPedido, idTienda)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El pedido no existe"));
         return generar(p);

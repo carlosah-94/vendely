@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import LayoutPanel from './components/LayoutPanel';
+import RequierePermiso from './components/RequierePermiso';
 import RutaProtegida from './components/RutaProtegida';
 import AccesoDenegado from './pages/AccesoDenegado';
 import AdminCuentas from './pages/admin/AdminCuentas';
@@ -7,6 +8,7 @@ import AdminPlanes from './pages/admin/AdminPlanes';
 import AdminTiendas from './pages/admin/AdminTiendas';
 import Clientes from './pages/Clientes';
 import DetalleVenta from './pages/DetalleVenta';
+import Empleados from './pages/Empleados';
 import Inicio from './pages/Inicio';
 import InicioPanel from './pages/InicioPanel';
 import Login from './pages/Login';
@@ -57,25 +59,38 @@ export default function App() {
       </Route>
 
       {/* Panel del dueño de tienda */}
-      <Route element={<RutaProtegida roles={['ADMIN_TIENDA']} />}>
+      {/* Panel de la tienda: el dueño ve todo; un empleado, solo las secciones que su dueño
+          le permitió en la tienda elegida (RequierePermiso). El backend lo vuelve a revisar. */}
+      <Route element={<RutaProtegida roles={['ADMIN_TIENDA', 'EMPLEADO']} />}>
         <Route element={<LayoutPanel />}>
           <Route path="/panel" element={<InicioPanel />} />
           <Route path="/panel/tiendas" element={<MisTiendas />} />
-          <Route path="/panel/productos" element={<Productos />} />
-          <Route path="/panel/productos/categorias" element={<Categorias />} />
-          <Route path="/panel/productos/inventario" element={<Inventario />} />
-          <Route path="/panel/clientes" element={<Clientes />} />
-          <Route path="/panel/envios" element={<Envios />} />
-          <Route path="/panel/personalizar" element={<PersonalizarTienda />} />
-          <Route path="/panel/plan" element={<Plan />} />
-          <Route path="/panel/ventas" element={<Ventas />} />
-          <Route path="/panel/ventas/nueva" element={<NuevaVenta />} />
-          <Route path="/panel/ventas/:idPedido" element={<DetalleVenta />} />
+          <Route element={<RequierePermiso permiso="PRODUCTOS" />}>
+            <Route path="/panel/productos" element={<Productos />} />
+            <Route path="/panel/productos/categorias" element={<Categorias />} />
+          </Route>
+          <Route element={<RequierePermiso permiso="INVENTARIO" />}>
+            <Route path="/panel/productos/inventario" element={<Inventario />} />
+          </Route>
+          <Route element={<RequierePermiso permiso="CLIENTES" />}>
+            <Route path="/panel/clientes" element={<Clientes />} />
+          </Route>
+          <Route element={<RequierePermiso permiso="PEDIDOS" />}>
+            <Route path="/panel/ventas" element={<Ventas />} />
+            <Route path="/panel/ventas/nueva" element={<NuevaVenta />} />
+            <Route path="/panel/ventas/:idPedido" element={<DetalleVenta />} />
+          </Route>
+          <Route element={<RequierePermiso soloDueno />}>
+            <Route path="/panel/envios" element={<Envios />} />
+            <Route path="/panel/personalizar" element={<PersonalizarTienda />} />
+            <Route path="/panel/plan" element={<Plan />} />
+            <Route path="/panel/empleados" element={<Empleados />} />
+          </Route>
         </Route>
       </Route>
 
-      {/* Mi cuenta: la usan los dos roles del panel (issue #4) */}
-      <Route element={<RutaProtegida roles={['ADMIN_TIENDA', 'SUPERADMIN']} />}>
+      {/* Mi cuenta: la usan todas las cuentas del panel (issue #4) */}
+      <Route element={<RutaProtegida roles={['ADMIN_TIENDA', 'EMPLEADO', 'SUPERADMIN']} />}>
         <Route element={<LayoutPanel />}>
           <Route path="/cuenta/seguridad" element={<Seguridad />} />
         </Route>

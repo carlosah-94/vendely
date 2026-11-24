@@ -25,6 +25,9 @@ function aSubdominio(texto) {
  */
 export default function MisTiendas() {
   const { tiendas, cambiarTienda, recargar, cargando, error } = useTiendaActual();
+  const { usuario } = useAuth();
+  // Un empleado ve las tiendas donde trabaja, pero no crea tiendas (eso es de un dueño).
+  const esEmpleado = usuario?.rol === 'EMPLEADO';
   const { avisar } = useToast();
   const [copiada, setCopiada] = useState(null);
   const [creando, setCreando] = useState(false);
@@ -47,10 +50,12 @@ export default function MisTiendas() {
   return (
     <section className="max-w-3xl space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-bold text-[#101010]">Mis tiendas</h1>
-        <button onClick={() => setCreando(true)} className={`${BOTON} inline-flex items-center gap-1 text-[13px]`}>
-          <IconoMas tamano={16} /> Crear tienda
-        </button>
+        <h1 className="text-xl font-bold text-[#101010]">{esEmpleado ? 'Tiendas donde trabajo' : 'Mis tiendas'}</h1>
+        {!esEmpleado && (
+          <button onClick={() => setCreando(true)} className={`${BOTON} inline-flex items-center gap-1 text-[13px]`}>
+            <IconoMas tamano={16} /> Crear tienda
+          </button>
+        )}
       </div>
 
       {cargando ? (
@@ -58,9 +63,20 @@ export default function MisTiendas() {
       ) : tiendas.length === 0 ? (
         <div className="rounded-xl border border-[#e3e3e3] bg-white p-10 text-center">
           <span className="mx-auto mb-3 block w-fit text-[#b5b5b5]"><IconoTienda tamano={40} /></span>
-          <p className="text-lg font-semibold">Todavía no tienes tiendas</p>
-          <p className="text-[#616161]">Cuando crees una, aquí verás el enlace para compartirla.</p>
-          <button onClick={() => setCreando(true)} className={`${BOTON} mt-4 text-[13px]`}>Crear tienda</button>
+          {esEmpleado ? (
+            <>
+              <p className="text-lg font-semibold">Ahora no tienes acceso a ninguna tienda</p>
+              <p className="text-[#616161]">
+                Cuando un dueño te agregue, o te vuelva a activar si te suspendió, su tienda aparecerá aquí.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-lg font-semibold">Todavía no tienes tiendas</p>
+              <p className="text-[#616161]">Cuando crees una, aquí verás el enlace para compartirla.</p>
+              <button onClick={() => setCreando(true)} className={`${BOTON} mt-4 text-[13px]`}>Crear tienda</button>
+            </>
+          )}
         </div>
       ) : (
         tiendas.map((t) => {
@@ -69,7 +85,10 @@ export default function MisTiendas() {
           return (
             <article key={t.idTienda} className="space-y-3 rounded-xl border border-[#e3e3e3] bg-white p-5">
               <div className="flex items-center justify-between gap-3">
-                <h2 className="text-lg font-semibold">{t.nombre}</h2>
+                <h2 className="text-lg font-semibold">
+                  {t.nombre}
+                  {t.esDueno === false && <span className="ml-2 align-middle text-xs font-normal text-[#616161]">(empleado)</span>}
+                </h2>
                 <span
                   className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
                     t.estado === 'ACTIVA' ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-700'

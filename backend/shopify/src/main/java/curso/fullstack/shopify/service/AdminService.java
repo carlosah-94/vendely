@@ -86,9 +86,10 @@ public class AdminService {
         p.setPermitePlantillas(r.permitePlantillas());
         p.setPermiteEnvioInternacional(r.permiteEnvioInternacional());
         p.setPermiteMasMetodosPago(r.permiteMasMetodosPago());
+        p.setMaxEmpleados(r.maxEmpleados());
         planRepository.saveAndFlush(p);
-        log.info("Superadmin {} cambio el plan {}: {} USD, max {} productos, comision {} %",
-                yo.idLogin(), p.getNombre(), p.getPrecioUsd(), p.getMaxProductos(), p.getComision());
+        log.info("Superadmin {} cambio el plan {}: {} USD, max {} productos, comision {} %, max {} empleados",
+                yo.idLogin(), p.getNombre(), p.getPrecioUsd(), p.getMaxProductos(), p.getComision(), p.getMaxEmpleados());
         return PlanResponse.desde(p);
     }
 

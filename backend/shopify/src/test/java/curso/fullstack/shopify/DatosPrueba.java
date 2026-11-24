@@ -83,6 +83,29 @@ public class DatosPrueba {
     }
 
     /**
+     * Un empleado (rol 4) de la tienda con estos permisos; devuelve su id_login.
+     * La tienda debe tener un plan con empleados (Básico o Pro) para que pueda entrar.
+     */
+    public long nuevoEmpleado(long idTienda, boolean pedidos, boolean productos, boolean inventario, boolean clientes) {
+        long idLogin = nuevaCuenta(4, null, "empleado" + CONTADOR.incrementAndGet() + "-" + System.nanoTime() % 100000);
+        jdbc.update("""
+                INSERT INTO empleados_tienda (id_login, id_tienda, puede_pedidos, puede_productos, puede_inventario, puede_clientes)
+                VALUES (?, ?, ?, ?, ?, ?)""", idLogin, idTienda, pedidos, productos, inventario, clientes);
+        return idLogin;
+    }
+
+    /** El mismo empleado, ahora también en otra tienda (una persona puede trabajar en varias). */
+    public void agregarEmpleado(long idLogin, long idTienda, boolean pedidos) {
+        jdbc.update("""
+                INSERT INTO empleados_tienda (id_login, id_tienda, puede_pedidos, puede_productos)
+                VALUES (?, ?, ?, ?)""", idLogin, idTienda, pedidos, !pedidos);
+    }
+
+    public void suspenderEmpleado(long idLogin, long idTienda) {
+        jdbc.update("UPDATE empleados_tienda SET estado = 0 WHERE id_login = ? AND id_tienda = ?", idLogin, idTienda);
+    }
+
+    /**
      * Un producto simple (una sola variante) con su precio y su stock. Devuelve el id de la
      * VARIANTE, que es lo que se vende.
      *

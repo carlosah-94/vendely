@@ -1,12 +1,16 @@
 package curso.fullstack.shopify.dto;
 
+import curso.fullstack.shopify.entity.PermisoTienda;
 import curso.fullstack.shopify.entity.Plan;
 import curso.fullstack.shopify.entity.Tienda;
 import curso.fullstack.shopify.repository.DireccionRepository;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Set;
 
-/** Datos de la tienda para su dueño (panel). */
+/** Datos de la tienda para el panel (su dueño o un empleado). */
 public record TiendaResponse(
         Long idTienda,
         String nombre,
@@ -28,19 +32,32 @@ public record TiendaResponse(
         String plantilla,           // clasica, moderna o boutique
         String plan,                // "Gratis", "Basico", "Pro"
         Boolean permitePersonalizar,// su plan deja poner logo y color
-        Boolean permitePlantillas   // su plan deja elegir plantilla
+        Boolean permitePlantillas,  // su plan deja elegir plantilla
+        Boolean esDueno,            // true: puede todo. false: es empleado y solo puede lo de "permisos"
+        List<String> permisos       // PEDIDOS, PRODUCTOS, INVENTARIO, CLIENTES (el dueño las tiene todas)
 ) {
+    private static final List<String> TODOS = Arrays.stream(PermisoTienda.values()).map(Enum::name).toList();
+
     public static TiendaResponse desde(Tienda t, DireccionRepository.PaisInfo p) {
         return desde(t, p, null);
     }
 
+    /** Para el dueño: puede todo. */
     public static TiendaResponse desde(Tienda t, DireccionRepository.PaisInfo p, Plan plan) {
+        return desde(t, p, plan, true, null);
+    }
+
+    /** Con lo que puede hacer quien la mira (el dueño, o un empleado con sus permisos). */
+    public static TiendaResponse desde(Tienda t, DireccionRepository.PaisInfo p, Plan plan, boolean esDueno,
+            Set<PermisoTienda> permisos) {
+        List<String> lista = esDueno || permisos == null ? TODOS : permisos.stream().map(Enum::name).toList();
         return new TiendaResponse(t.getIdTienda(), t.getNombre(), t.getSubdominio(), t.getIdPais(),
                 p.getNombre(), p.getIdMoneda(), p.getDecimales(), p.getImpuesto(), p.getTasaImpuesto(), p.getNivelFinal(),
                 t.getDescripcion(), t.getCorreoContacto(), t.getLogoUrl(), t.getColorPrincipal(), t.getPermiteInvitados(),
                 t.estaActiva() ? "ACTIVA" : "SUSPENDIDA", t.getFechaCreacion(), t.getPlantilla(),
                 plan == null ? null : plan.getNombre(),
                 plan == null || Boolean.TRUE.equals(plan.getPermitePersonalizar()),
-                plan == null || Boolean.TRUE.equals(plan.getPermitePlantillas()));
+                plan == null || Boolean.TRUE.equals(plan.getPermitePlantillas()),
+                esDueno, lista);
     }
 }

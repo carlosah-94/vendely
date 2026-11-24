@@ -4,10 +4,13 @@ import curso.fullstack.shopify.dto.TiendaActualizarRequest;
 import curso.fullstack.shopify.dto.TiendaCrearRequest;
 import curso.fullstack.shopify.dto.TiendaPublicaResponse;
 import curso.fullstack.shopify.dto.TiendaResponse;
+import curso.fullstack.shopify.entity.EmpleadoTienda;
 import curso.fullstack.shopify.entity.Propietario;
+import curso.fullstack.shopify.entity.RolUsuario;
 import curso.fullstack.shopify.entity.Tienda;
 import curso.fullstack.shopify.exception.ApiException;
 import curso.fullstack.shopify.repository.DireccionRepository;
+import curso.fullstack.shopify.repository.EmpleadoTiendaRepository;
 import curso.fullstack.shopify.repository.TiendaRepository;
 import curso.fullstack.shopify.security.UsuarioAutenticado;
 import curso.fullstack.shopify.security.VerificadorTienda;
@@ -35,11 +38,13 @@ public class TiendaService {
     private final EntityManager entityManager;
     private final PlanService planService;
     private final MetodoPagoService metodoPagoService;
+    private final EmpleadoTiendaRepository empleadoRepository;
 
     public TiendaService(TiendaRepository tiendaRepository, DireccionRepository direccionRepository,
             VerificadorTienda verificadorTienda, EntityManager entityManager, PlanService planService,
-            MetodoPagoService metodoPagoService) {
+            MetodoPagoService metodoPagoService, EmpleadoTiendaRepository empleadoRepository) {
         this.metodoPagoService = metodoPagoService;
+        this.empleadoRepository = empleadoRepository;
         this.planService = planService;
         this.tiendaRepository = tiendaRepository;
         this.direccionRepository = direccionRepository;
@@ -86,8 +91,21 @@ public class TiendaService {
         return TiendaResponse.desde(t, pais, planService.planDe(t.getIdTienda()));
     }
 
+    /**
+     * Las tiendas que la cuenta puede abrir en el panel: las suyas si es dueño; si es empleado,
+     * aquellas donde está activo (y cuyo plan todavía incluye empleados). Cada una dice qué puede
+     * hacer ahí, para que el panel muestre solo esas opciones.
+     */
     @Transactional(readOnly = true)
     public List<TiendaResponse> misTiendas(UsuarioAutenticado yo) {
+        if (yo.rol() == RolUsuario.EMPLEADO) {
+            return empleadoRepository.findByIdLoginAndEstadoOrderByIdTiendaAsc(yo.idLogin(), EmpleadoTienda.ACTIVO)
+                    .stream()
+                    .map(e -> tiendaRepository.findById(e.getIdTienda()).orElse(null))
+                    .filter(t -> t != null && verificadorTienda.planPermiteEmpleados(t))
+                    .map(t -> responderConAcceso(verificadorTienda.acceso(yo, t.getIdTienda())))
+                    .toList();
+        }
         Propietario propietario = verificadorTienda.propietario(yo);
         return tiendaRepository.findByIdPropietarioOrderByIdTiendaAsc(propietario.getIdPropietario())
                 .stream().map(this::responder).toList();
@@ -95,7 +113,7 @@ public class TiendaService {
 
     @Transactional(readOnly = true)
     public TiendaResponse miTienda(UsuarioAutenticado yo, Long idTienda) {
-        return responder(verificadorTienda.delDueno(yo, idTienda));
+        return responderConAcceso(verificadorTienda.acceso(yo, idTienda));
     }
 
     @Transactional
@@ -137,6 +155,12 @@ public class TiendaService {
 
     private TiendaResponse responder(Tienda t) {
         return TiendaResponse.desde(t, paisDe(t), planService.planDe(t.getIdTienda()));
+    }
+
+    private TiendaResponse responderConAcceso(VerificadorTienda.Acceso acceso) {
+        Tienda t = acceso.tienda();
+        return TiendaResponse.desde(t, paisDe(t), planService.planDe(t.getIdTienda()), acceso.esDueno(),
+                acceso.permisos());
     }
 
     /** Moneda, impuesto y divisiones del país de la tienda. */

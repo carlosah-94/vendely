@@ -1,5 +1,6 @@
 package curso.fullstack.shopify.service;
 
+import curso.fullstack.shopify.entity.PermisoTienda;
 import curso.fullstack.shopify.dto.InventarioRequest;
 import curso.fullstack.shopify.dto.InventarioResponse;
 import curso.fullstack.shopify.entity.Inventario;
@@ -40,13 +41,13 @@ public class InventarioService {
 
     @Transactional(readOnly = true)
     public List<InventarioResponse> listar(UsuarioAutenticado yo, Long idTienda) {
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.INVENTARIO, PermisoTienda.PRODUCTOS);
         return inventarioRepository.filasDeTienda(idTienda).stream().map(InventarioResponse::desde).toList();
     }
 
     @Transactional
     public InventarioResponse actualizar(UsuarioAutenticado yo, Long idTienda, Long idVariante, InventarioRequest r) {
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.INVENTARIO);
         // La variante debe ser de un producto de ESTA tienda (si es de otra, 404: no se revela que existe).
         varianteRepository.buscarInfo(idVariante)
                 .filter(i -> idTienda.equals(i.getIdTienda()))
