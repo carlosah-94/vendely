@@ -38,6 +38,13 @@ public class DetallePedido {
     @Column(name = "cantidad", nullable = false)
     private Integer cantidad;
 
+    /** Oferta con la que se vendió (null = sin oferta). */
+    @Setter
+    @Column(name = "id_oferta")
+    private Long idOferta;
+
+    /** Lo que rebajó la oferta por unidad (0 sin oferta). Lo revisa el trigger T7. */
+    @Setter
     @Column(name = "descuento_unitario", nullable = false, precision = 12, scale = 2)
     private BigDecimal descuentoUnitario = BigDecimal.ZERO;
 }

@@ -180,7 +180,9 @@ public class ComprobanteService {
         }
         for (DetallePedido d : detalles) {
             Precio precio = precios.get(d.getIdPrecio());
-            BigDecimal monto = precio == null ? BigDecimal.ZERO : precio.getMonto();
+            // Precio cobrado por unidad: el de lista menos lo que rebajó la oferta automática.
+            BigDecimal descuento = d.getDescuentoUnitario() == null ? BigDecimal.ZERO : d.getDescuentoUnitario();
+            BigDecimal monto = precio == null ? BigDecimal.ZERO : precio.getMonto().subtract(descuento);
             celda(t, d.getNombreProducto(), Element.ALIGN_LEFT);
             celda(t, d.getNombreVariante(), Element.ALIGN_LEFT);
             celda(t, String.valueOf(d.getCantidad()), Element.ALIGN_CENTER);

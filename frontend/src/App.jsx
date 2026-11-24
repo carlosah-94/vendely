@@ -7,6 +7,7 @@ import AdminCuentas from './pages/admin/AdminCuentas';
 import AdminPlanes from './pages/admin/AdminPlanes';
 import AdminTiendas from './pages/admin/AdminTiendas';
 import Clientes from './pages/Clientes';
+import Descuentos from './pages/Descuentos';
 import DetalleVenta from './pages/DetalleVenta';
 import Empleados from './pages/Empleados';
 import Inicio from './pages/Inicio';
@@ -69,6 +70,7 @@ export default function App() {
           <Route element={<RequierePermiso permiso="PRODUCTOS" />}>
             <Route path="/panel/productos" element={<Productos />} />
             <Route path="/panel/productos/categorias" element={<Categorias />} />
+            <Route path="/panel/descuentos" element={<Descuentos />} />
           </Route>
           <Route element={<RequierePermiso permiso="INVENTARIO" />}>
             <Route path="/panel/productos/inventario" element={<Inventario />} />
