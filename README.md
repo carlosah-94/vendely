@@ -37,7 +37,7 @@ shopity/
 
 | Módulo | Backend | Pantalla en el panel |
 |---|---|---|
-| Registro, inicio de sesión y roles | Sí | Sí (login, registro de dueño con su primera tienda, menú por rol, acceso denegado) |
+| Registro, inicio de sesión y roles | Sí | Sí (login, registro de dueño con su primera tienda (primero el país: documentos y prefijo del teléfono de ese país), menú por rol, acceso denegado) |
 | Tiendas (en Perú o Chile) | Sí | Sí (`/panel/tiendas`, "Mis tiendas") |
 | Personalizar la tienda (logo, color, descripción) | Sí | Sí (`/panel/personalizar`) |
 | Clientes (CRUD) | Sí | Sí (`/panel/clientes`) |
