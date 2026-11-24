@@ -6,6 +6,7 @@ import curso.fullstack.shopify.dto.PagarPlanRequest;
 import curso.fullstack.shopify.dto.PagoPlanIniciadoResponse;
 import curso.fullstack.shopify.dto.PlanResponse;
 import curso.fullstack.shopify.dto.SuscripcionResponse;
+import curso.fullstack.shopify.entity.Plan;
 import curso.fullstack.shopify.entity.Tienda;
 import curso.fullstack.shopify.repository.PlanRepository;
 import curso.fullstack.shopify.security.UsuarioAutenticado;
@@ -54,14 +55,21 @@ public class PlanController {
     @Transactional(readOnly = true)
     public MiPlanResponse miPlan(@AuthenticationPrincipal UsuarioAutenticado yo, @PathVariable Long idTienda) {
         Tienda t = verificadorTienda.delDueno(yo, idTienda);     // 404 si no existe, 403 si es de otro
+        Plan actual = planService.planDe(idTienda);
+        List<Plan> planes = planRepository.findAllByOrderByPrecioUsdAsc();
+        List<String> alVencer = actual.esGratis() ? List.of()
+                : planes.stream().filter(Plan::esGratis).findFirst()
+                        .map(gratis -> suscripcionService.dejaraDeTener(t, gratis))
+                        .orElse(List.of());
         return new MiPlanResponse(
-                PlanResponse.desde(planService.planDe(idTienda)),
+                PlanResponse.desde(actual),
                 planService.productosUsados(idTienda),
                 t.getPlanVenceEl(),
-                planRepository.findAllByOrderByPrecioUsdAsc().stream()
+                planes.stream()
                         .filter(p -> p.getEstado() != null && p.getEstado() == 1)
                         .map(PlanResponse::desde).toList(),
-                suscripcionService.opciones(idTienda));
+                suscripcionService.opciones(idTienda),
+                alVencer);
     }
 
     @PostMapping("/pagar")

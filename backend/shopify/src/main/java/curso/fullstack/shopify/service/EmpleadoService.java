@@ -1,5 +1,7 @@
 package curso.fullstack.shopify.service;
 
+import java.util.List;
+import java.util.ArrayList;
 import curso.fullstack.shopify.dto.EmpleadoCrearRequest;
 import curso.fullstack.shopify.dto.EmpleadoEditarRequest;
 import curso.fullstack.shopify.dto.EmpleadoResponse;
@@ -54,9 +56,19 @@ public class EmpleadoService {
     public EmpleadosResponse listar(UsuarioAutenticado yo, Long idTienda) {
         verificadorTienda.delDueno(yo, idTienda);
         Plan plan = planService.planDe(idTienda);
-        return new EmpleadosResponse(plan.getNombre(), plan.getMaxEmpleados(),
-                empleadoRepository.countByIdTiendaAndEstado(idTienda, EmpleadoTienda.ACTIVO),
-                empleadoRepository.filasDeTienda(idTienda).stream().map(EmpleadoResponse::desde).toList());
+        // La lista viene ordenada por antigüedad: los primeros activos hasta el máximo del plan
+        // pueden entrar; si la tienda bajó de plan, los que sobran quedan marcados (no se borran).
+        int maximo = plan.getMaxEmpleados() == null ? 0 : plan.getMaxEmpleados();
+        int activosVistos = 0;
+        List<EmpleadoResponse> empleados = new ArrayList<>();
+        for (EmpleadoTiendaRepository.Fila f : empleadoRepository.filasDeTienda(idTienda)) {
+            boolean activo = f.getEstado() != null && f.getEstado() == 1;
+            empleados.add(EmpleadoResponse.desde(f, !activo || activosVistos < maximo));
+            if (activo) {
+                activosVistos++;
+            }
+        }
+        return new EmpleadosResponse(plan.getNombre(), maximo, activosVistos, empleados);
     }
 
     /**
