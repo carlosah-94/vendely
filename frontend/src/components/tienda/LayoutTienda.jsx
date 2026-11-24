@@ -175,6 +175,9 @@ function Cabecera({ tienda, subdominio }) {
           <a href={`${base}#catalogo`} aria-label="Buscar" className="hidden sm:block"><IconoBuscar /></a>
           {esCliente ? (
             <>
+              {usuario.nombres && (
+                <span className="hidden text-sm lg:inline">Hola, {usuario.nombres.trim().split(/\s+/)[0]}</span>
+              )}
               <Link to={`${base}/mis-pedidos`} className="flex items-center gap-1 text-sm hover:underline">
                 <IconoCuenta /> <span className="hidden md:inline">Mis pedidos</span>
               </Link>

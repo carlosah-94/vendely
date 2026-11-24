@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Navigate, useLocation, useNavigate, useOutletContext } from 'react-router-dom';
 import Campo from '../../components/Campo';
 import { useAuth } from '../../context/AuthContext';
 import { mensajeDeError } from '../../services/api';
+import { listarPaises } from '../../services/envios';
 import { registrarCliente } from '../../services/tienda';
 import { estiloInput } from '../../utils/estilos';
 
@@ -20,11 +21,27 @@ export default function IngresarCliente() {
   const destino = location.state?.volver ?? `/tienda/${subdominio}`;
 
   const [modo, setModo] = useState('ingresar'); // 'ingresar' | 'registro'
-  // El teléfono empieza con el prefijo del país de la tienda (+51 Perú, +56 Chile).
+  // El país empieza en el de la tienda y el teléfono con su prefijo (+51 Perú, +56 Chile).
+  // Si el cliente elige otro país, el prefijo cambia solo.
+  const [paises, setPaises] = useState([]);
+  const [idPais, setIdPais] = useState(tienda.idPais);
   const [datos, setDatos] = useState({ ...VACIO, telefono: tienda.idPais === 'CL' ? '+56' : '+51' });
   const [errores, setErrores] = useState({});
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
+
+  useEffect(() => {
+    listarPaises()
+      .then((lista) => {
+        // El país de la tienda va primero; los demás, en orden alfabético.
+        const propio = lista.filter((p) => p.idPais === tienda.idPais);
+        const otros = lista
+          .filter((p) => p.idPais !== tienda.idPais && p.prefijoTelefono)
+          .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+        setPaises([...propio, ...otros]);
+      })
+      .catch(() => setPaises([]));
+  }, [tienda.idPais]);
 
   if (usuario?.rol === 'CLIENTE' && usuario.idTienda === tienda.idTienda) {
     return <Navigate to={destino} replace />;
@@ -34,6 +51,17 @@ export default function IngresarCliente() {
     setDatos((d) => ({ ...d, [campo]: e.target.value }));
     setErrores((er) => ({ ...er, [campo]: undefined }));
   };
+
+  function cambiarPais(e) {
+    const nuevo = e.target.value;
+    const prefijo = paises.find((p) => p.idPais === nuevo)?.prefijoTelefono ?? '+';
+    setIdPais(nuevo);
+    // Si el teléfono todavía solo tenía el prefijo del país anterior, se cambia por el nuevo.
+    setDatos((d) => ({ ...d, telefono: /^\+\d{0,4}$/.test(d.telefono.trim()) ? prefijo : d.telefono }));
+    setErrores((er) => ({ ...er, telefono: undefined }));
+  }
+
+  const prefijoActual = paises.find((p) => p.idPais === idPais)?.prefijoTelefono ?? '+51';
 
   async function enviar(evento) {
     evento.preventDefault();
@@ -94,7 +122,15 @@ export default function IngresarCliente() {
             <Campo etiqueta="Usuario" error={errores.usuario} ayuda="3 a 50 caracteres: letras, números, punto o guion">
               <input required minLength={3} value={datos.usuario} onChange={cambiar('usuario')} autoComplete="username" className={estiloInput(errores.usuario)} />
             </Campo>
-            <Campo etiqueta="Teléfono" error={errores.telefono} ayuda="Con código de país: +51987654321">
+            <Campo etiqueta="País">
+              <select value={idPais} onChange={cambiarPais} className={estiloInput()}>
+                {paises.length === 0 && <option value={tienda.idPais}>{tienda.pais ?? tienda.idPais}</option>}
+                {paises.map((p) => (
+                  <option key={p.idPais} value={p.idPais}>{p.nombre} ({p.prefijoTelefono})</option>
+                ))}
+              </select>
+            </Campo>
+            <Campo etiqueta="Teléfono" error={errores.telefono} ayuda={`Con código de país: ${prefijoActual}...`}>
               <input required type="tel" value={datos.telefono} onChange={cambiar('telefono')} className={estiloInput(errores.telefono)} />
             </Campo>
           </>
