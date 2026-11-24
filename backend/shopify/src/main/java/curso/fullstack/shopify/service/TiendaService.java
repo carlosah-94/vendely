@@ -34,9 +34,12 @@ public class TiendaService {
     private final VerificadorTienda verificadorTienda;
     private final EntityManager entityManager;
     private final PlanService planService;
+    private final MetodoPagoService metodoPagoService;
 
     public TiendaService(TiendaRepository tiendaRepository, DireccionRepository direccionRepository,
-            VerificadorTienda verificadorTienda, EntityManager entityManager, PlanService planService) {
+            VerificadorTienda verificadorTienda, EntityManager entityManager, PlanService planService,
+            MetodoPagoService metodoPagoService) {
+        this.metodoPagoService = metodoPagoService;
         this.planService = planService;
         this.tiendaRepository = tiendaRepository;
         this.direccionRepository = direccionRepository;
@@ -125,7 +128,9 @@ public class TiendaService {
         Tienda t = tiendaRepository.findBySubdominio(subdominio.trim().toLowerCase(Locale.ROOT))
                 .filter(Tienda::estaActiva) // una tienda suspendida no se muestra
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "La tienda no existe"));
-        return TiendaPublicaResponse.desde(t, paisDe(t), planService.planDe(t.getIdTienda()));
+        // metodosPago: con qué puede pagar el cliente en esta tienda (servidor + plan).
+        return TiendaPublicaResponse.desde(t, paisDe(t), planService.planDe(t.getIdTienda()),
+                metodoPagoService.disponibles(t.getIdTienda()));
     }
 
     // ------------------------------------------------------------------ apoyo

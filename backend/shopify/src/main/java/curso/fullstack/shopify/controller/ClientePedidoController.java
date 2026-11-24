@@ -1,6 +1,7 @@
 package curso.fullstack.shopify.controller;
 
 import curso.fullstack.shopify.dto.ConfirmarPagoRequest;
+import curso.fullstack.shopify.dto.IniciarPagoRequest;
 import curso.fullstack.shopify.dto.PagoIniciadoResponse;
 import curso.fullstack.shopify.dto.PedidoClienteRequest;
 import curso.fullstack.shopify.dto.PedidoResumenResponse;
@@ -71,9 +72,14 @@ public class ClientePedidoController {
     }
 
     /** Inicia el pago con Mercado Pago: responde la URL a donde enviar al cliente. */
+    /**
+     * Inicia el pago con la pasarela elegida: {"metodo": "PAYPAL"} o {"metodo": "MERCADO_PAGO"}.
+     * El cuerpo es opcional; sin él se usa el primer método que ofrece la tienda.
+     */
     @PostMapping("/{idPedido}/pago")
-    public PagoIniciadoResponse pagar(@AuthenticationPrincipal UsuarioAutenticado yo, @PathVariable Long idPedido) {
-        return pagoService.iniciar(yo, idPedido);
+    public PagoIniciadoResponse pagar(@AuthenticationPrincipal UsuarioAutenticado yo, @PathVariable Long idPedido,
+                                      @RequestBody(required = false) IniciarPagoRequest r) {
+        return pagoService.iniciar(yo, idPedido, r == null ? null : r.metodo());
     }
 
     /** Confirma el pago consultándolo en Mercado Pago (nunca se confía en lo que diga el navegador). */

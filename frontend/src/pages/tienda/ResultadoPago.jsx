@@ -4,6 +4,7 @@ import { IconoCerrar, IconoCheck } from '../../components/Iconos';
 import { useCarrito } from '../../context/CarritoContext';
 import { mensajeDeError } from '../../services/api';
 import { confirmarPago, iniciarPago } from '../../services/tienda';
+import { metodoDelRegreso } from '../../utils/metodosPago';
 
 /**
  * Regreso de la pasarela de pago.
@@ -51,7 +52,8 @@ export default function ResultadoPago() {
     setReintentando(true);
     setErrorReintento('');
     try {
-      const { urlPago } = await iniciarPago(idPedido);
+      // Se reintenta con la misma pasarela de la que volvió (si se sabe); si no, la de por defecto.
+      const { urlPago } = await iniciarPago(idPedido, metodoDelRegreso(params));
       window.location.href = urlPago;
     } catch (e) {
       setErrorReintento(mensajeDeError(e));

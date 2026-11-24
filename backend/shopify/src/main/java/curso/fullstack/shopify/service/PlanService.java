@@ -94,7 +94,9 @@ public class PlanService {
             case PERSONALIZAR -> plan + " no incluye logo ni color propios. " + MEJORA_TU_PLAN;
             case PLANTILLAS -> plan + " no incluye elegir plantilla. " + MEJORA_TU_PLAN;
             case ENVIO_INTERNACIONAL -> plan + " no incluye envios internacionales. " + MEJORA_TU_PLAN;
-            case METODOS_PAGO -> plan + " solo incluye PayPal. " + MEJORA_TU_PLAN;
+            // Un solo método y no "solo PayPal": el método base es el primero configurado en el
+            // servidor (MetodoPagoService), que puede ser Mercado Pago si PayPal no tiene credenciales.
+            case METODOS_PAGO -> plan + " incluye un solo método de pago. " + MEJORA_TU_PLAN;
         };
     }
 }

@@ -49,8 +49,13 @@ export async function crearPedido(datos) {
   return (await api.post('/cliente/pedidos', datos)).data;
 }
 
-export async function iniciarPago(idPedido) {
-  return (await api.post(`/cliente/pedidos/${idPedido}/pago`)).data;
+/**
+ * Inicia el pago con la pasarela elegida ('PAYPAL' o 'MERCADO_PAGO') y devuelve { urlPago }.
+ * Sin método, el backend usa el primero que ofrece la tienda.
+ */
+export async function iniciarPago(idPedido, metodo) {
+  const cuerpo = metodo ? { metodo } : undefined;
+  return (await api.post(`/cliente/pedidos/${idPedido}/pago`, cuerpo)).data;
 }
 
 export async function confirmarPago(idPedido, paymentId) {

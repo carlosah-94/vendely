@@ -30,7 +30,8 @@ import org.springframework.web.client.RestClientResponseException;
 
 /**
  * Pago de un pedido con una pasarela en modo de prueba: PayPal (Sandbox) o Mercado Pago (Checkout Pro).
- * Se usa PayPal si están PAYPAL_CLIENT_ID y PAYPAL_CLIENT_SECRET; si no, Mercado Pago si está su token.
+ * El cliente elige con cuál; qué métodos ofrece cada tienda lo decide MetodoPagoService (las
+ * pasarelas configuradas en el servidor y el plan de la tienda).
  *
  * Regla de oro: NUNCA se cree lo que manda el navegador. La URL de regreso trae
  * status=approved, pero cualquiera puede escribirla a mano: siempre se consulta el pago
@@ -47,6 +48,7 @@ public class PagoService {
     private final MercadoPagoClient mercadoPago;
     private final PayPalClient payPal;
     private final PlanService planService;
+    private final MetodoPagoService metodoPagoService;
     private final ApplicationEventPublisher eventos;
     private final BigDecimal tipoCambioPenUsd;
     private final BigDecimal tipoCambioClpUsd;
@@ -54,7 +56,8 @@ public class PagoService {
 
     public PagoService(PedidoRepository pedidoRepository, PagoRepository pagoRepository,
                        TiendaRepository tiendaRepository, MercadoPagoClient mercadoPago, PayPalClient payPal,
-                       PlanService planService, ApplicationEventPublisher eventos,
+                       PlanService planService, MetodoPagoService metodoPagoService,
+                       ApplicationEventPublisher eventos,
                        @Value("${app.paypal.tipo-cambio-pen-usd:3.75}") BigDecimal tipoCambioPenUsd,
                        @Value("${app.paypal.tipo-cambio-clp-usd:950}") BigDecimal tipoCambioClpUsd,
                        @Value("${app.frontend-url:http://localhost:5173}") String frontendUrl) {
@@ -64,6 +67,7 @@ public class PagoService {
         this.mercadoPago = mercadoPago;
         this.payPal = payPal;
         this.planService = planService;
+        this.metodoPagoService = metodoPagoService;
         this.eventos = eventos;
         this.tipoCambioPenUsd = tipoCambioPenUsd;
         this.tipoCambioClpUsd = tipoCambioClpUsd;
@@ -73,24 +77,32 @@ public class PagoService {
     // ------------------------------------------------------------------ iniciar el pago
 
     /**
-     * Crea el intento de pago (pendiente) y la preferencia en Mercado Pago.
-     * Si Mercado Pago falla se lanza ApiException: @Transactional deshace el registro de pago.
+     * Inicia el pago del pedido con la pasarela que eligió el cliente.
+     *
+     * Antes el backend decidía solo (PayPal si estaba configurado; si no, Mercado Pago). Ahora el
+     * cliente elige, y MetodoPagoService comprueba que ese método esté configurado en el servidor
+     * y que el plan de la tienda lo incluya. Si no elige (metodo null, como el frontend antiguo),
+     * se usa el primero disponible: el comportamiento de siempre.
+     *
+     * Si la pasarela falla se lanza ApiException: @Transactional deshace el registro de pago.
      */
     @Transactional
-    public PagoIniciadoResponse iniciar(UsuarioAutenticado yo, Long idPedido) {
+    public PagoIniciadoResponse iniciar(UsuarioAutenticado yo, Long idPedido, MetodoPago metodo) {
         Pedido p = pedidoDelCliente(yo, idPedido);
         if (pagoRepository.existsByIdPedidoAndEstado(idPedido, Pago.APROBADO)) {
             throw new ApiException(HttpStatus.CONFLICT, "El pedido #" + p.getNumeroPedido() + " ya está pagado");
         }
         Tienda tienda = tiendaRepository.findById(p.getIdTienda())
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "La tienda no existe"));
-        if (payPal.estaConfigurado()) {
-            return iniciarPayPal(p, tienda);
-        }
-        if (!mercadoPago.estaConfigurado()) {
-            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "El pago en línea no está disponible por ahora");
-        }
+        return switch (metodoPagoService.elegir(p.getIdTienda(), metodo)) {
+            case PAYPAL -> iniciarPayPal(p, tienda);
+            case MERCADO_PAGO -> iniciarMercadoPago(p, tienda);
+        };
+    }
 
+    /** Crea el intento de pago (pendiente) y la preferencia de Checkout Pro en Mercado Pago. */
+    private PagoIniciadoResponse iniciarMercadoPago(Pedido p, Tienda tienda) {
+        Long idPedido = p.getIdPedido();
         Pago pago = new Pago();
         pago.setIdPedido(idPedido);
         pago.setProveedor(Pago.MERCADO_PAGO);

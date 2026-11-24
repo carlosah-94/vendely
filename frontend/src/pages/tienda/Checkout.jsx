@@ -11,10 +11,12 @@ import { cotizarEnvio, listarPaises } from '../../services/envios';
 import { crearDireccion, crearPedido, iniciarPago, listarDirecciones } from '../../services/tienda';
 import { estiloInput } from '../../utils/estilos';
 import { formatoMoneda } from '../../utils/formato';
+import { METODOS_PAGO, metodosDeTienda } from '../../utils/metodosPago';
 
 /**
  * Checkout en dos columnas: a la izquierda Contacto, Entrega y Pago; a la derecha el resumen gris.
- * Al pagar: crea el pedido, pide a la pasarela (PayPal en modo de prueba) la página de pago y envía al cliente allí.
+ * Al pagar: crea el pedido, pide a la pasarela elegida (PayPal o Mercado Pago, en modo de prueba)
+ * la página de pago y envía al cliente allí.
  */
 export default function Checkout() {
   const { tienda, subdominio } = useOutletContext();
@@ -31,6 +33,10 @@ export default function Checkout() {
   const [pedidoCreado, setPedidoCreado] = useState(null);
   // Envío a la dirección elegida: { idDireccion, subtotal, datos } (datos null = calculando).
   const [envio, setEnvio] = useState(null);
+  // Método de pago: los que ofrece la tienda; por defecto el primero (el método base).
+  const metodos = metodosDeTienda(tienda);
+  const [metodo, setMetodo] = useState(null);
+  const metodoElegido = metodos.includes(metodo) ? metodo : metodos[0];
 
   // Cada vez que cambia la dirección (o el subtotal, por el envío gratis) se pide el costo del envío.
   useEffect(() => {
@@ -76,7 +82,7 @@ export default function Checkout() {
         });
         setPedidoCreado(pedido);
       }
-      const { urlPago } = await iniciarPago(pedido.idPedido);
+      const { urlPago } = await iniciarPago(pedido.idPedido, metodoElegido);
       window.location.href = urlPago;
     } catch (e) {
       // 409 (stock insuficiente, etc.): se muestra el mensaje y no se continúa.
@@ -245,12 +251,44 @@ export default function Checkout() {
             )}
           </section>
 
+          {/* Los métodos los decide el backend (pasarelas configuradas + plan de la tienda).
+              Con uno solo se muestra como texto; con varios, el cliente elige. */}
           <section className="space-y-2">
             <h2 className="text-lg font-semibold">Pago</h2>
-            <p className="rounded-md border border-[#d9d9d9] bg-[#f5f5f5] px-3 py-3 text-sm text-[#616161]">
-              Serás redirigido a PayPal para completar tu compra de forma segura. En este modo de
-              prueba, el cobro se procesa en dólares (USD).
-            </p>
+            {metodos.length === 0 && (
+              <Mensaje tipo="error" texto="Esta tienda no tiene el pago en línea disponible por ahora." />
+            )}
+            {metodos.length === 1 && (
+              <p className="rounded-md border border-[#d9d9d9] bg-[#f5f5f5] px-3 py-3 text-sm text-[#616161]">
+                Serás redirigido a {METODOS_PAGO[metodos[0]].nombre} para completar tu compra de forma segura.{' '}
+                {METODOS_PAGO[metodos[0]].detalle(tienda.moneda)}
+              </p>
+            )}
+            {metodos.length > 1 && (
+              <ul className="space-y-2">
+                {metodos.map((m) => (
+                  <li key={m}>
+                    <label
+                      className={`flex cursor-pointer items-start gap-3 rounded-md border p-3 text-sm ${
+                        metodoElegido === m ? 'border-[#303030] bg-[#f5f5f5]' : 'border-[#d9d9d9]'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="metodoPago"
+                        checked={metodoElegido === m}
+                        onChange={() => setMetodo(m)}
+                        className="mt-1"
+                      />
+                      <span>
+                        <span className="font-medium">{METODOS_PAGO[m].nombre}</span>
+                        <span className="block text-[#616161]">{METODOS_PAGO[m].detalle(tienda.moneda)}</span>
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
 
           {error && <Mensaje tipo="error" texto={error} />}
@@ -258,10 +296,10 @@ export default function Checkout() {
           <button
             type="button"
             onClick={pagar}
-            disabled={enviando || !idDireccion || nueva || !cotizacion?.datos?.disponible}
+            disabled={enviando || !idDireccion || nueva || !cotizacion?.datos?.disponible || !metodoElegido}
             className="w-full rounded-md bg-[var(--tienda)] py-4 text-lg font-medium text-[var(--tienda-texto)] hover:brightness-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {enviando ? 'Procesando...' : 'Pagar ahora'}
+            {enviando ? 'Procesando...' : metodoElegido ? `Pagar con ${METODOS_PAGO[metodoElegido].nombre}` : 'Pagar ahora'}
           </button>
           {!idDireccion && direcciones && (
             <p className="text-center text-xs text-[#616161]">Guarda una dirección de entrega para continuar.</p>
