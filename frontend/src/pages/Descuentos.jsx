@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import CampoPanel from '../components/CampoPanel';
+import CodigosDescuento from '../components/CodigosDescuento';
 import ConfirmarAccion from '../components/ConfirmarAccion';
 import { IconoCerrar, IconoDescuento, IconoMas } from '../components/Iconos';
 import Mensaje from '../components/Mensaje';
@@ -41,6 +43,9 @@ export default function Descuentos() {
   const [formulario, setFormulario] = useState(null);   // 'nueva' o la oferta a editar
   const [porEliminar, setPorEliminar] = useState(null);
   const [eliminando, setEliminando] = useState(false);
+  // Pestaña en la URL (?pestana=codigos) para que se pueda volver directo a los códigos.
+  const [params, setParams] = useSearchParams();
+  const pestana = params.get('pestana') === 'codigos' ? 'codigos' : 'ofertas';
 
   useEffect(() => {
     if (!idTienda) return undefined;
@@ -87,12 +92,14 @@ export default function Descuentos() {
         <div>
           <h1 className="text-xl font-bold text-[#101010]">Descuentos</h1>
           <p className="text-[13px] text-[#616161]">
-            Ofertas automáticas: el precio rebajado se ve en tu tienda y se cobra solo, sin códigos.
+            {pestana === 'ofertas'
+              ? 'Ofertas automáticas: el precio rebajado se ve en tu tienda y se cobra solo, sin códigos.'
+              : 'Códigos que tus clientes escriben en el checkout para rebajar todo su pedido.'}
           </p>
         </div>
         <div className="flex items-center gap-3">
           {tiendas.length > 0 && <SelectorTienda tiendas={tiendas} idTienda={idTienda} onCambiar={cambiarTienda} />}
-          {tienda && (
+          {tienda && pestana === 'ofertas' && (
             <button onClick={() => setFormulario('nueva')} className={`${BOTON} inline-flex items-center gap-1`}>
               <IconoMas tamano={16} /> Crear oferta
             </button>
@@ -100,10 +107,28 @@ export default function Descuentos() {
         </div>
       </div>
 
-      {datos.error && <Mensaje tipo="error" texto={datos.error} onCerrar={() => setDatos((d) => ({ ...d, error: '' }))} />}
+      <div role="tablist" className="flex gap-1 border-b border-[#e3e3e3] text-[13px]">
+        {[['ofertas', 'Ofertas automáticas'], ['codigos', 'Códigos de descuento']].map(([clave, texto]) => (
+          <button
+            key={clave}
+            role="tab"
+            aria-selected={pestana === clave}
+            onClick={() => setParams(clave === 'codigos' ? { pestana: 'codigos' } : {}, { replace: true })}
+            className={`-mb-px border-b-2 px-3 py-2 font-medium ${
+              pestana === clave ? 'border-[#303030] text-[#101010]' : 'border-transparent text-[#616161] hover:text-[#303030]'
+            }`}
+          >
+            {texto}
+          </button>
+        ))}
+      </div>
+
+      {tienda && pestana === 'codigos' && <CodigosDescuento key={idTienda} idTienda={idTienda} moneda={tienda.moneda ?? 'PEN'} />}
+
+      {pestana === 'ofertas' && datos.error && <Mensaje tipo="error" texto={datos.error} onCerrar={() => setDatos((d) => ({ ...d, error: '' }))} />}
       {!cargandoTiendas && !tienda && <Mensaje tipo="info" texto="Primero crea una tienda." />}
 
-      {tienda && (
+      {tienda && pestana === 'ofertas' && (
         <div className={`${TARJETA} overflow-x-auto`}>
           {!cargando && datos.ofertas.length === 0 ? (
             <div className="flex flex-col items-center px-6 py-12 text-center">

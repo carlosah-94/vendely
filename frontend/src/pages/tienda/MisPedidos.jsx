@@ -149,6 +149,9 @@ export default function MisPedidos() {
                         </ul>
                         <dl className="ml-auto max-w-xs space-y-1">
                           <div className="flex justify-between"><dt>Subtotal</dt><dd>{formatoMoneda(d.subtotal, d.moneda)}</dd></div>
+                          {Number(d.descuentoCupon) > 0 && (
+                            <div className="flex justify-between"><dt>Código {d.codigoCupon}</dt><dd>- {formatoMoneda(d.descuentoCupon, d.moneda)}</dd></div>
+                          )}
                           <div className="flex justify-between"><dt>Envío</dt><dd>{formatoMoneda(d.costoEnvio, d.moneda)}</dd></div>
                           <div className="flex justify-between border-t border-[#e3e3e3] pt-1 font-semibold">
                             <dt>Total</dt><dd>{formatoMoneda(d.total, d.moneda)}</dd>

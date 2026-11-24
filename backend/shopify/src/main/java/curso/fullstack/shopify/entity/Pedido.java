@@ -90,4 +90,14 @@ public class Pedido {
 
     @Column(name = "fecha_creacion", insertable = false, updatable = false)
     private OffsetDateTime fechaCreacion;
+
+    /** Código de descuento usado (V14), o null. Se fija al crear el pedido y no cambia. */
+    @Setter
+    @Column(name = "id_cupon", updatable = false)
+    private Long idCupon;
+
+    /** Lo que rebajó el código: total = subtotal - descuentoCupon + costoEnvio. */
+    @Setter
+    @Column(name = "descuento_cupon", nullable = false, precision = 12, scale = 2, updatable = false)
+    private BigDecimal descuentoCupon = BigDecimal.ZERO;
 }

@@ -44,6 +44,8 @@ public class PedidoService {
     private final TiendaRepository tiendaRepository;
     private final PagoRepository pagoRepository;
     private final OfertaRepository ofertaRepository;
+    private final CuponService cuponService;
+    private final CuponRepository cuponRepository;
     private final ApplicationEventPublisher eventos;
 
     @PersistenceContext
@@ -54,8 +56,11 @@ public class PedidoService {
                          PrecioRepository precioRepository, InventarioRepository inventarioRepository,
                          PedidoRepository pedidoRepository, DetallePedidoRepository detallePedidoRepository,
                          TiendaRepository tiendaRepository, PagoRepository pagoRepository,
-                         OfertaRepository ofertaRepository, ApplicationEventPublisher eventos) {
+                         OfertaRepository ofertaRepository, CuponService cuponService,
+                         CuponRepository cuponRepository, ApplicationEventPublisher eventos) {
         this.eventos = eventos;
+        this.cuponService = cuponService;
+        this.cuponRepository = cuponRepository;
         this.ofertaRepository = ofertaRepository;
         this.tiendaRepository = tiendaRepository;
         this.pagoRepository = pagoRepository;
@@ -87,7 +92,7 @@ public class PedidoService {
                 .filter(l -> l.getRol() == RolUsuario.CLIENTE && idTienda.equals(l.getIdTienda()))
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El cliente no existe en esta tienda"));
 
-        return crearPedido(idTienda, cliente, r.idDireccionEnvio(), r.lineas());
+        return crearPedido(idTienda, cliente, r.idDireccionEnvio(), r.lineas(), null);
     }
 
     /**
@@ -105,14 +110,15 @@ public class PedidoService {
                 .filter(l -> l.getRol() == RolUsuario.CLIENTE && yo.idTienda().equals(l.getIdTienda()))
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El cliente no existe en esta tienda"));
 
-        return crearPedido(yo.idTienda(), cliente, r.idDireccionEnvio(), r.lineas());
+        return crearPedido(yo.idTienda(), cliente, r.idDireccionEnvio(), r.lineas(), r.codigoCupon());
     }
 
     /**
      * Lógica común de una venta (panel y tienda): valida la dirección, descuenta el stock,
      * toma el precio vigente y guarda pedido + líneas. Debe llamarse dentro de una transacción.
      */
-    private VentaResponse crearPedido(Long idTienda, Login cliente, Long idDireccion, List<LineaVentaRequest> lineasPedidas) {
+    private VentaResponse crearPedido(Long idTienda, Login cliente, Long idDireccion, List<LineaVentaRequest> lineasPedidas,
+                                      String codigoCupon) {
         // 1. La dirección es suya y está activa
         if (!direccionRepository.existsByIdDireccionAndIdLoginAndEstado(idDireccion, cliente.getIdLogin(), (short) 1)) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "La dirección de envío no es de este cliente");
@@ -178,17 +184,26 @@ public class PedidoService {
                     oferta.map(OfertaRepository.Vigente::getNombre).orElse(null)));
         }
 
-        // 4. Guardar el pedido: Java manda el subtotal; el trigger pone número, envío, total e impuesto (IGV, IVA)
+        // 4. Código de descuento (opcional): se revisa con el subtotal real y rebaja el pedido completo.
+        //    Si ya no sirve (venció, se agotó...), 400 y @Transactional devuelve el stock descontado.
+        CuponService.Aplicado cupon = codigoCupon == null || codigoCupon.isBlank() ? null
+                : cuponService.aplicar(idTienda, cliente.getIdLogin(), codigoCupon, subtotal);
+
+        // 5. Guardar el pedido: Java manda el subtotal; el trigger pone número, envío, total e impuesto (IGV, IVA)
         Pedido p = new Pedido();
         p.setIdTienda(idTienda);
         p.setIdLogin(cliente.getIdLogin());
         p.setIdDireccionEnvio(idDireccion);
         p.setCorreoContacto(cliente.getCorreo());
         p.setSubtotal(subtotal);
+        if (cupon != null) {
+            p.setIdCupon(cupon.cupon().getIdCupon());
+            p.setDescuentoCupon(cupon.descuento());
+        }
         pedidoRepository.saveAndFlush(p);
         em.refresh(p);                       // lee lo que completó el trigger
 
-        // 5. Guardar las líneas
+        // 6. Guardar las líneas
         for (DetallePedido d : detalles) {
             d.setIdPedido(p.getIdPedido());
         }
@@ -197,7 +212,7 @@ public class PedidoService {
 
         log.info("Venta registrada: tienda={}, pedido #{} (id={}), {} producto(s), total {} {}",
                 idTienda, p.getNumeroPedido(), p.getIdPedido(), detalles.size(), p.getTotal(), p.getMoneda());
-        return VentaResponse.desde(p, lineas, "SIN_PAGO");
+        return VentaResponse.desde(p, lineas, "SIN_PAGO", cupon == null ? null : cupon.cupon().getCodigo());
     }
 
     // =====================================================================
@@ -412,7 +427,9 @@ public class PedidoService {
                     descuento, nombresOferta.get(d.getIdOferta()));
         }).toList();
         Short estadoPago = estadosDePago(List.of(p.getIdPedido())).get(p.getIdPedido());
-        return VentaResponse.desde(p, lineas, PedidoResumenResponse.nombreEstadoPago(estadoPago));
+        String codigo = p.getIdCupon() == null ? null
+                : cuponRepository.findById(p.getIdCupon()).map(Cupon::getCodigo).orElse(null);
+        return VentaResponse.desde(p, lineas, PedidoResumenResponse.nombreEstadoPago(estadoPago), codigo);
     }
 
     /** Estado de pago de varios pedidos en UNA consulta (los que no tienen pagos no aparecen). */

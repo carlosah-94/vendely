@@ -47,7 +47,7 @@ public class InformeService {
     /** Pedidos pagados de la tienda en [:desde, :hasta). Las demás consultas parten de aquí. */
     private static final String VENTAS = """
             WITH ventas AS (
-                SELECT p.id_pedido, p.id_login, p.total, p.costo_envio, p.estado, p.fecha_creacion
+                SELECT p.id_pedido, p.id_login, p.total, p.costo_envio, p.estado, p.fecha_creacion, p.descuento_cupon
                   FROM pedidos p
                  WHERE p.id_tienda = :idTienda
                    AND p.fecha_creacion >= :desde AND p.fecha_creacion < :hasta
@@ -89,7 +89,8 @@ public class InformeService {
                        (SELECT COALESCE(sum(d.cantidad), 0) FROM detalle_pedido d
                          WHERE d.id_pedido IN (SELECT id_pedido FROM ventas)) AS unidades,
                        (SELECT COALESCE(sum(d.descuento_unitario * d.cantidad), 0) FROM detalle_pedido d
-                         WHERE d.id_pedido IN (SELECT id_pedido FROM ventas)) AS descuentos
+                         WHERE d.id_pedido IN (SELECT id_pedido FROM ventas))
+                         + COALESCE(sum(descuento_cupon), 0) AS descuentos
                   FROM ventas
                 """, p);
         long pedidos = numero(f.get("pedidos"));

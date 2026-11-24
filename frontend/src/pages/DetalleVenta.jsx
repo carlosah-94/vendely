@@ -396,6 +396,12 @@ export default function DetalleVenta() {
             <dt className="text-slate-600">Subtotal</dt>
             <dd>{formatoMoneda(venta.subtotal, venta.moneda)}</dd>
           </div>
+          {Number(venta.descuentoCupon) > 0 && (
+            <div className="flex justify-between">
+              <dt className="text-slate-600">Código {venta.codigoCupon}</dt>
+              <dd>- {formatoMoneda(venta.descuentoCupon, venta.moneda)}</dd>
+            </div>
+          )}
           <div className="flex justify-between">
             <dt className="text-slate-600">Envío</dt>
             <dd>{formatoMoneda(venta.costoEnvio, venta.moneda)}</dd>
