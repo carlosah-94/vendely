@@ -5,6 +5,8 @@ import { usarMoneda } from '../utils/formato';
 const CLAVE_TIENDA = 'vendely_tienda';
 /** Aviso para que el menú y la página elegida usen la misma tienda al cambiarla. */
 const EVENTO_TIENDA = 'vendely:tienda-cambiada';
+/** Aviso para que todas las listas de tiendas (menú, selector, páginas) se vuelvan a cargar. */
+const EVENTO_RECARGAR = 'vendely:tiendas-recargar';
 
 function leerGuardada() {
   try {
@@ -52,8 +54,13 @@ export function useTiendaActual(activo = true) {
   // también la cambia: así muestra las opciones que esa cuenta tiene en ESA tienda.
   useEffect(() => {
     const alCambiar = (e) => setIdTienda(e.detail);
+    const alRecargar = () => setVersion((v) => v + 1);
     window.addEventListener(EVENTO_TIENDA, alCambiar);
-    return () => window.removeEventListener(EVENTO_TIENDA, alCambiar);
+    window.addEventListener(EVENTO_RECARGAR, alRecargar);
+    return () => {
+      window.removeEventListener(EVENTO_TIENDA, alCambiar);
+      window.removeEventListener(EVENTO_RECARGAR, alRecargar);
+    };
   }, []);
 
   function cambiarTienda(id) {
@@ -69,6 +76,7 @@ export function useTiendaActual(activo = true) {
   const tienda = tiendas.find((t) => t.idTienda === idTienda) ?? null;
   // Los montos de la pantalla (precios, envíos, ventas) se muestran en la moneda de esta tienda.
   usarMoneda(tienda?.moneda);
-  const recargar = () => setVersion((v) => v + 1);
+  // Al crear o editar una tienda se recargan TODAS las listas (también la del selector del menú).
+  const recargar = () => window.dispatchEvent(new Event(EVENTO_RECARGAR));
   return { tiendas, tienda, idTienda, cambiarTienda, recargar, cargando, error };
 }

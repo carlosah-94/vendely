@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import CampoPanel from '../components/CampoPanel';
 import Mensaje from '../components/Mensaje';
 import { IconoCerrar, IconoCopiar, IconoEnlaceExterno, IconoMas, IconoTienda } from '../components/Iconos';
@@ -30,7 +31,14 @@ export default function MisTiendas() {
   const esEmpleado = usuario?.rol === 'EMPLEADO';
   const { avisar } = useToast();
   const [copiada, setCopiada] = useState(null);
-  const [creando, setCreando] = useState(false);
+  const [creandoAqui, setCreandoAqui] = useState(false);
+  // "Crear tienda" del selector del menú llega con ?crear=1 y abre el formulario directo.
+  const [params, setParams] = useSearchParams();
+  const creando = creandoAqui || params.get('crear') === '1';
+  function setCreando(valor) {
+    setCreandoAqui(valor);
+    if (!valor && params.has('crear')) setParams({}, { replace: true });
+  }
 
   async function copiar(idTienda, enlace) {
     try {

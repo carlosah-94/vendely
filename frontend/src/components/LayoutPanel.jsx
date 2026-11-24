@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Campanita from './Campanita';
+import MenuCuenta from './MenuCuenta';
 import { ToastProvider } from '../context/ToastContext';
 import { useTiendaActual } from '../hooks/useTiendaActual';
 import {
-  IconoBuscar, IconoCategoria, IconoCheck, IconoClientes, IconoCuenta, IconoDescuento, IconoEmpleados, IconoInforme, IconoEnlaceExterno, IconoEnvio, IconoInicio,
-  IconoInventario, IconoMenu, IconoPedidos, IconoProductos, IconoSalir, IconoTienda,
+  IconoBuscar, IconoCategoria, IconoCheck, IconoClientes, IconoDescuento, IconoEmpleados, IconoInforme, IconoEnlaceExterno, IconoEnvio, IconoInicio,
+  IconoInventario, IconoMenu, IconoPedidos, IconoProductos, IconoTienda,
 } from './Iconos';
 import { esDuenoDe, puede } from '../utils/permisos';
 import MarcaVendely from './marca/MarcaVendely';
@@ -32,7 +33,6 @@ const MENU_TIENDA = [
   { ruta: '/panel/tiendas', texto: 'Mis tiendas', icono: IconoTienda },
   { ruta: '/panel/empleados', texto: 'Empleados', icono: IconoEmpleados, soloDueno: true },
   { ruta: '/panel/plan', texto: 'Plan', icono: IconoCheck, soloDueno: true },
-  { ruta: '/cuenta/seguridad', texto: 'Seguridad', icono: IconoCuenta },
 ];
 
 /** Opciones del menú según el rol de la cuenta. */
@@ -43,7 +43,6 @@ const MENU = {
     { ruta: '/admin/tiendas', texto: 'Tiendas de Vendely', icono: IconoTienda },
     { ruta: '/admin/cuentas', texto: 'Cuentas', icono: IconoClientes },
     { ruta: '/admin/planes', texto: 'Planes', icono: IconoCheck },
-    { ruta: '/cuenta/seguridad', texto: 'Seguridad', icono: IconoCuenta },
   ],
 };
 
@@ -59,7 +58,7 @@ const NOMBRE_ROL = {
  * En el celular el menú se esconde y se abre con el botón de tres rayas.
  */
 export default function LayoutPanel() {
-  const { usuario, cerrarSesion } = useAuth();
+  const { usuario } = useAuth();
   const navigate = useNavigate();
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [busqueda, setBusqueda] = useState('');
@@ -91,7 +90,9 @@ export default function LayoutPanel() {
   }
 
   const menu = (
-    <nav className="flex h-full flex-col gap-0.5 text-[13px]">
+    <nav className="flex h-full flex-col text-[13px]">
+      {/* Las opciones se desplazan solas si no caben; la tienda y la cuenta quedan siempre abajo, a la vista */}
+      <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
       {opciones.map(({ ruta, texto, icono: Icono, exacta, sub }) => (
         <NavLink
           key={ruta}
@@ -131,13 +132,12 @@ export default function LayoutPanel() {
         </NavLink>
       ))}
 
-      <button
-        onClick={cerrarSesion}
-        className="mt-auto flex h-[30px] items-center gap-2.5 rounded-xl px-2.5 text-left text-[#dcdcdc] hover:bg-[#1f1f1f]"
-      >
-        <IconoSalir tamano={17} />
-        Cerrar sesión
-      </button>
+      </div>
+
+      {/* Abajo: la tienda con la que se trabaja (para cambiarla) y la cuenta (perfil, seguridad, salir) */}
+      <div className="mt-2 shrink-0 border-t border-[#262626] pt-2">
+        <MenuCuenta alNavegar={() => setMenuAbierto(false)} />
+      </div>
     </nav>
   );
 
@@ -175,19 +175,22 @@ export default function LayoutPanel() {
           <div className="ml-auto flex items-center gap-2.5 sm:ml-0 md:w-52 md:justify-end">
             {/* Pedidos nuevos en vivo (issue #4). Va dentro del ToastProvider, que muestra el aviso. */}
             {esPanelTienda && permite('PEDIDOS') && <Campanita />}
-            <div className="hidden text-right leading-tight lg:block">
-              <p className="text-[13px] font-medium text-white">{usuario.nombres} {usuario.primerApellido}</p>
-              <p className="text-[12px] text-[#8a8a8a]">{NOMBRE_ROL[usuario.rol] ?? usuario.rol}</p>
-            </div>
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--v-mango)] text-[13px] font-bold text-[var(--v-tinta)]">
-              {inicial}
-            </span>
+            <Link to="/cuenta/perfil" title="Mi perfil" className="flex items-center gap-2.5 rounded-xl px-1.5 py-1 hover:bg-[#1f1f1f]">
+              <span className="hidden text-right leading-tight lg:block">
+                <span className="block text-[13px] font-medium text-white">{usuario.nombres} {usuario.primerApellido}</span>
+                <span className="block text-[12px] text-[#8a8a8a]">{NOMBRE_ROL[usuario.rol] ?? usuario.rol}</span>
+              </span>
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--v-mango)] text-[13px] font-bold text-[var(--v-tinta)]">
+                {inicial}
+              </span>
+            </Link>
           </div>
         </header>
 
         <div className="flex min-h-0 flex-1">
           {/* Menú lateral (escritorio) */}
-          <aside className="hidden w-60 shrink-0 px-3 pb-4 pt-1 md:block">{menu}</aside>
+          {/* Fijo al alto de la ventana: el selector de tienda de abajo siempre se ve */}
+          <aside className="hidden w-60 shrink-0 px-3 pb-3 pt-1 md:sticky md:top-0 md:block md:h-[calc(100vh-3.5rem)] md:self-start">{menu}</aside>
 
           {/* Menú lateral (celular): se abre encima del contenido */}
           {menuAbierto && (
