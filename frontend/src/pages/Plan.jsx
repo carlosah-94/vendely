@@ -16,6 +16,7 @@ function beneficios(p) {
   return [
     p.maxProductos == null ? 'Productos ilimitados' : `Hasta ${p.maxProductos} productos`,
     `Comisión de Vendely: ${Number(p.comision)} % por venta`,
+    !p.maxEmpleados ? 'Solo el dueño entra al panel' : `Hasta ${p.maxEmpleados} ${p.maxEmpleados === 1 ? 'empleado' : 'empleados'} con sus permisos`,
     p.permitePersonalizar ? 'Tu logo, tu color y barra de anuncio' : 'Colores de Vendely',
     p.permitePlantillas ? 'Elige plantilla: Clásica, Moderna o Boutique' : 'Plantilla Clásica',
     p.permiteMasMetodosPago ? 'PayPal y más métodos de pago' : 'Pago con PayPal',

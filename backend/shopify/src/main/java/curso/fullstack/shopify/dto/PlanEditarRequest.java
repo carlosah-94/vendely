@@ -3,6 +3,7 @@ package curso.fullstack.shopify.dto;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
@@ -26,5 +27,9 @@ public record PlanEditarRequest(
         @NotNull Boolean permitePersonalizar,
         @NotNull Boolean permitePlantillas,
         @NotNull Boolean permiteEnvioInternacional,
-        @NotNull Boolean permiteMasMetodosPago
+        @NotNull Boolean permiteMasMetodosPago,
+        @NotNull(message = "Indica cuantos empleados permite")
+        @Min(value = 0, message = "Los empleados van de 0 a 1000")
+        @Max(value = 1000, message = "Los empleados van de 0 a 1000")
+        Short maxEmpleados
 ) {}

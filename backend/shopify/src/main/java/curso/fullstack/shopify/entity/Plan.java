@@ -57,6 +57,10 @@ public class Plan {
     @Column(name = "permite_mas_metodos_pago", nullable = false)
     private Boolean permiteMasMetodosPago = false;
 
+    /** Cuantos empleados activos permite (0 = solo el dueño). */
+    @Column(name = "max_empleados", nullable = false)
+    private Short maxEmpleados = 0;
+
     /** 1 se ofrece · 0 ya no se vende */
     @Column(name = "estado", nullable = false)
     private Short estado = 1;

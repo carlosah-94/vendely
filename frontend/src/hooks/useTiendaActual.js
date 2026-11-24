@@ -3,6 +3,8 @@ import { api, mensajeDeError } from '../services/api';
 import { usarMoneda } from '../utils/formato';
 
 const CLAVE_TIENDA = 'vendely_tienda';
+/** Aviso para que el menú y la página elegida usen la misma tienda al cambiarla. */
+const EVENTO_TIENDA = 'vendely:tienda-cambiada';
 
 function leerGuardada() {
   try {
@@ -14,7 +16,8 @@ function leerGuardada() {
 
 /**
  * Las rutas del panel llevan el número de tienda (/panel/tiendas/{idTienda}/...),
- * porque un dueño puede tener varias. Este hook carga las tiendas del dueño y
+ * porque un dueño puede tener varias (y un empleado puede trabajar en varias). Cada tienda trae
+ * esDueno y permisos: lo que esta cuenta puede hacer en ella. Este hook carga las tiendas del dueño y
  * decide con cuál se trabaja: la última elegida si sigue siendo suya, o la primera.
  *
  * Lo pueden usar todas las pantallas del panel (ventas, clientes, productos).
@@ -39,6 +42,14 @@ export function useTiendaActual() {
       .finally(() => setCargando(false));
   }, [version]);
 
+  // Si otra parte del panel cambia la tienda (por ejemplo el selector de una página), el menú
+  // también la cambia: así muestra las opciones que esa cuenta tiene en ESA tienda.
+  useEffect(() => {
+    const alCambiar = (e) => setIdTienda(e.detail);
+    window.addEventListener(EVENTO_TIENDA, alCambiar);
+    return () => window.removeEventListener(EVENTO_TIENDA, alCambiar);
+  }, []);
+
   function cambiarTienda(id) {
     try {
       localStorage.setItem(CLAVE_TIENDA, String(id));
@@ -46,6 +57,7 @@ export function useTiendaActual() {
       // Si el navegador no deja guardar, solo se pierde la elección al recargar.
     }
     setIdTienda(id);
+    window.dispatchEvent(new CustomEvent(EVENTO_TIENDA, { detail: id }));
   }
 
   const tienda = tiendas.find((t) => t.idTienda === idTienda) ?? null;

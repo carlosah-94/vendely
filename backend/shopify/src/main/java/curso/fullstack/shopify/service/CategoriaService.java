@@ -1,5 +1,6 @@
 package curso.fullstack.shopify.service;
 
+import curso.fullstack.shopify.entity.PermisoTienda;
 import curso.fullstack.shopify.dto.CategoriaRequest;
 import curso.fullstack.shopify.dto.CategoriaResponse;
 import curso.fullstack.shopify.entity.Categoria;
@@ -39,13 +40,13 @@ public class CategoriaService {
 
     @Transactional(readOnly = true)
     public List<CategoriaResponse> listar(UsuarioAutenticado yo, Long idTienda) {
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.PRODUCTOS);
         return categoriaRepository.filasDeTienda(idTienda).stream().map(CategoriaResponse::desde).toList();
     }
 
     @Transactional
     public CategoriaResponse crear(UsuarioAutenticado yo, Long idTienda, CategoriaRequest r) {
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.PRODUCTOS);
         String slug = slug(r.nombre());
         if (categoriaRepository.existsByIdTiendaAndSlug(idTienda, slug)) {
             throw new ApiException(HttpStatus.CONFLICT, "Ya hay una categoría con ese nombre");
@@ -60,7 +61,7 @@ public class CategoriaService {
 
     @Transactional
     public CategoriaResponse actualizar(UsuarioAutenticado yo, Long idTienda, Long idCategoria, CategoriaRequest r) {
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.PRODUCTOS);
         Categoria c = buscar(idTienda, idCategoria);
         String slug = slug(r.nombre());
         if (categoriaRepository.existsByIdTiendaAndSlugAndIdCategoriaNot(idTienda, slug, idCategoria)) {
@@ -75,7 +76,7 @@ public class CategoriaService {
     /** Borra la categoría. Los productos NO se borran: solo dejan de estar en ella (ON DELETE CASCADE). */
     @Transactional
     public void eliminar(UsuarioAutenticado yo, Long idTienda, Long idCategoria) {
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.PRODUCTOS);
         categoriaRepository.delete(buscar(idTienda, idCategoria));
         categoriaRepository.flush();
         log.info("Categoría eliminada: idCategoria={}, tienda={}", idCategoria, idTienda);

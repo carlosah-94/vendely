@@ -6,5 +6,7 @@ public enum FuncionPlan {
     PERSONALIZAR,
     PLANTILLAS,
     ENVIO_INTERNACIONAL,
-    METODOS_PAGO
+    METODOS_PAGO,
+    /** Agregar un empleado mas (cuenta los activos contra planes.max_empleados). */
+    AGREGAR_EMPLEADO
 }

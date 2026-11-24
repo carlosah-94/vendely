@@ -41,6 +41,8 @@ export const EVENTO_ACCESO_DENEGADO = "vendely:acceso-denegado";
 // mismo formulario (por ejemplo, contraseña incorrecta).
 // Un 403 por el PLAN ("Mejora tu plan para usar esto") tampoco: la cuenta sí tiene
 // permiso, solo que su plan no incluye esa función. Se muestra como mensaje en la pantalla.
+// Lo mismo con lo que un EMPLEADO no puede hacer en una tienda donde sí trabaja (por ejemplo,
+// "Solo el dueño de la tienda puede hacer esto"): se avisa ahí mismo.
 api.interceptors.response.use(
   (respuesta) => respuesta,
   (error) => {
@@ -51,12 +53,22 @@ api.interceptors.response.use(
       window.dispatchEvent(new Event(EVENTO_SESION_EXPIRADA));
     }
     const esLimiteDePlan = esErrorDePlan(error);
-    if (estado === 403 && !esAuth && !esLimiteDePlan) {
+    if (estado === 403 && !esAuth && !esLimiteDePlan && !esErrorDeEmpleado(error)) {
       window.dispatchEvent(new Event(EVENTO_ACCESO_DENEGADO));
     }
     return Promise.reject(error);
   },
 );
+
+/** true si es un empleado que intentó algo que su dueño no le permitió (o que solo hace el dueño). */
+export function esErrorDeEmpleado(error) {
+  const mensaje = error.response?.data?.mensaje ?? "";
+  return (
+    error.response?.status === 403 &&
+    (mensaje.includes("Tu cuenta de empleado") || mensaje.includes("Solo el dueño") ||
+      mensaje.includes("suspendió tu acceso") || mensaje.includes("ya no incluye empleados"))
+  );
+}
 
 /** true si el backend rechazó la acción porque el plan de la tienda no la incluye. */
 export function esErrorDePlan(error) {

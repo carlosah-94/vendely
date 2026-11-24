@@ -28,7 +28,7 @@ const PASOS = [
  */
 export default function Portada() {
   const { usuario } = useAuth();
-  const tienePanel = usuario && (usuario.rol === 'ADMIN_TIENDA' || usuario.rol === 'SUPERADMIN');
+  const tienePanel = usuario && (['ADMIN_TIENDA', 'EMPLEADO', 'SUPERADMIN'].includes(usuario.rol));
 
   return (
     <div className="min-h-screen bg-black text-white">

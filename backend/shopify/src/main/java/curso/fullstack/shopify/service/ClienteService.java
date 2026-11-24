@@ -1,5 +1,6 @@
 package curso.fullstack.shopify.service;
 
+import curso.fullstack.shopify.entity.PermisoTienda;
 import curso.fullstack.shopify.dto.ClienteActualizarRequest;
 import curso.fullstack.shopify.dto.ClienteCrearRequest;
 import curso.fullstack.shopify.dto.ClienteResponse;
@@ -30,8 +31,10 @@ import org.springframework.transaction.annotation.Transactional;
  * CRUD de clientes desde el panel del dueño (issue #9 · RF1 · rúbrica 1.1).
  *
  * Un cliente es una fila de "login" con rol CLIENTE (3) y la tienda donde está registrado.
- * Todas las operaciones empiezan con verificadorTienda.delDueno(...): así un dueño solo
- * gestiona los clientes de SUS tiendas (403 si la tienda es de otro, 404 si no existe).
+ * Todas las operaciones empiezan con verificadorTienda.conPermiso(...): así solo el dueño, o un
+ * empleado con permiso de clientes, gestiona los clientes de esa tienda (403 si no, 404 si no
+ * existe). Leerlos también se permite con el permiso de pedidos: quien atiende un pedido
+ * necesita ver a quién se lo envía.
  */
 @Slf4j
 @Service
@@ -66,7 +69,7 @@ public class ClienteService {
     /** Lista de clientes de la tienda. Sin direcciones, para que la respuesta sea liviana. */
     @Transactional(readOnly = true)
     public List<ClienteResponse> listar(UsuarioAutenticado yo, Long idTienda) {
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.CLIENTES, PermisoTienda.PEDIDOS);
         return loginRepository.findByIdTiendaAndIdRolOrderByFechaCreacionDesc(idTienda, CLIENTE).stream()
                 .map(l -> ClienteResponse.desde(l, null))
                 .toList();
@@ -75,7 +78,7 @@ public class ClienteService {
     /** Ficha de un cliente con su dirección. */
     @Transactional(readOnly = true)
     public ClienteResponse ver(UsuarioAutenticado yo, Long idTienda, Long idCliente) {
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.CLIENTES, PermisoTienda.PEDIDOS);
         Login cliente = buscarEnTienda(idCliente, idTienda);
         return ClienteResponse.desde(cliente, direccionDe(cliente.getIdLogin()));
     }
@@ -88,7 +91,7 @@ public class ClienteService {
      */
     @Transactional
     public ClienteResponse crear(UsuarioAutenticado yo, Long idTienda, ClienteCrearRequest r) {
-        Tienda tienda = verificadorTienda.delDueno(yo, idTienda);
+        Tienda tienda = verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.CLIENTES);
         // La base exige el correo en minúsculas (CHECK ck_login_correo); se normaliza aquí.
         String correo = normalizarCorreo(r.correo());
 
@@ -136,7 +139,7 @@ public class ClienteService {
 
     @Transactional
     public ClienteResponse actualizar(UsuarioAutenticado yo, Long idTienda, Long idCliente, ClienteActualizarRequest r) {
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.CLIENTES);
         Login l = buscarEnTienda(idCliente, idTienda);
         String correo = normalizarCorreo(r.correo());
 
@@ -174,7 +177,7 @@ public class ClienteService {
      */
     @Transactional
     public void eliminar(UsuarioAutenticado yo, Long idTienda, Long idCliente) {
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.CLIENTES);
         Login l = buscarEnTienda(idCliente, idTienda);
 
         if (pedidoRepository.existsByIdLogin(idCliente)) {

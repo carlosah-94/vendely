@@ -51,6 +51,17 @@ class CanalesTest {
     }
 
     @Test
+    void unEmpleadoEscuchaSoloLosCanalesQueSuPermisoLeDa() {
+        UsuarioAutenticado empleado = new UsuarioAutenticado(40L, RolUsuario.EMPLEADO, null, "e@x.pe");
+        // Trabaja en la tienda 1 solo con el permiso de pedidos (lo decide VerificadorTienda).
+        Canales.AccesoTienda soloPedidos = (u, idTienda, canal) -> idTienda == 1L && "pedidos".equals(canal);
+
+        assertTrue(Canales.puedeEscuchar(empleado, "/topic/tiendas/1/pedidos", soloPedidos));
+        assertFalse(Canales.puedeEscuchar(empleado, "/topic/tiendas/1/inventario", soloPedidos));
+        assertFalse(Canales.puedeEscuchar(empleado, "/topic/tiendas/2/pedidos", soloPedidos));
+    }
+
+    @Test
     void elSuperadminNoEntraALosCanalesDeUnaTienda() {
         assertFalse(Canales.puedeEscuchar(ADMIN, "/topic/tiendas/1/pedidos", (u, t) -> true));
     }

@@ -10,6 +10,7 @@ import { formatoFecha } from '../../utils/formato';
 const PESTANAS = [
   { valor: 'TODAS', texto: 'Todas' },
   { valor: 'ADMIN_TIENDA', texto: 'Dueños' },
+  { valor: 'EMPLEADO', texto: 'Empleados' },
   { valor: 'CLIENTE', texto: 'Clientes' },
   { valor: 'SUPERADMIN', texto: 'Administradores' },
 ];
@@ -17,6 +18,7 @@ const PESTANAS = [
 const ROL = {
   SUPERADMIN: { texto: 'Administrador', estilo: 'bg-[#303030] text-white' },
   ADMIN_TIENDA: { texto: 'Dueño', estilo: 'bg-[#eaf4ff] text-[#00527c]' },
+  EMPLEADO: { texto: 'Empleado', estilo: 'bg-[#f1e9ff] text-[#4c1d95]' },
   CLIENTE: { texto: 'Cliente', estilo: 'bg-[#e3e3e3] text-[#4a4a4a]' },
 };
 
@@ -174,6 +176,7 @@ export default function AdminCuentas() {
                     {c.rol === 'CLIENTE' && c.tienda}
                     {c.rol === 'ADMIN_TIENDA' && `${c.tiendasPropias} ${c.tiendasPropias === 1 ? 'tienda' : 'tiendas'}`}
                     {c.rol === 'SUPERADMIN' && <span className="text-[#8a8a8a]">Toda la plataforma</span>}
+                    {c.rol === 'EMPLEADO' && <span className="text-[#8a8a8a]">Trabaja en tiendas de otros</span>}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-[#616161]">{formatoFecha(c.fechaCreacion)}</td>
                   <td className="px-4 py-3">

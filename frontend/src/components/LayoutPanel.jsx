@@ -5,27 +5,37 @@ import Campanita from './Campanita';
 import { ToastProvider } from '../context/ToastContext';
 import { useTiendaActual } from '../hooks/useTiendaActual';
 import {
-  IconoBuscar, IconoCheck, IconoClientes, IconoCuenta, IconoEnlaceExterno, IconoEnvio, IconoInicio, IconoMenu, IconoPedidos,
-  IconoProductos, IconoSalir, IconoTienda,
+  IconoBuscar, IconoCategoria, IconoCheck, IconoClientes, IconoCuenta, IconoEmpleados, IconoEnlaceExterno, IconoEnvio, IconoInicio,
+  IconoInventario, IconoMenu, IconoPedidos, IconoProductos, IconoSalir, IconoTienda,
 } from './Iconos';
+import { esDuenoDe, puede } from '../utils/permisos';
 
 /**
- * Opciones del menú según el rol de la cuenta.
+ * Menú del panel de la tienda (dueño y empleados).
  * sub = opción que cuelga de la anterior (como Inventario bajo Productos en Shopify).
+ * permiso = la ve el dueño o un empleado con ese permiso · soloDueno = solo la ve el dueño.
+ * iconoSolo = el ícono de una sub-opción cuando su opción de arriba no se muestra (por ejemplo,
+ * un empleado con Inventario pero sin Productos): entonces va como opción principal.
+ * Sin permiso ni soloDueno, la ven todos.
  */
+const MENU_TIENDA = [
+  { ruta: '/panel', texto: 'Inicio', icono: IconoInicio, exacta: true },
+  { ruta: '/panel/ventas', texto: 'Pedidos', icono: IconoPedidos, permiso: 'PEDIDOS' },
+  { ruta: '/panel/productos', texto: 'Productos', icono: IconoProductos, exacta: true, permiso: 'PRODUCTOS' },
+  { ruta: '/panel/productos/inventario', texto: 'Inventario', sub: true, permiso: 'INVENTARIO', iconoSolo: IconoInventario },
+  { ruta: '/panel/productos/categorias', texto: 'Categorías', sub: true, permiso: 'PRODUCTOS', iconoSolo: IconoCategoria },
+  { ruta: '/panel/clientes', texto: 'Clientes', icono: IconoClientes, permiso: 'CLIENTES' },
+  { ruta: '/panel/envios', texto: 'Envíos', icono: IconoEnvio, soloDueno: true },
+  { ruta: '/panel/tiendas', texto: 'Mis tiendas', icono: IconoTienda },
+  { ruta: '/panel/empleados', texto: 'Empleados', icono: IconoEmpleados, soloDueno: true },
+  { ruta: '/panel/plan', texto: 'Plan', icono: IconoCheck, soloDueno: true },
+  { ruta: '/cuenta/seguridad', texto: 'Seguridad', icono: IconoCuenta },
+];
+
+/** Opciones del menú según el rol de la cuenta. */
 const MENU = {
-  ADMIN_TIENDA: [
-    { ruta: '/panel', texto: 'Inicio', icono: IconoInicio, exacta: true },
-    { ruta: '/panel/ventas', texto: 'Pedidos', icono: IconoPedidos },
-    { ruta: '/panel/productos', texto: 'Productos', icono: IconoProductos, exacta: true },
-    { ruta: '/panel/productos/inventario', texto: 'Inventario', sub: true },
-    { ruta: '/panel/productos/categorias', texto: 'Categorías', sub: true },
-    { ruta: '/panel/clientes', texto: 'Clientes', icono: IconoClientes },
-    { ruta: '/panel/envios', texto: 'Envíos', icono: IconoEnvio },
-    { ruta: '/panel/tiendas', texto: 'Mis tiendas', icono: IconoTienda },
-    { ruta: '/panel/plan', texto: 'Plan', icono: IconoCheck },
-    { ruta: '/cuenta/seguridad', texto: 'Seguridad', icono: IconoCuenta },
-  ],
+  ADMIN_TIENDA: MENU_TIENDA,
+  EMPLEADO: MENU_TIENDA,
   SUPERADMIN: [
     { ruta: '/admin/tiendas', texto: 'Tiendas de Vendely', icono: IconoTienda },
     { ruta: '/admin/cuentas', texto: 'Cuentas', icono: IconoClientes },
@@ -36,6 +46,7 @@ const MENU = {
 
 const NOMBRE_ROL = {
   ADMIN_TIENDA: 'Dueño de tienda',
+  EMPLEADO: 'Empleado',
   SUPERADMIN: 'Administrador de Vendely',
 };
 
@@ -50,8 +61,22 @@ export default function LayoutPanel() {
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [busqueda, setBusqueda] = useState('');
 
-  const opciones = MENU[usuario.rol] ?? [];
-  const esDueno = usuario.rol === 'ADMIN_TIENDA';
+  const { tienda } = useTiendaActual();
+  const esPanelTienda = usuario.rol === 'ADMIN_TIENDA' || usuario.rol === 'EMPLEADO';
+  // Mientras carga la tienda elegida, el dueño ve su menú completo; un empleado, solo lo común.
+  const duenoAqui = usuario.rol === 'ADMIN_TIENDA' && (!tienda || esDuenoDe(tienda));
+  const permite = (permiso) => usuario.rol === 'ADMIN_TIENDA' ? duenoAqui : puede(tienda, permiso);
+  const visible = (o) => (o.soloDueno ? duenoAqui : o.permiso ? permite(o.permiso) : true);
+  const opciones = [];
+  let padreVisible = false;
+  for (const o of MENU[usuario.rol] ?? []) {
+    if (!o.sub) {
+      padreVisible = visible(o);
+    }
+    if (visible(o)) {
+      opciones.push(o.sub && !padreVisible ? { ...o, sub: false, icono: o.iconoSolo } : o);
+    }
+  }
   const inicial = (usuario.nombres ?? '?').trim().charAt(0).toUpperCase();
 
   // La búsqueda de arriba lleva a Productos con el texto escrito (como en Shopify).
@@ -80,10 +105,14 @@ export default function LayoutPanel() {
         </NavLink>
       ))}
 
-      {esDueno && (
+      {esPanelTienda && tienda && (
         <>
           <p className="mt-5 mb-1 px-2.5 text-[12px] font-medium text-[#8a8a8a]">Canales de venta</p>
           <VerTienda />
+        </>
+      )}
+      {duenoAqui && (
+        <>
           <NavLink
             to="/panel/personalizar"
             onClick={() => setMenuAbierto(false)}
@@ -122,7 +151,7 @@ export default function LayoutPanel() {
           </button>
           <span className="text-[17px] font-semibold tracking-tight text-white md:w-52">Vendely</span>
 
-          {esDueno ? (
+          {esPanelTienda && permite('PRODUCTOS') ? (
             <form onSubmit={buscar} className="mx-auto hidden w-full max-w-lg sm:block">
               <label className="flex items-center gap-2 rounded-xl border border-[#333] bg-[#1f1f1f] px-3 py-1.5 text-[#b5b5b5] focus-within:border-[#5c5c5c]">
                 <IconoBuscar tamano={16} />
@@ -141,7 +170,7 @@ export default function LayoutPanel() {
 
           <div className="ml-auto flex items-center gap-2.5 sm:ml-0 md:w-52 md:justify-end">
             {/* Pedidos nuevos en vivo (issue #4). Va dentro del ToastProvider, que muestra el aviso. */}
-            {esDueno && <Campanita />}
+            {esPanelTienda && permite('PEDIDOS') && <Campanita />}
             <div className="hidden text-right leading-tight lg:block">
               <p className="text-[13px] font-medium text-white">{usuario.nombres} {usuario.primerApellido}</p>
               <p className="text-[12px] text-[#8a8a8a]">{NOMBRE_ROL[usuario.rol] ?? usuario.rol}</p>

@@ -13,11 +13,12 @@ public record PlanResponse(
         Boolean permitePersonalizar,
         Boolean permitePlantillas,
         Boolean permiteEnvioInternacional,
-        Boolean permiteMasMetodosPago
+        Boolean permiteMasMetodosPago,
+        Short maxEmpleados             // 0 = solo el dueño
 ) {
     public static PlanResponse desde(Plan p) {
         return new PlanResponse(p.getIdPlan(), p.getNombre(), p.getPrecioUsd(), p.getMaxProductos(), p.getComision(),
                 p.getPermitePersonalizar(), p.getPermitePlantillas(), p.getPermiteEnvioInternacional(),
-                p.getPermiteMasMetodosPago());
+                p.getPermiteMasMetodosPago(), p.getMaxEmpleados());
     }
 }
