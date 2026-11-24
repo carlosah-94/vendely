@@ -25,6 +25,7 @@ import Perfil from './pages/Perfil';
 import Plan from './pages/Plan';
 import Portada from './pages/Portada';
 import Productos from './pages/Productos';
+import RecuperarContrasena from './pages/RecuperarContrasena';
 import Registro from './pages/Registro';
 import Seguridad from './pages/Seguridad';
 import Ventas from './pages/Ventas';
@@ -35,6 +36,7 @@ import Checkout from './pages/tienda/Checkout';
 import DetalleProducto from './pages/tienda/DetalleProducto';
 import IngresarCliente from './pages/tienda/IngresarCliente';
 import MisPedidos from './pages/tienda/MisPedidos';
+import RecuperarCliente from './pages/tienda/RecuperarCliente';
 import ResultadoPago from './pages/tienda/ResultadoPago';
 import Vitrina from './pages/tienda/Vitrina';
 
@@ -43,6 +45,7 @@ export default function App() {
     <Routes>
       {/* Públicas */}
       <Route path="/login" element={<Login />} />
+      <Route path="/recuperar" element={<RecuperarContrasena />} />
       <Route path="/registro" element={<Registro />} />
       <Route path="/acceso-denegado" element={<AccesoDenegado />} />
       <Route path="/" element={<Portada />} />
@@ -55,6 +58,7 @@ export default function App() {
         <Route path="producto/:idProducto" element={<DetalleProducto />} />
         <Route path="carrito" element={<Carrito />} />
         <Route path="ingresar" element={<IngresarCliente />} />
+        <Route path="recuperar" element={<RecuperarCliente />} />
         <Route element={<RequiereCliente />}>
           <Route path="checkout" element={<Checkout />} />
           <Route path="pago/resultado" element={<ResultadoPago />} />

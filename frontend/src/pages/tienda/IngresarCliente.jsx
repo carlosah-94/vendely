@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Navigate, useLocation, useNavigate, useOutletContext } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate, useOutletContext } from 'react-router-dom';
 import Campo from '../../components/Campo';
 import { useAuth } from '../../context/AuthContext';
 import { mensajeDeError } from '../../services/api';
@@ -32,7 +32,11 @@ export default function IngresarCliente() {
   // Si el cliente elige otro país, el prefijo cambia solo.
   const [paises, setPaises] = useState([]);
   const [idPais, setIdPais] = useState(tienda.idPais);
-  const [datos, setDatos] = useState({ ...VACIO, telefono: tienda.idPais === 'CL' ? '+56' : '+51' });
+  // Al volver de "¿Olvidaste tu contraseña?" llega el correo y un aviso de que ya cambió.
+  const [datos, setDatos] = useState({
+    ...VACIO, correo: location.state?.correo ?? '', telefono: tienda.idPais === 'CL' ? '+56' : '+51',
+  });
+  const aviso = location.state?.aviso;
   const [errores, setErrores] = useState({});
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -241,6 +245,9 @@ export default function IngresarCliente() {
 
       <form onSubmit={enviar} className="mt-6 space-y-4" noValidate={false}>
         {error && <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        {aviso && !error && !registro && (
+          <p className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">{aviso}</p>
+        )}
 
         {registro && (
           <>
@@ -289,6 +296,17 @@ export default function IngresarCliente() {
             className={estiloInput(errores.contrasena)}
           />
         </Campo>
+        {!registro && (
+          <div className="-mt-2 text-right">
+            <Link
+              to={`/tienda/${subdominio}/recuperar`}
+              state={{ ...location.state, aviso: undefined, correo: datos.correo }}
+              className="text-sm font-medium text-[#303030] underline-offset-4 hover:underline"
+            >
+              ¿Olvidaste tu contraseña?
+            </Link>
+          </div>
+        )}
 
         <button
           type="submit"

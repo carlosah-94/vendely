@@ -105,6 +105,21 @@ public class VerificacionCorreoService {
             throw new ApiException(HttpStatus.CONFLICT, mensaje, Map.of("correo", mensaje));
         }
 
+        return generar(correo, tienda == null ? "Vendely" : tienda.getNombre(), false);
+    }
+
+    /**
+     * Código para restablecer la contraseña (RecuperacionContrasenaService ya revisó que la cuenta
+     * existe). A diferencia del registro, se exige SIEMPRE, aunque VERIFICAR_CORREO esté apagado:
+     * sin él, cualquiera podría cambiar la contraseña de otra cuenta.
+     */
+    @Transactional
+    public CodigoEnviadoResponse enviarRecuperacion(String correoCrudo, String para) {
+        return generar(normalizar(correoCrudo), para, true);
+    }
+
+    /** Genera el código, guarda su hash y lo envía. Respeta la espera de un minuto entre envíos. */
+    private CodigoEnviadoResponse generar(String correo, String para, boolean recuperacion) {
         OffsetDateTime ahora = OffsetDateTime.now();
         VerificacionCorreo v = verificaciones.bloquear(correo).orElseGet(VerificacionCorreo::new);
         if (v.getEnviadoEn() != null && v.getEnviadoEn().plus(ESPERA_REENVIO).isAfter(ahora)) {
@@ -123,7 +138,7 @@ public class VerificacionCorreoService {
 
         // Si el correo no sale, la transacción se deshace: no queda un código que nadie recibió
         // ni la espera de un minuto para pedir otro.
-        mandar(correo, codigo, tienda == null ? "Vendely" : tienda.getNombre());
+        mandar(correo, codigo, para, recuperacion);
         return new CodigoEnviadoResponse(true, correo, VIGENCIA.toSeconds(), ESPERA_REENVIO.toSeconds());
     }
 
@@ -136,9 +151,21 @@ public class VerificacionCorreoService {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW, noRollbackFor = ApiException.class)
     public void comprobar(String correoCrudo, String codigo) {
-        if (!activa) {
-            return;
+        if (activa) {
+            revisar(correoCrudo, codigo);
         }
+    }
+
+    /**
+     * Comprueba el código para restablecer la contraseña: SIEMPRE, aunque la verificación del
+     * registro esté apagada. Igual que {@link #comprobar}, un código equivocado suma un intento.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, noRollbackFor = ApiException.class)
+    public void comprobarRecuperacion(String correoCrudo, String codigo) {
+        revisar(correoCrudo, codigo);
+    }
+
+    private void revisar(String correoCrudo, String codigo) {
         String correo = normalizar(correoCrudo);
         if (codigo == null || codigo.isBlank()) {
             throw error("Escribe el código que te enviamos a tu correo");
@@ -171,6 +198,12 @@ public class VerificacionCorreoService {
         }
     }
 
+    /** Borra el código usado para restablecer la contraseña (siempre, esté o no activa la verificación). */
+    @Transactional
+    public void consumirRecuperacion(String correoCrudo) {
+        verificaciones.deleteById(normalizar(correoCrudo));
+    }
+
     /** Cada noche se borran los códigos vencidos hace más de un día que nadie usó. */
     @Scheduled(cron = "0 30 3 * * *", zone = "America/Lima")
     @Transactional
@@ -187,7 +220,7 @@ public class VerificacionCorreoService {
      * El asunto termina en el código ("Tu código de Moda Lima: 123456"): así se ve sin abrir el
      * correo, y las pruebas lo leen de ahí.
      */
-    private void mandar(String correo, String codigo, String para) {
+    private void mandar(String correo, String codigo, String para, boolean recuperacion) {
         if (!correos.estaConfigurado()) {
             // Solo en local (sin BREVO_API_KEY ni RESEND_API_KEY): así se prueba el registro sin cuentas.
             log.warn("Sin servicio de correo: el código de verificación para {} es {} (no se envió ningún correo)",
@@ -195,7 +228,9 @@ public class VerificacionCorreoService {
             return;
         }
         try {
-            correos.enviar(correo, "Tu código de " + para + ": " + codigo, html(codigo, para), null, null);
+            String asunto = recuperacion ? "Restablece tu contraseña de " + para + ": " + codigo
+                                         : "Tu código de " + para + ": " + codigo;
+            correos.enviar(correo, asunto, recuperacion ? htmlRecuperacion(codigo, para) : html(codigo, para), null, null);
             log.info("Código de verificación enviado a {} con {}", ocultar(correo), correos.servicio());
         } catch (RestClientException e) {
             log.error("No se pudo enviar el código de verificación a {}: {}", ocultar(correo), e.getMessage());
@@ -210,6 +245,17 @@ public class VerificacionCorreoService {
                   <p>Usa este código para terminar de crear tu cuenta en %s:</p>
                   <p style="font-size:32px;font-weight:bold;letter-spacing:8px;margin:24px 0">%s</p>
                   <p style="color:#6b7280;font-size:14px">Vence en %d minutos. Si no pediste crear una cuenta, ignora este correo.</p>
+                </div>
+                """.formatted(escapar(para), codigo, VIGENCIA.toMinutes());
+    }
+
+    private static String htmlRecuperacion(String codigo, String para) {
+        return """
+                <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;color:#1f2937">
+                  <h2 style="margin:0 0 12px">Restablece tu contraseña</h2>
+                  <p>Usa este código para crear una contraseña nueva en %s:</p>
+                  <p style="font-size:32px;font-weight:bold;letter-spacing:8px;margin:24px 0">%s</p>
+                  <p style="color:#6b7280;font-size:14px">Vence en %d minutos. Si no pediste cambiar tu contraseña, ignora este correo: tu cuenta sigue igual.</p>
                 </div>
                 """.formatted(escapar(para), codigo, VIGENCIA.toMinutes());
     }

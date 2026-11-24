@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import Campo from '../components/Campo';
 import LayoutAcceso from '../components/LayoutAcceso';
 import { useAuth } from '../context/AuthContext';
@@ -14,8 +14,11 @@ import { estiloInput } from '../utils/estilos';
 export default function Login() {
   const { usuario, iniciarSesion } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const [correo, setCorreo] = useState('');
+  // Al volver de "¿Olvidaste tu contraseña?" llega el correo y un aviso de que ya cambió.
+  const [correo, setCorreo] = useState(location.state?.correo ?? '');
+  const aviso = location.state?.aviso;
   const [contrasena, setContrasena] = useState('');
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -67,6 +70,9 @@ export default function Login() {
       </div>
 
       <form onSubmit={enviar} className="space-y-4">
+        {aviso && !error && (
+          <p className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">{aviso}</p>
+        )}
         {error && (
           <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
         )}
@@ -114,6 +120,11 @@ export default function Login() {
                 className={estiloInput()}
               />
             </Campo>
+            <div className="-mt-2 text-right">
+              <Link to="/recuperar" state={{ correo }} className="text-sm font-medium text-violet-700 hover:underline">
+                ¿Olvidaste tu contraseña?
+              </Link>
+            </div>
           </>
         )}
 

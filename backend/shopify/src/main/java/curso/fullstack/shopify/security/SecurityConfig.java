@@ -68,7 +68,7 @@ public class SecurityConfig {
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                .requestMatchers("/api/auth/registro/**", "/api/auth/login").permitAll()
+                .requestMatchers("/api/auth/registro/**", "/api/auth/login", "/api/auth/recuperar/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/public/**").permitAll()
                 // Avisos de las pasarelas: los manda Mercado Pago o PayPal, no un navegador con
                 // sesión, así que no pueden exigir token. A cambio, el propio aviso trae su firma
