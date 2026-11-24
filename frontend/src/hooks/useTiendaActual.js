@@ -8,6 +8,58 @@ const EVENTO_TIENDA = 'vendely:tienda-cambiada';
 /** Aviso para que todas las listas de tiendas (menú, selector, páginas) se vuelvan a cargar. */
 const EVENTO_RECARGAR = 'vendely:tiendas-recargar';
 
+/**
+ * Una sola lista de tiendas para todo el panel. Antes, cada parte de la pantalla (menú, campanita,
+ * menú de cuenta, la página...) pedía GET /panel/tiendas por su cuenta: 6 pedidos iguales en cada
+ * página. Ahora el primero que pide abre el pedido y los demás esperan ese mismo; y al cambiar de
+ * página se muestra al instante la última lista y se actualiza por detrás con un solo pedido.
+ * Es como una fila en el banco: si alguien ya está preguntando lo mismo en la ventanilla, esperas
+ * su respuesta en vez de hacer otra fila.
+ */
+let compartido = { clave: null, datos: null, promesa: null };
+
+function claveSesion() {
+  try {
+    return localStorage.getItem('vendely_token');
+  } catch {
+    return null;
+  }
+}
+
+/** La última lista conocida de ESTA sesión (null si otra cuenta inició sesión en el navegador). */
+function listaGuardada() {
+  return compartido.clave === claveSesion() ? compartido.datos : null;
+}
+
+function pedirTiendas() {
+  const clave = claveSesion();
+  if (compartido.clave === clave && compartido.promesa) {
+    return compartido.promesa;
+  }
+  const promesa = api.get('/panel/tiendas')
+    .then(({ data }) => {
+      if (compartido.promesa === promesa) {
+        compartido = { clave, datos: data, promesa: null };
+      }
+      return data;
+    })
+    .catch((e) => {
+      if (compartido.promesa === promesa) {
+        compartido = { ...compartido, promesa: null };
+      }
+      throw e;
+    });
+  compartido = { clave, datos: compartido.clave === clave ? compartido.datos : null, promesa };
+  return promesa;
+}
+
+function elegir(data) {
+  const guardada = leerGuardada();
+  // Si la guardada no es de este dueño (otra cuenta en el mismo navegador), se usa la primera.
+  const elegida = data.find((t) => t.idTienda === guardada) ?? data[0];
+  return elegida ? elegida.idTienda : null;
+}
+
 function leerGuardada() {
   try {
     return Number(localStorage.getItem(CLAVE_TIENDA));
@@ -28,9 +80,12 @@ function leerGuardada() {
  * tiene tiendas: /api/panel/tiendas le responde 403 y lo mandaría a "Acceso denegado".
  */
 export function useTiendaActual(activo = true) {
-  const [tiendas, setTiendas] = useState([]);
-  const [idTienda, setIdTienda] = useState(null);
-  const [cargando, setCargando] = useState(activo);
+  const [tiendas, setTiendas] = useState(() => (activo && listaGuardada()) || []);
+  const [idTienda, setIdTienda] = useState(() => {
+    const lista = activo ? listaGuardada() : null;
+    return lista ? elegir(lista) : null;
+  });
+  const [cargando, setCargando] = useState(() => activo && !listaGuardada());
   const [error, setError] = useState('');
   const [version, setVersion] = useState(0);   // sube al crear una tienda: se vuelve a cargar la lista
 
@@ -38,23 +93,29 @@ export function useTiendaActual(activo = true) {
     if (!activo) {
       return;
     }
-    api.get('/panel/tiendas')
-      .then(({ data }) => {
+    let vigente = true;
+    pedirTiendas()
+      .then((data) => {
+        if (!vigente) return;
         setTiendas(data);
-        const guardada = leerGuardada();
-        // Si la guardada no es de este dueño (otra cuenta en el mismo navegador), se usa la primera.
-        const elegida = data.find((t) => t.idTienda === guardada) ?? data[0];
-        setIdTienda(elegida ? elegida.idTienda : null);
+        setIdTienda(elegir(data));
+        setError('');
       })
-      .catch((e) => setError(mensajeDeError(e)))
-      .finally(() => setCargando(false));
+      .catch((e) => vigente && setError(mensajeDeError(e)))
+      .finally(() => vigente && setCargando(false));
+    return () => {
+      vigente = false;
+    };
   }, [version, activo]);
 
   // Si otra parte del panel cambia la tienda (por ejemplo el selector de una página), el menú
   // también la cambia: así muestra las opciones que esa cuenta tiene en ESA tienda.
   useEffect(() => {
     const alCambiar = (e) => setIdTienda(e.detail);
-    const alRecargar = () => setVersion((v) => v + 1);
+    const alRecargar = () => {
+      compartido = { ...compartido, promesa: null };   // la próxima carga pide la lista de nuevo
+      setVersion((v) => v + 1);
+    };
     window.addEventListener(EVENTO_TIENDA, alCambiar);
     window.addEventListener(EVENTO_RECARGAR, alRecargar);
     return () => {
