@@ -21,15 +21,21 @@ function leerGuardada() {
  * decide con cuál se trabaja: la última elegida si sigue siendo suya, o la primera.
  *
  * Lo pueden usar todas las pantallas del panel (ventas, clientes, productos).
+ *
+ * activo = false: no pide nada. Lo usa el marco del panel cuando entra el superadmin, que no
+ * tiene tiendas: /api/panel/tiendas le responde 403 y lo mandaría a "Acceso denegado".
  */
-export function useTiendaActual() {
+export function useTiendaActual(activo = true) {
   const [tiendas, setTiendas] = useState([]);
   const [idTienda, setIdTienda] = useState(null);
-  const [cargando, setCargando] = useState(true);
+  const [cargando, setCargando] = useState(activo);
   const [error, setError] = useState('');
   const [version, setVersion] = useState(0);   // sube al crear una tienda: se vuelve a cargar la lista
 
   useEffect(() => {
+    if (!activo) {
+      return;
+    }
     api.get('/panel/tiendas')
       .then(({ data }) => {
         setTiendas(data);
@@ -40,7 +46,7 @@ export function useTiendaActual() {
       })
       .catch((e) => setError(mensajeDeError(e)))
       .finally(() => setCargando(false));
-  }, [version]);
+  }, [version, activo]);
 
   // Si otra parte del panel cambia la tienda (por ejemplo el selector de una página), el menú
   // también la cambia: así muestra las opciones que esa cuenta tiene en ESA tienda.

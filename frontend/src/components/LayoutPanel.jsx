@@ -62,8 +62,9 @@ export default function LayoutPanel() {
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [busqueda, setBusqueda] = useState('');
 
-  const { tienda } = useTiendaActual();
   const esPanelTienda = usuario.rol === 'ADMIN_TIENDA' || usuario.rol === 'EMPLEADO';
+  // El superadmin no tiene tiendas: no se piden (el backend le respondería 403).
+  const { tienda } = useTiendaActual(esPanelTienda);
   // Mientras carga la tienda elegida, el dueño ve su menú completo; un empleado, solo lo común.
   const duenoAqui = usuario.rol === 'ADMIN_TIENDA' && (!tienda || esDuenoDe(tienda));
   const permite = (permiso) => usuario.rol === 'ADMIN_TIENDA' ? duenoAqui : puede(tienda, permiso);
