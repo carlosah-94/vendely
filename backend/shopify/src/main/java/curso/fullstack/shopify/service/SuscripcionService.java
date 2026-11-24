@@ -130,8 +130,52 @@ public class SuscripcionService {
         if (s.getEstado() != Suscripcion.PENDIENTE || s.getReferenciaPago() == null) {
             return responder(s);                           // ya se proceso (por ejemplo, recargo la pagina)
         }
+        return procesar(tienda, s);
+    }
 
+    // ------------------------------------------------------------------ conciliacion (sin el dueno)
+
+    /**
+     * Cierra un pago de plan que quedo PENDIENTE porque el dueno no volvio de PayPal (cerro la
+     * pestana, se le corto la conexion...). Lo llama ConciliacionPagosService cada 15 minutos
+     * con los que llevan mas de 30 minutos: le pregunta a PayPal como termino la orden y hace lo
+     * mismo que si el dueno hubiera vuelto. Si la cobro, el plan se activa; si no la pago (o la
+     * orden ya no existe en PayPal), pasa a CANCELADA y deja de verse "Pendiente".
+     *
+     * @return true si la cerro (pagada o cancelada); false si sigue pendiente o ya estaba cerrada
+     */
+    @Transactional
+    public boolean conciliar(Long idSuscripcion) {
+        if (!payPal.estaConfigurado()) {
+            return false;                                  // sin PayPal no hay a quien preguntar
+        }
+        Suscripcion s = suscripcionRepository.findById(idSuscripcion)
+                .flatMap(p -> suscripcionRepository.bloquear(idSuscripcion, p.getIdTienda()))
+                .orElse(null);
+        if (s == null || s.getEstado() != Suscripcion.PENDIENTE) {
+            return false;                                  // el dueno volvio mientras tanto
+        }
+        if (s.getReferenciaPago() == null) {
+            cancelar(s, "nunca se creo la orden en PayPal");
+            return true;
+        }
+        Tienda tienda = tiendaRepository.findById(s.getIdTienda()).orElseThrow();
+        procesar(tienda, s);
+        return s.getEstado() != Suscripcion.PENDIENTE;
+    }
+
+    /**
+     * Pregunta a PayPal por la orden de la suscripcion y la cierra: la cobra si el dueno la
+     * aprobo, la activa si ya estaba cobrada o la cancela si no la pago. Lo usan confirmar
+     * (el dueno volvio de PayPal) y conciliar (no volvio).
+     */
+    private SuscripcionResponse procesar(Tienda tienda, Suscripcion s) {
+        Long idSuscripcion = s.getIdSuscripcion();
         Map<String, Object> orden = consultar(s.getReferenciaPago());
+        if (orden == null) {
+            // PayPal ya no la tiene: las ordenes que nadie aprueba se borran a las pocas horas.
+            return cancelar(s, "la orden ya no existe en PayPal");
+        }
         Map<String, Object> unidad = primero(orden.get("purchase_units"));
         Map<String, Object> monto = mapa(unidad.get("amount"));
         BigDecimal valor = numero(monto.get("value"));
@@ -369,6 +413,7 @@ public class SuscripcionService {
         return cuerpo;
     }
 
+    /** La orden tal como la tiene PayPal, o null si PayPal responde 404 (ya no existe). */
     private Map<String, Object> consultar(String idOrden) {
         try {
             Map<String, Object> orden = payPal.consultarOrden(idOrden);
@@ -377,6 +422,10 @@ public class SuscripcionService {
             }
             return orden;
         } catch (RestClientResponseException e) {
+            if (e.getStatusCode().value() == 404) {
+                log.info("La orden {} ya no existe en PayPal", idOrden);
+                return null;
+            }
             log.warn("PayPal respondio {} al consultar la orden {}", e.getStatusCode().value(), idOrden);
             throw new ApiException(HttpStatus.BAD_GATEWAY, "No se pudo verificar el pago");
         } catch (RestClientException e) {

@@ -37,7 +37,7 @@ shopity/
 
 | Módulo | Backend | Pantalla en el panel |
 |---|---|---|
-| Registro, inicio de sesión y roles | Sí | Sí (login, registro de dueño con su primera tienda, menú por rol, acceso denegado) |
+| Registro, inicio de sesión y roles | Sí | Sí (login, registro de dueño con su primera tienda (correo verificado con un código de 6 dígitos; primero el país: documentos y prefijo del teléfono de ese país), menú por rol, acceso denegado) |
 | Tiendas (en Perú o Chile) | Sí | Sí (`/panel/tiendas`, "Mis tiendas") |
 | Personalizar la tienda (logo, color, descripción) | Sí | Sí (`/panel/personalizar`) |
 | Clientes (CRUD) | Sí | Sí (`/panel/clientes`) |
@@ -218,7 +218,8 @@ Variables de entorno (las lee `application.yml`):
 | `MERCADOPAGO_WEBHOOK_SECRET`, `PAYPAL_WEBHOOK_ID` | opcionales, para recibir los avisos de pago |
 | `RESEND_API_KEY` | opcional; sin ella los correos se registran como "simulado" y no se envían |
 | `CLOUDINARY_URL` | opcional; sin ella no se pueden subir fotos, solo pegar enlaces |
-| `RESEND_REMITENTE` | opcional, `Vendely <onboarding@resend.dev>` por defecto |
+| `RESEND_REMITENTE` | opcional, `Vendely <onboarding@resend.dev>` por defecto. Con ese remitente Resend solo envía al correo de la cuenta de Resend: para que el código de registro llegue a cualquier persona hay que verificar un dominio y usar un remitente de ese dominio |
+| `VERIFICAR_CORREO` | `true` (por defecto). Con `true` y sin un dominio verificado en Resend, nadie más puede registrarse: mientras tanto, `false` |
 | `FLYWAY_LOCATIONS` | `classpath:db/migration` (sin los usuarios de prueba) |
 
 `CORS_ORIGENES` se compara letra por letra: va sin `/` al final y, si hay varias direcciones, separadas solo por comas, sin espacios. Si no coincide, el navegador bloquea las peticiones con un error de CORS.
@@ -285,7 +286,8 @@ La API usa **JWT** (JSON Web Token) sin sesiones: al iniciar sesión el backend 
 
 | Endpoint | Acceso | Qué hace |
 |---|---|---|
-| `POST /api/auth/registro/dueno` | Abierto | Crea la cuenta del panel (ADMIN_TIENDA) y sus datos de propietario |
+| `POST /api/auth/registro/codigo` | Abierto | Envía un código de 6 dígitos al correo del futuro dueño |
+| `POST /api/auth/registro/dueno` | Abierto | Crea la cuenta del panel (ADMIN_TIENDA) y sus datos de propietario; exige el código del correo |
 | `POST /api/auth/registro/cliente` | Abierto | Crea la cuenta de un cliente en una tienda (por `subdominio`) |
 | `POST /api/auth/login` | Abierto | Sin `subdominio`: cuenta del panel. Con `subdominio`: cliente de esa tienda |
 | `GET /api/auth/yo` | Con token | Datos de quien inició sesión |
@@ -362,6 +364,8 @@ Si la base ya existía antes de agregar este archivo, hay que recrearla para que
    - **5. Clientes, productos y ventas** y **6. Casos que deben fallar**: panel del dueño (CRUD, venta con descuento y devolución de stock, reglas de 409 y permisos entre dueños).
    - **7. Tienda pública y compra del cliente** y **8. Casos que deben fallar**: catálogo, registro del comprador, direcciones, pedido, y permisos por rol y entre clientes.
 3. Los tokens y los ids se guardan solos en las variables de la colección.
+
+> Postman no puede leer el código que llega al correo: para correr la colección, levanta el backend con `VERIFICAR_CORREO=false` en el `.env`.
 
 Las carpetas 5 a 8 usan la tienda que crea la carpeta 3, así que se ejecutan después de ella. La petición **Iniciar pago** acepta 200 (con `MERCADOPAGO_ACCESS_TOKEN`) o 503 (sin él); el pago completo en Mercado Pago se prueba desde la tienda en el navegador.
 

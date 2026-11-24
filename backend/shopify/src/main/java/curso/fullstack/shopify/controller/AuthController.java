@@ -12,6 +12,9 @@ import curso.fullstack.shopify.dto.DesactivarDobleFactorRequest;
 import curso.fullstack.shopify.dto.DobleFactorInicioResponse;
 import curso.fullstack.shopify.service.AuthService;
 import curso.fullstack.shopify.service.DobleFactorService;
+import curso.fullstack.shopify.service.VerificacionCorreoService;
+import curso.fullstack.shopify.dto.CodigoCorreoRequest;
+import curso.fullstack.shopify.dto.CodigoEnviadoResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -23,7 +26,8 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * POST /api/auth/registro/dueno     crear cuenta de dueño de tienda      (abierto)
+ * POST /api/auth/registro/codigo    enviar código al correo del dueño    (abierto)
+ * POST /api/auth/registro/dueno     crear cuenta de dueño (con el código) (abierto)
  * POST /api/auth/registro/cliente   crear cuenta de cliente en una tienda (abierto)
  * POST /api/auth/login              iniciar sesión → token               (abierto)
  * GET  /api/auth/yo                 datos de quien inició sesión         (con token)
@@ -40,10 +44,23 @@ public class AuthController {
 
     private final AuthService authService;
     private final DobleFactorService dobleFactorService;
+    private final VerificacionCorreoService verificacionCorreo;
 
-    public AuthController(AuthService authService, DobleFactorService dobleFactorService) {
+    public AuthController(AuthService authService, DobleFactorService dobleFactorService,
+                          VerificacionCorreoService verificacionCorreo) {
         this.authService = authService;
         this.dobleFactorService = dobleFactorService;
+        this.verificacionCorreo = verificacionCorreo;
+    }
+
+    /**
+     * Paso previo al registro del dueño: envía un código de 6 dígitos a su correo.
+     * Está bajo /registro/** para que sea abierta (SecurityConfig).
+     * 409 si el correo ya tiene cuenta · 429 si pide otro antes de un minuto · 502 si el correo no sale.
+     */
+    @PostMapping("/registro/codigo")
+    public CodigoEnviadoResponse enviarCodigo(@Valid @RequestBody CodigoCorreoRequest request) {
+        return verificacionCorreo.enviar(request.correo());
     }
 
     @PostMapping("/registro/dueno")
