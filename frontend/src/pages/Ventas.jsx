@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import EtiquetaPago from '../components/EtiquetaPago';
 import Mensaje from '../components/Mensaje';
 import SelectorTienda from '../components/SelectorTienda';
@@ -38,6 +38,12 @@ export default function Ventas() {
   // Filtro por estado del pedido (issue #3). Se filtra en la pantalla y no en el backend:
   // la lista ya esta completa en memoria, asi que cambiar el filtro no cuesta una peticion.
   const [filtro, setFiltro] = useState('TODOS');
+  // ?pedido=ID: viene de la campanita. Se señala ese pedido unos segundos; abrirlo lo decide el dueño.
+  const [params] = useSearchParams();
+  const pedidoSenalado = Number(params.get('pedido')) || null;
+  const [apagado, setApagado] = useState(null);   // pedido cuya luz ya se apagó
+  const resaltado = pedidoSenalado && apagado !== pedidoSenalado ? pedidoSenalado : null;
+  const filaSenalada = useRef(null);
 
   useEffect(() => {
     if (!idTienda) {
@@ -57,7 +63,24 @@ export default function Ventas() {
   }, [idTienda, version]);
 
   const cargando = cargandoTiendas || (idTienda !== null && datos.idTienda !== idTienda);
-  const ventas = filtro === 'TODOS' ? datos.ventas : datos.ventas.filter((v) => v.estado === filtro);
+  // El pedido señalado se ve aunque el filtro de estado lo escondería.
+  const ventas = filtro === 'TODOS'
+    ? datos.ventas
+    : datos.ventas.filter((v) => v.estado === filtro || v.idPedido === resaltado);
+
+  // Cuando la lista ya está, se lleva la vista hasta el pedido señalado y se ilumina 4 segundos.
+  const listaLista = !cargando && datos.idTienda === idTienda;
+  useEffect(() => {
+    if (!resaltado || !listaLista) return undefined;
+    const marco = requestAnimationFrame(() =>
+      filaSenalada.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+    const fin = setTimeout(() => setApagado(resaltado), 4000);
+    return () => {
+      cancelAnimationFrame(marco);
+      clearTimeout(fin);
+    };
+  }, [resaltado, listaLista]);
+
 
   async function eliminar(venta) {
     setEliminando(true);
@@ -156,7 +179,14 @@ export default function Ventas() {
             </thead>
             <tbody>
               {ventas.map((v) => (
-                <tr key={v.idPedido} className="border-b border-slate-100 last:border-0">
+                <tr
+                  key={v.idPedido}
+                  ref={v.idPedido === pedidoSenalado ? filaSenalada : undefined}
+                  aria-current={v.idPedido === pedidoSenalado ? 'true' : undefined}
+                  className={`border-b border-slate-100 transition-colors duration-700 last:border-0 ${
+                    v.idPedido === resaltado ? 'bg-amber-50 shadow-[inset_3px_0_0_#f59e0b]' : ''
+                  }`}
+                >
                   <td className="px-4 py-3 font-medium text-slate-800">#{v.numeroPedido}</td>
                   <td className="px-4 py-3 text-slate-600">{formatoFecha(v.fechaCreacion)}</td>
                   <td className="px-4 py-3 text-slate-800">{v.cliente}</td>

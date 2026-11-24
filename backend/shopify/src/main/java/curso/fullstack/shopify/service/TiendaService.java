@@ -101,9 +101,9 @@ public class TiendaService {
         if (yo.rol() == RolUsuario.EMPLEADO) {
             return empleadoRepository.findByIdLoginAndEstadoOrderByIdTiendaAsc(yo.idLogin(), EmpleadoTienda.ACTIVO)
                     .stream()
-                    .map(e -> tiendaRepository.findById(e.getIdTienda()).orElse(null))
-                    .filter(t -> t != null && verificadorTienda.planPermiteEmpleados(t))
-                    .map(t -> responderConAcceso(verificadorTienda.acceso(yo, t.getIdTienda())))
+                    .filter(e -> tiendaRepository.findById(e.getIdTienda())
+                            .map(t -> verificadorTienda.dentroDelPlan(e, t)).orElse(false))
+                    .map(e -> responderConAcceso(verificadorTienda.acceso(yo, e.getIdTienda())))
                     .toList();
         }
         Propietario propietario = verificadorTienda.propietario(yo);

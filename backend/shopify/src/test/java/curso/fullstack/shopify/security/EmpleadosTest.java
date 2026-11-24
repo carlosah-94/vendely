@@ -149,6 +149,38 @@ class EmpleadosTest extends PruebaIntegracion {
     }
 
     @Test
+    void siLaTiendaBajaDeProABasicoEntranSoloLosDosMasAntiguos() throws Exception {
+        datos.cambiarPlan(tienda.idTienda(), 3);   // Pro: hasta 15
+        long primero = datos.nuevoEmpleado(tienda.idTienda(), true, false, false, false);
+        long segundo = datos.nuevoEmpleado(tienda.idTienda(), true, false, false, false);
+        long tercero = datos.nuevoEmpleado(tienda.idTienda(), true, false, false, false);
+        datos.cambiarPlan(tienda.idTienda(), 2);   // Básico: hasta 2
+
+        mvc.perform(get(ruta("pedidos")).header("Authorization", token(primero))).andExpect(status().isOk());
+        mvc.perform(get(ruta("pedidos")).header("Authorization", token(segundo))).andExpect(status().isOk());
+        mvc.perform(get(ruta("pedidos")).header("Authorization", token(tercero)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.mensaje").value(containsString("quedó fuera del límite")));
+        mvc.perform(get("/api/panel/tiendas").header("Authorization", token(tercero)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(0)));
+
+        // El dueño ve a los tres (nadie se borra) y sabe quién quedó fuera.
+        mvc.perform(get(ruta("empleados")).header("Authorization", token(tienda.idDueno())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.maxEmpleados").value(2))
+                .andExpect(jsonPath("$.activos").value(3))
+                .andExpect(jsonPath("$.empleados", hasSize(3)))
+                .andExpect(jsonPath("$.empleados[0].dentroDelPlan").value(true))
+                .andExpect(jsonPath("$.empleados[1].dentroDelPlan").value(true))
+                .andExpect(jsonPath("$.empleados[2].dentroDelPlan").value(false));
+
+        // Si el dueño suspende a uno, el tercero vuelve a entrar sin hacer nada más.
+        datos.suspenderEmpleado(segundo, tienda.idTienda());
+        mvc.perform(get(ruta("pedidos")).header("Authorization", token(tercero))).andExpect(status().isOk());
+    }
+
+    @Test
     void misTiendasMuestraSoloDondeTrabajaYConSusPermisos() throws Exception {
         DatosPrueba.Tienda ajena = datos.nuevaTienda();
         datos.cambiarPlan(ajena.idTienda(), 2);

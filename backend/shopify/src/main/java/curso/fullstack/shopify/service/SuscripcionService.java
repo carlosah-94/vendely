@@ -3,11 +3,15 @@ package curso.fullstack.shopify.service;
 import curso.fullstack.shopify.dto.OpcionPlanResponse;
 import curso.fullstack.shopify.dto.PagoPlanIniciadoResponse;
 import curso.fullstack.shopify.dto.SuscripcionResponse;
+import curso.fullstack.shopify.entity.EmpleadoTienda;
 import curso.fullstack.shopify.entity.Plan;
 import curso.fullstack.shopify.entity.Suscripcion;
 import curso.fullstack.shopify.entity.Tienda;
 import curso.fullstack.shopify.exception.ApiException;
+import curso.fullstack.shopify.repository.EmpleadoTiendaRepository;
+import curso.fullstack.shopify.repository.EnvioRepository;
 import curso.fullstack.shopify.repository.PlanRepository;
+import curso.fullstack.shopify.repository.ProductoRepository;
 import curso.fullstack.shopify.repository.SuscripcionRepository;
 import curso.fullstack.shopify.repository.TiendaRepository;
 import curso.fullstack.shopify.security.UsuarioAutenticado;
@@ -58,11 +62,21 @@ public class SuscripcionService {
     private final SuscripcionRepository suscripcionRepository;
     private final PayPalClient payPal;
     private final String frontendUrl;
+    private final ProductoRepository productoRepository;
+    private final EmpleadoTiendaRepository empleadoRepository;
+    private final EnvioRepository envioRepository;
+    private final MetodoPagoService metodoPagoService;
 
     public SuscripcionService(VerificadorTienda verificadorTienda, TiendaRepository tiendaRepository,
                               PlanRepository planRepository, SuscripcionRepository suscripcionRepository,
                               PayPalClient payPal,
-                              @Value("${app.frontend-url:http://localhost:5173}") String frontendUrl) {
+                              @Value("${app.frontend-url:http://localhost:5173}") String frontendUrl,
+                              ProductoRepository productoRepository, EmpleadoTiendaRepository empleadoRepository,
+                              EnvioRepository envioRepository, MetodoPagoService metodoPagoService) {
+        this.productoRepository = productoRepository;
+        this.empleadoRepository = empleadoRepository;
+        this.envioRepository = envioRepository;
+        this.metodoPagoService = metodoPagoService;
         this.verificadorTienda = verificadorTienda;
         this.tiendaRepository = tiendaRepository;
         this.planRepository = planRepository;
@@ -337,7 +351,68 @@ public class SuscripcionService {
         } else {
             empieza = finDeLoPagado(tienda.getIdTienda(), ahora);
         }
-        return new OpcionPlanResponse(plan.getIdPlan(), tipo, precio, credito, precio.subtract(credito), empieza);
+        List<String> pierde = "BAJAR".equals(tipo) ? dejaraDeTener(tienda, plan) : List.of();
+        return new OpcionPlanResponse(plan.getIdPlan(), tipo, precio, credito, precio.subtract(credito), empieza, pierde);
+    }
+
+    /**
+     * Lo que la tienda deja de tener si pasa a este plan, en frases para el dueño. Se calcula con lo
+     * que la tienda usa HOY (su plantilla, sus empleados, sus tarifas...): si no usa algo, no se avisa.
+     * Las mismas reglas aplican en el resto del backend (PlanService, VerificadorTienda, EnvioService,
+     * TiendaPublicaResponse), así que el aviso dice exactamente lo que va a pasar.
+     */
+    public List<String> dejaraDeTener(Tienda tienda, Plan nuevo) {
+        Plan actual = planRepository.findById(tienda.getIdPlan()).orElse(null);
+        List<String> lista = new ArrayList<>();
+        if (actual == null) {
+            return lista;
+        }
+        Long id = tienda.getIdTienda();
+
+        boolean usaPlantilla = !"clasica".equals(tienda.getPlantilla());
+        boolean usaFondo = tienda.getFondo() != null && !"blanco".equals(tienda.getFondo());
+        if (si(actual.getPermitePlantillas()) && !si(nuevo.getPermitePlantillas()) && (usaPlantilla || usaFondo)) {
+            lista.add("Tu tienda se verá con la plantilla Clásica y fondo blanco (lo que elegiste queda guardado).");
+        }
+        if (si(actual.getPermitePersonalizar()) && !si(nuevo.getPermitePersonalizar())) {
+            lista.add("Se ocultarán tu logo, tus colores y tu diseño propio, y aparecerá \"Hecho con Vendely\" en el pie.");
+        }
+        long productos = productoRepository.countByIdTienda(id);
+        if (nuevo.getMaxProductos() != null && productos > nuevo.getMaxProductos()) {
+            lista.add("Tienes " + productos + " productos y el plan permite " + nuevo.getMaxProductos()
+                    + ": los que ya tienes siguen a la venta, pero no podrás crear más hasta tener menos de "
+                    + nuevo.getMaxProductos() + ".");
+        }
+        long empleados = empleadoRepository.countByIdTiendaAndEstado(id, EmpleadoTienda.ACTIVO);
+        int maxEmpleados = nuevo.getMaxEmpleados() == null ? 0 : nuevo.getMaxEmpleados();
+        if (empleados > maxEmpleados) {
+            lista.add(maxEmpleados == 0
+                    ? (empleados == 1 ? "Tu empleado perderá" : "Tus " + empleados + " empleados perderán")
+                            + " el acceso a la tienda (sus cuentas no se borran)."
+                    : (maxEmpleados == 1 ? "Solo tu empleado más antiguo podrá entrar; "
+                            : "Solo los " + maxEmpleados + " empleados más antiguos podrán entrar; ")
+                            + (empleados - maxEmpleados == 1 ? "1 perderá"
+                            : (empleados - maxEmpleados) + " perderán")
+                            + " el acceso hasta que suspendas a otros (nadie se borra).");
+        }
+        if (si(actual.getPermiteEnvioInternacional()) && !si(nuevo.getPermiteEnvioInternacional())) {
+            List<String> paises = envioRepository.internacionales(id).stream()
+                    .filter(t -> t.getEstado() != null && t.getEstado() == 1)
+                    .map(EnvioRepository.Tarifa::getZona)
+                    .toList();
+            if (!paises.isEmpty()) {
+                lista.add("Dejarás de vender a " + String.join(", ", paises) + " (las tarifas quedan guardadas).");
+            }
+        }
+        List<MetodoPago> metodos = metodoPagoService.configuradosEnServidor();
+        if (si(actual.getPermiteMasMetodosPago()) && !si(nuevo.getPermiteMasMetodosPago()) && metodos.size() > 1) {
+            lista.add("Tus clientes solo podrán pagar con " + metodos.get(0).nombre() + ".");
+        }
+        return lista;
+    }
+
+    private static boolean si(Boolean valor) {
+        return Boolean.TRUE.equals(valor);
     }
 
     /**

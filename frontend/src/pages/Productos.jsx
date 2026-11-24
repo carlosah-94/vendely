@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import FormularioProducto from '../components/FormularioProducto';
 import { IconoBuscar, IconoProductos } from '../components/Iconos';
 import ImagenProducto from '../components/ImagenProducto';
@@ -168,6 +168,7 @@ export default function Productos() {
       {aviso && <Mensaje tipo="exito" texto={aviso} onCerrar={() => setAviso('')} />}
       {errorAccion && <Mensaje tipo="error" texto={errorAccion} onCerrar={() => setErrorAccion('')} />}
       {datos.error && <Mensaje tipo="error" texto={datos.error} />}
+      {tienda && !cargando && <LimiteDelPlan tienda={tienda} cantidad={datos.productos.length} />}
 
       {tienda && !cargando && datos.productos.length === 0 && !datos.error && (
         <div className="flex flex-col items-center rounded-xl bg-white px-6 py-14 text-center shadow-[0_1px_0_rgba(0,0,0,0.08),0_0_0_1px_rgba(0,0,0,0.05)]">
@@ -344,5 +345,28 @@ export default function Productos() {
         />
       )}
     </section>
+  );
+}
+
+/**
+ * El tope de productos del plan (Gratis tiene uno). Si la tienda bajó de plan y tiene más productos
+ * que el tope, ninguno se borra ni se oculta: siguen a la venta, solo no se pueden crear más.
+ */
+function LimiteDelPlan({ tienda, cantidad }) {
+  const max = tienda.maxProductos;
+  if (max == null || cantidad < max) return null;
+  const pasado = cantidad > max;
+  return (
+    <div className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-[13px] ${
+      pasado ? 'border-[#f0c94d] bg-[#fff8db] text-[#4f4700]' : 'border-[#d6e4ff] bg-[#f2f7ff] text-[#1e3a8a]'
+    }`}>
+      <p>
+        <b>{pasado ? `Tienes ${cantidad} productos y tu plan ${tienda.plan} permite ${max}.` : `Usaste los ${max} productos de tu plan ${tienda.plan}.`}</b>{' '}
+        {pasado
+          ? 'Todos siguen a la venta, pero no puedes agregar más hasta tener menos o mejorar el plan.'
+          : 'Para agregar más, mejora tu plan.'}
+      </p>
+      <Link to="/panel/plan" className="rounded-lg bg-[#303030] px-3 py-1.5 font-semibold text-white hover:bg-[#1a1a1a]">Ver planes</Link>
+    </div>
   );
 }

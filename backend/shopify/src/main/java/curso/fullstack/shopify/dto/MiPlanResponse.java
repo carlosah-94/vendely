@@ -9,5 +9,7 @@ public record MiPlanResponse(
         long productosUsados,
         OffsetDateTime venceEl,          // fin del periodo pagado actual (null en Gratis)
         List<PlanResponse> planes,
-        List<OpcionPlanResponse> opciones
+        List<OpcionPlanResponse> opciones,
+        // Lo que la tienda deja de tener si no renueva y vuelve a Gratis al vencer (vacío en Gratis).
+        List<String> alVencer
 ) {}

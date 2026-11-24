@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import CampoPanel from '../components/CampoPanel';
 import ConfirmarAccion from '../components/ConfirmarAccion';
 import { IconoCerrar, IconoEnvio, IconoMas } from '../components/Iconos';
@@ -144,10 +145,21 @@ export default function Envios() {
                   Solo vendes a los países que agregues aquí. Las ventas al extranjero no llevan {tienda?.impuesto ?? 'impuesto'}.
                 </p>
               </div>
-              <button onClick={() => setEditando({ tipo: 'internacional', tarifa: null })} className={`${BOTON} inline-flex items-center gap-1`}>
-                <IconoMas tamano={16} /> Agregar país
-              </button>
+              {envios.internacionalIncluido === false ? (
+                <Link to="/panel/plan" className={`${BOTON} text-[13px]`}>Mejora a Pro</Link>
+              ) : (
+                <button onClick={() => setEditando({ tipo: 'internacional', tarifa: null })} className={`${BOTON} inline-flex items-center gap-1`}>
+                  <IconoMas tamano={16} /> Agregar país
+                </button>
+              )}
             </div>
+            {/* La tienda bajó de plan: sus tarifas quedan guardadas, pero no se vende al extranjero. */}
+            {envios.internacionalIncluido === false && envios.internacionales.length > 0 && (
+              <p className="border-b border-[#f0c94d] bg-[#fff8db] px-4 py-3 text-[13px] text-[#4f4700]">
+                <b className="text-[#3d3700]">Tu plan actual no incluye envíos internacionales.</b> Tus clientes de otros
+                países no pueden comprar por ahora. Estas tarifas quedan guardadas y vuelven a funcionar si mejoras a Pro.
+              </p>
+            )}
             {envios.internacionales.length === 0 ? (
               <div className="flex flex-col items-center px-6 py-10 text-center">
                 <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#f1f1f1] text-[#616161]">

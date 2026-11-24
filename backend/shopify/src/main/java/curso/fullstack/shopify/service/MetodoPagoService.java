@@ -75,6 +75,11 @@ public class MetodoPagoService {
         return pedido;
     }
 
+    /** Las pasarelas con credenciales en el servidor (sin mirar el plan). */
+    public List<MetodoPago> configuradosEnServidor() {
+        return configurados();
+    }
+
     /** Las pasarelas con credenciales en el servidor, en el orden del enum. */
     private List<MetodoPago> configurados() {
         List<MetodoPago> lista = new ArrayList<>();

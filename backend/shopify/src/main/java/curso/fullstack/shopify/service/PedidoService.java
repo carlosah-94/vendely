@@ -1,5 +1,6 @@
 package curso.fullstack.shopify.service;
 
+import curso.fullstack.shopify.repository.EnvioRepository;
 import curso.fullstack.shopify.entity.PermisoTienda;
 import curso.fullstack.shopify.dto.EnvioPedidoRequest;
 import curso.fullstack.shopify.dto.LineaVentaRequest;
@@ -47,6 +48,8 @@ public class PedidoService {
     private final CuponService cuponService;
     private final CuponRepository cuponRepository;
     private final ApplicationEventPublisher eventos;
+    private final EnvioRepository envioRepository;
+    private final PlanService planService;
 
     @PersistenceContext
     private EntityManager em;
@@ -57,8 +60,11 @@ public class PedidoService {
                          PedidoRepository pedidoRepository, DetallePedidoRepository detallePedidoRepository,
                          TiendaRepository tiendaRepository, PagoRepository pagoRepository,
                          OfertaRepository ofertaRepository, CuponService cuponService,
-                         CuponRepository cuponRepository, ApplicationEventPublisher eventos) {
+                         CuponRepository cuponRepository, ApplicationEventPublisher eventos,
+                         EnvioRepository envioRepository, PlanService planService) {
         this.eventos = eventos;
+        this.envioRepository = envioRepository;
+        this.planService = planService;
         this.cuponService = cuponService;
         this.cuponRepository = cuponRepository;
         this.ofertaRepository = ofertaRepository;
@@ -123,6 +129,15 @@ public class PedidoService {
         if (!direccionRepository.existsByIdDireccionAndIdLoginAndEstado(idDireccion, cliente.getIdLogin(), (short) 1)) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "La dirección de envío no es de este cliente");
         }
+        // 1b. Una dirección en otro país solo si el plan incluye envíos internacionales. Las tarifas
+        //     guardadas de un plan anterior no se usan (el trigger de la base las cobraría igual).
+        envioRepository.cotizar(idTienda, cliente.getIdLogin(), idDireccion)
+                .filter(c -> Boolean.TRUE.equals(c.getInternacional()))
+                .filter(c -> !planService.permite(idTienda, FuncionPlan.ENVIO_INTERNACIONAL))
+                .ifPresent(c -> {
+                    throw new ApiException(HttpStatus.CONFLICT, "Esta tienda no envía a " + c.getPais()
+                            + " por ahora. Elige una dirección en el país de la tienda.");
+                });
 
         // 2. Juntar líneas repetidas (la llave de detalle_pedido no permite la misma variante dos veces)
         Map<Long, Integer> cantidades = new LinkedHashMap<>();

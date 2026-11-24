@@ -16,13 +16,19 @@ public record EmpleadoResponse(
         Boolean activo,             // en esta tienda (el dueño lo puede suspender)
         Boolean cuentaActiva,       // la cuenta en Vendely (la puede desactivar el superadmin)
         Boolean dobleFactor,        // si protege su cuenta con el código de 6 dígitos
-        String fechaCreacion        // ISO 8601 en UTC: desde cuándo trabaja en la tienda
+        String fechaCreacion,       // ISO 8601 en UTC: desde cuándo trabaja en la tienda
+        Boolean dentroDelPlan       // false: está activo pero sobra para el plan actual y no puede entrar
 ) {
     public static EmpleadoResponse desde(EmpleadoTiendaRepository.Fila f) {
+        return desde(f, true);
+    }
+
+    public static EmpleadoResponse desde(EmpleadoTiendaRepository.Fila f, boolean dentroDelPlan) {
         return new EmpleadoResponse(f.getIdLogin(), f.getNombres(), f.getPrimerApellido(), f.getCorreo(),
                 f.getPuedePedidos(), f.getPuedeProductos(), f.getPuedeInventario(), f.getPuedeClientes(),
                 f.getEstado() != null && f.getEstado() == 1, f.getEstadoCuenta() != null && f.getEstadoCuenta() == 1,
                 Boolean.TRUE.equals(f.getDobleFactor()),
-                f.getFechaCreacion() == null ? null : Instant.ofEpochSecond(f.getFechaCreacion()).toString());
+                f.getFechaCreacion() == null ? null : Instant.ofEpochSecond(f.getFechaCreacion()).toString(),
+                dentroDelPlan);
     }
 }

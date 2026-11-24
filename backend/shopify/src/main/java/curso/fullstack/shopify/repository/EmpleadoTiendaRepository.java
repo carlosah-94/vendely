@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface EmpleadoTiendaRepository extends JpaRepository<EmpleadoTienda, EmpleadoTienda.Llave> {
 
@@ -15,6 +16,20 @@ public interface EmpleadoTiendaRepository extends JpaRepository<EmpleadoTienda, 
 
     /** Para el límite del plan: solo cuentan los activos. */
     long countByIdTiendaAndEstado(Long idTienda, Short estado);
+
+    /**
+     * Cuántos empleados activos de la tienda llegaron antes que este (por fecha de alta y, si
+     * empatan, por id). Si el plan baja y sobran empleados, entran los más antiguos: este número
+     * dice si este empleado quedó dentro del límite (puesto < máximo del plan).
+     */
+    @Query(value = """
+            SELECT count(*)
+              FROM empleados_tienda e
+              JOIN empleados_tienda o ON o.id_tienda = e.id_tienda AND o.estado = 1
+             WHERE e.id_tienda = :idTienda AND e.id_login = :idLogin
+               AND (o.fecha_creacion, o.id_login) < (e.fecha_creacion, e.id_login)
+            """, nativeQuery = true)
+    long activosAntes(@Param("idTienda") Long idTienda, @Param("idLogin") Long idLogin);
 
     /** Un empleado de la tienda con los datos de su cuenta, para la pantalla del dueño. */
     interface Fila {
@@ -41,7 +56,7 @@ public interface EmpleadoTiendaRepository extends JpaRepository<EmpleadoTienda, 
               FROM empleados_tienda e
               JOIN login l ON l.id_login = e.id_login
              WHERE e.id_tienda = :idTienda
-             ORDER BY e.fecha_creacion
+             ORDER BY e.fecha_creacion, e.id_login
             """, nativeQuery = true)
     List<Fila> filasDeTienda(Long idTienda);
 }

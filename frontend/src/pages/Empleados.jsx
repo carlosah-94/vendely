@@ -187,6 +187,8 @@ export default function Empleados() {
                         <td className="px-4 py-3">
                           {!e.cuentaActiva ? (
                             <span className={etiqueta('error')}>Cuenta desactivada</span>
+                          ) : e.activo && e.dentroDelPlan === false ? (
+                            <span className={etiqueta('aviso')} title="Tu plan actual no alcanza para este empleado">Sin acceso por el plan</span>
                           ) : e.activo ? (
                             <span className={etiqueta('exito')}>Activo</span>
                           ) : (
@@ -236,6 +238,27 @@ export default function Empleados() {
 
 /** Cuántos lugares del plan se usan. Con el plan Gratis invita a mejorar el plan. */
 function UsoDelPlan({ respuesta: r }) {
+  // La tienda bajó de plan y le sobran empleados: nadie se borra, pero los que sobran no entran.
+  if (r.activos > r.maxEmpleados) {
+    const fuera = r.activos - r.maxEmpleados;
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#f0c94d] bg-[#fff8db] px-4 py-3">
+        <div className="text-[13px] text-[#4f4700]">
+          <p className="font-semibold text-[#3d3700]">
+            {r.maxEmpleados === 0
+              ? `Tu plan ${r.plan} no incluye empleados`
+              : `Tu plan ${r.plan} permite ${r.maxEmpleados} ${r.maxEmpleados === 1 ? 'empleado' : 'empleados'} y tienes ${r.activos} activos`}
+          </p>
+          <p>
+            {r.maxEmpleados === 0
+              ? 'Tus empleados no pueden entrar a la tienda. Sus cuentas y permisos siguen guardados.'
+              : `${fuera === 1 ? 'El más reciente no puede' : `Los ${fuera} más recientes no pueden`} entrar hasta que suspendas a otro o mejores el plan. Nadie se borró.`}
+          </p>
+        </div>
+        <Link to="/panel/plan" className={`${BOTON} text-[13px]`}>Ver planes</Link>
+      </div>
+    );
+  }
   if (r.maxEmpleados === 0) {
     return (
       <div className={`${TARJETA} flex flex-wrap items-center justify-between gap-3 px-4 py-4`}>
