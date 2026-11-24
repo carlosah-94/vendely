@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation, useMatch, useNavigate, useParams } from 'react-router-dom';
 import { CarritoProvider, useCarrito } from '../../context/CarritoContext';
+import { useTituloPagina } from '../../hooks/useTituloPagina';
 import { useAuth } from '../../context/AuthContext';
 import { mensajeDeError } from '../../services/api';
 import { paisesDeEnvio } from '../../services/envios';
@@ -96,6 +97,8 @@ function Marco({ subdominio }) {
       vigente = false;
     };
   }, [subdominio]);
+
+  useTituloPagina(estado.subdominio === subdominio ? estado.tienda?.nombre : null);
 
   if (estado.subdominio !== subdominio) {
     return <p className="p-10 text-center text-[#616161]">Cargando tienda...</p>;

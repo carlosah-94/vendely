@@ -207,8 +207,9 @@ export default function DetalleVenta() {
                 No
               </button>
             </div>
-          ) : esDuenoDe(tienda) && (
+          ) : esDuenoDe(tienda) && venta.estadoPago !== 'APROBADO' && (
             // Eliminar lo hace solo el dueño; un empleado con permiso de pedidos puede cancelar.
+            // Una venta pagada no se elimina (el backend responde 409): se cancela abajo.
             <button
               onClick={() => setConfirmando(true)}
               className="rounded-md border border-red-300 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
@@ -323,7 +324,7 @@ export default function DetalleVenta() {
               <span className="flex flex-wrap items-center gap-2">
                 <span className="text-slate-700">
                   ¿Cancelar el pedido? El stock vuelve al inventario
-                  {pagado && ' y el pago queda como reembolsado'}.
+                  {pagado && ' y el pago queda como reembolsado. Devuelve el dinero al cliente desde tu cuenta de PayPal o Mercado Pago'}.
                 </span>
                 <button
                   onClick={() => accion(() => cancelarPedido(idTienda, idPedido),

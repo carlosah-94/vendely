@@ -144,8 +144,8 @@ export default function LayoutPanel() {
   return (
     <ToastProvider>
       <div className="flex min-h-screen flex-col bg-[#0a0a0a] text-[#303030]">
-        {/* Barra superior oscura */}
-        <header className="flex h-14 shrink-0 items-center gap-3 px-3 md:px-4">
+        {/* Barra superior oscura: queda fija arriba aunque la página baje (como en Shopify) */}
+        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 bg-[#0a0a0a] px-3 md:px-4">
           <button
             onClick={() => setMenuAbierto((v) => !v)}
             className="rounded-lg p-1.5 text-[#dcdcdc] hover:bg-[#1f1f1f] md:hidden"
@@ -189,8 +189,9 @@ export default function LayoutPanel() {
 
         <div className="flex min-h-0 flex-1">
           {/* Menú lateral (escritorio) */}
-          {/* Fijo al alto de la ventana: el selector de tienda de abajo siempre se ve */}
-          <aside className="hidden w-60 shrink-0 px-3 pb-3 pt-1 md:sticky md:top-0 md:block md:h-[calc(100vh-3.5rem)] md:self-start">{menu}</aside>
+          {/* Fijo debajo de la barra superior y al alto de la ventana: no se mueve con el scroll y el
+              selector de tienda de abajo siempre se ve */}
+          <aside className="hidden w-60 shrink-0 px-3 pb-3 pt-1 md:sticky md:top-14 md:block md:h-[calc(100vh-3.5rem)] md:self-start">{menu}</aside>
 
           {/* Menú lateral (celular): se abre encima del contenido */}
           {menuAbierto && (
