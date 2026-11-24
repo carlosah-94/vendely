@@ -133,6 +133,10 @@ public class TiendaService {
             t.setPlantilla(r.plantilla());
         }
         personalizar(t, r);
+        if (r.tema() != null && (cambia(t.getTema(), r.tema()) || t.getTemaAplicadoEl() == null)) {
+            t.setTema(r.tema());
+            t.setTemaAplicadoEl(java.time.OffsetDateTime.now());
+        }
         copiarDatos(t, r.nombre(), r.descripcion(), r.correoContacto(), r.logoUrl(), r.colorPrincipal(),
                 r.permiteInvitados());
         tiendaRepository.saveAndFlush(t);
@@ -144,9 +148,11 @@ public class TiendaService {
      * Opciones de diseño de la vitrina (V12). Cada campo null se deja como está. Como con el logo
      * y el color, el plan se exige solo si el valor CAMBIA: así una tienda que bajó de plan puede
      * seguir guardando su nombre o su correo aunque tenga guardadas opciones que ya no incluye.
+     * Y volver a lo de por defecto (sin acento, sin portada, letra y botones "auto", fondo blanco)
+     * siempre se puede: así cualquier plan puede aplicar el tema Esencial.
      *   - Secciones (garantías, destacado, categorías): cualquier plan.
      *   - Acento, anuncio, portada, letra y botones: PERSONALIZAR (Básico y Pro).
-     *   - Fondo distinto de blanco: PLANTILLAS (Pro). Volver a blanco siempre se puede.
+     *   - Fondo distinto de blanco: PLANTILLAS (Pro).
      */
     private void personalizar(Tienda t, TiendaActualizarRequest r) {
         Long id = t.getIdTienda();
@@ -158,9 +164,12 @@ public class TiendaService {
         String fuente = r.fuente() == null ? t.getFuente() : r.fuente();
         String botones = r.estiloBotones() == null ? t.getEstiloBotones() : r.estiloBotones();
 
-        if (cambia(t.getColorAcento(), acento) || cambia(t.getTextoAnuncio(), anuncio)
-                || cambia(t.getImagenPortadaUrl(), portada) || !mostrarAnuncio.equals(t.getMostrarAnuncio())
-                || cambia(t.getFuente(), fuente) || cambia(t.getEstiloBotones(), botones)) {
+        if ((acento != null && cambia(t.getColorAcento(), acento))
+                || (anuncio != null && cambia(t.getTextoAnuncio(), anuncio))
+                || (portada != null && cambia(t.getImagenPortadaUrl(), portada))
+                || (!mostrarAnuncio && !mostrarAnuncio.equals(t.getMostrarAnuncio()))
+                || (!"auto".equals(fuente) && cambia(t.getFuente(), fuente))
+                || (!"auto".equals(botones) && cambia(t.getEstiloBotones(), botones))) {
             planService.exigir(id, FuncionPlan.PERSONALIZAR);
         }
         if (r.fondo() != null && cambia(t.getFondo(), r.fondo()) && !"blanco".equals(r.fondo())) {

@@ -35,7 +35,9 @@ public record TiendaResponse(
         Boolean permitePlantillas,  // su plan deja elegir plantilla y color de fondo
         Boolean esDueno,            // true: puede todo. false: es empleado y solo puede lo de "permisos"
         List<String> permisos,      // PEDIDOS, PRODUCTOS, INVENTARIO, CLIENTES (el dueño las tiene todas)
-        DisenoTienda diseno         // letra, botones, acento, fondo, portada, anuncio y secciones (lo guardado)
+        DisenoTienda diseno,        // letra, botones, acento, fondo, portada, anuncio y secciones (lo guardado)
+        String tema,                // tema aplicado (Tienda online → Temas) o null
+        OffsetDateTime temaAplicadoEl
 ) {
     private static final List<String> TODOS = Arrays.stream(PermisoTienda.values()).map(Enum::name).toList();
 
@@ -59,6 +61,7 @@ public record TiendaResponse(
                 plan == null ? null : plan.getNombre(),
                 plan == null || Boolean.TRUE.equals(plan.getPermitePersonalizar()),
                 plan == null || Boolean.TRUE.equals(plan.getPermitePlantillas()),
-                esDueno, lista, DisenoTienda.de(t));
+                esDueno, lista, DisenoTienda.de(t),
+                t.getTema(), t.getTemaAplicadoEl());
     }
 }

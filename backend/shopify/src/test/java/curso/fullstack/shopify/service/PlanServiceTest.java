@@ -240,6 +240,51 @@ class PlanServiceTest extends PruebaIntegracion {
                 .andExpect(jsonPath("$.diseno.fuente").value("elegante"));
     }
 
+    // ------------------------------------------------------------------ temas (V13)
+
+    /** Aplicar un tema = mandar su plantilla y su estilo + el nombre del tema. */
+    private static final String TEMA_ATELIER = "\"tema\":\"atelier\",\"plantilla\":\"boutique\","
+            + "\"fuente\":\"elegante\",\"estiloBotones\":\"auto\",\"fondo\":\"hueso\",\"colorAcento\":\"\"";
+
+    @Test
+    void aplicarUnTemaGuardaCualYCuando() throws Exception {
+        datos.cambiarPlan(tienda.idTienda(), 3);
+        actualizarTienda(TEMA_ATELIER)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tema").value("atelier"))
+                .andExpect(jsonPath("$.temaAplicadoEl").isNotEmpty())
+                .andExpect(jsonPath("$.plantilla").value("boutique"))
+                .andExpect(jsonPath("$.diseno.fondo").value("hueso"));
+    }
+
+    @Test
+    void unTemaProConPlanBasicoResponde403() throws Exception {
+        datos.cambiarPlan(tienda.idTienda(), 2);
+        actualizarTienda(TEMA_ATELIER)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.mensaje").value(containsString(MEJORA)));
+    }
+
+    /** El tema Esencial vuelve todo a lo de por defecto: se puede con cualquier plan, aunque haya bajado. */
+    @Test
+    void volverALoDePorDefectoSiempreSePuede() throws Exception {
+        datos.cambiarPlan(tienda.idTienda(), 3);
+        actualizarTienda(TEMA_ATELIER + ",\"estiloBotones\":\"recto\"").andExpect(status().isOk());
+
+        datos.cambiarPlan(tienda.idTienda(), 1);
+        actualizarTienda("\"tema\":\"esencial\",\"plantilla\":\"clasica\",\"fuente\":\"auto\","
+                + "\"estiloBotones\":\"auto\",\"fondo\":\"blanco\",\"colorAcento\":\"\"")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tema").value("esencial"))
+                .andExpect(jsonPath("$.diseno.fuente").value("auto"))
+                .andExpect(jsonPath("$.diseno.fondo").value("blanco"));
+    }
+
+    @Test
+    void unTemaQueNoExisteSeRechazaCon400() throws Exception {
+        actualizarTienda("\"tema\":\"neon\"").andExpect(status().isBadRequest());
+    }
+
     @Test
     void elEnvioInternacionalSoloConPlanPro() throws Exception {
         tarifaInternacional("CL")

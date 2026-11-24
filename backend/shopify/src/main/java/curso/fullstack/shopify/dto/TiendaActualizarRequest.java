@@ -57,5 +57,11 @@ public record TiendaActualizarRequest(
 
         Boolean mostrarGarantias,
         Boolean mostrarDestacado,
-        Boolean mostrarCategorias
+        Boolean mostrarCategorias,
+
+        // Tema aplicado desde Tienda online → Temas (V13). Opcional: null = no cambia. Es solo el
+        // nombre: los colores, la letra, la plantilla... del tema llegan en los campos de arriba,
+        // y con ellos se valida el plan.
+        @Pattern(regexp = "^(esencial|mercado|minimal|escaparate|pop|atelier|arena)$", message = "Ese tema no existe")
+        String tema
 ) {}
