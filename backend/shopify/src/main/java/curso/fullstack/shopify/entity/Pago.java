@@ -23,6 +23,8 @@ public class Pago {
     public static final short APROBADO = 1;
     public static final short RECHAZADO = 2;
     public static final short REEMBOLSADO = 3;   // el pedido se cancelo despues de cobrarlo
+    /** Intento abandonado que se dejó de revisar (V10). No es un rechazo: el pedido sigue sin pagar. */
+    public static final short VENCIDO = 4;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -39,7 +41,7 @@ public class Pago {
     @Column(name = "monto", nullable = false, precision = 12, scale = 2)
     private BigDecimal monto;
 
-    /** 0 pendiente · 1 aprobado · 2 rechazado · 3 reembolsado */
+    /** 0 pendiente · 1 aprobado · 2 rechazado · 3 reembolsado · 4 vencido */
     @Column(name = "estado", nullable = false)
     private Short estado = PENDIENTE;
 

@@ -329,6 +329,16 @@ En el log nunca se escribe el cuerpo del aviso, solo el motivo del rechazo.
 
 **Probarlo en local.** Hay que exponer el backend con `ngrok http 8080` (o similar) y registrar esa dirección en el panel de la pasarela. Sin eso, lo que sí se puede probar es la firma (un aviso con firma inválida responde 401) y la revisión periódica.
 
+**Intentos que nadie pagó (estado `VENCIDO`).** Cada "Pagar" guarda un intento pendiente. Si el cliente va a Mercado Pago y no paga, Mercado Pago no registra nada, así que antes ese intento quedaba pendiente para siempre y se volvía a consultar en cada revisión (y la revisión toma solo los 50 más antiguos: con muchos abandonados, los nuevos dejaban de revisarse). Ahora la revisión lo cierra como `VENCIDO` cuando ya no hay nada que esperar:
+
+| Caso | Cuándo |
+|---|---|
+| Mercado Pago no tiene ningún pago de ese pedido | A los 3 días (`PAGOS_DIAS_PARA_VENCER`) |
+| La orden de PayPal ya no existe (404) | En la siguiente revisión |
+| El pedido ya se pagó con otro intento | En la siguiente revisión |
+
+`VENCIDO` no es un rechazo: el pedido se muestra **"Sin pago"** y el cliente puede volver a pagarlo. Si pagara el intento viejo después, el pago igual se registra (en un intento nuevo). Sin credenciales de la pasarela no se vence nada, porque no hay a quién preguntar.
+
 ## Base de datos
 
 La base la construye **Flyway** al arrancar, antes de que Hibernate valide las entidades. Las migraciones están en `src/main/resources/db/`:
@@ -343,6 +353,8 @@ La base la construye **Flyway** al arrancar, antes de que Hibernate valide las e
 | `migration/V6__pedidos_notificaciones_envio.sql` | Seguimiento del envío, comisión y tabla `notificaciones` |
 | `migration/V7__imagenes_public_id.sql` | `public_id` de la foto en Cloudinary, para poder borrarla |
 | `migration/V8__doble_autenticacion.sql` | Secreto y estado de la doble autenticación en `login` |
+| `migration/V9__verificacion_correo.sql` | Tabla `verificaciones_correo` (código del registro del dueño) |
+| `migration/V10__pago_vencido.sql` | Estado 4 = `VENCIDO` en `pagos` (intento abandonado) |
 
 Flyway aplica cada una una sola vez y guarda su huella en `flyway_schema_history`. De ahí salen dos reglas:
 
@@ -371,6 +383,7 @@ Para correr una sola clase: `mvn test -Dtest=PagoServiceTest`. Desde NetBeans: c
 | `service/PedidoServiceTest` | Que una venta sea todo o nada: si falta stock en una línea, el inventario queda exactamente como estaba. Líneas repetidas, eliminar con devolución de stock y productos que no están a la venta. |
 | `service/PlanServiceTest` | Los límites de cada plan y el texto "Mejora tu plan" del 403, del que depende `esErrorDePlan()` en el frontend. |
 | `security/SesionTest` | Que un token deje de servir si está firmado con otra clave, vencido, emitido antes del cambio de contraseña o si la cuenta se suspendió; y que el login no revele qué correos existen. |
+| `service/ConciliacionIntentosTest` | Que un intento de pago que nadie pagó se cierre como `VENCIDO` (Mercado Pago sin pago a los 3 días, orden de PayPal inexistente, pedido ya pagado con otro intento) sin tocar los recientes ni los que no se pueden consultar, que se muestre "Sin pago" y que un pago que llega tarde igual se registre. |
 | `security/VerificacionCorreoTest` | Que la cuenta del dueño solo se cree con el código enviado a su correo: sin código, equivocado, vencido o tras 5 intentos no se crea; que los intentos se guarden aunque el registro falle; que no se reenvíe antes de un minuto; y que un usuario ya ocupado no gaste el código. |
 | `security/TotpTest`, `tiemporeal/CanalesTest` | El generador de códigos de la doble autenticación y quién escucha cada canal de tiempo real. No levantan Spring. |
 
