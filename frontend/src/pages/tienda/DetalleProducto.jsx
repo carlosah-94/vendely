@@ -9,6 +9,7 @@ import { enOferta } from '../../utils/formato';
 import { obtenerProducto } from '../../services/tienda';
 import { useTiempoReal } from '../../hooks/useTiempoReal';
 import { canales } from '../../services/tiempoReal';
+import { IconoGarantia, garantiasDe } from '../../components/tienda/Garantias';
 
 /** Valores iniciales: los de la primera variante con stock (o la primera, si todas están agotadas). */
 function valoresIniciales(p) {
@@ -23,7 +24,7 @@ const mismos = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
  * cantidad y botones a la derecha. Cada combinación es una variante con su precio y su stock.
  */
 export default function DetalleProducto() {
-  const { subdominio, tienda } = useOutletContext();
+  const { subdominio, tienda, paises } = useOutletContext();
   const { idProducto } = useParams();
   const { agregar, abrir } = useCarrito();
   const navigate = useNavigate();
@@ -100,10 +101,10 @@ export default function DetalleProducto() {
   const foto = fotos[Math.min(fotoElegida, fotos.length - 1)];
 
   return (
-    <div className="mx-auto grid max-w-6xl gap-10 px-4 pt-10 md:grid-cols-2">
+    <div className="mx-auto grid max-w-6xl gap-10 px-4 pt-10 md:grid-cols-2 md:gap-14">
       {/* Galería: foto grande y, si hay varias, miniaturas para cambiarla */}
       <div className="space-y-3">
-        <div className="overflow-hidden rounded-md">
+        <div className="overflow-hidden rounded-3xl bg-[#f4f4f4]">
           <ImagenProducto key={foto} url={foto} nombre={p.nombre} />
         </div>
         {fotos.length > 1 && (
@@ -123,9 +124,9 @@ export default function DetalleProducto() {
         )}
       </div>
 
-      <div className="space-y-5">
+      <div className="space-y-5 md:sticky md:top-24 md:self-start">
         {p.marca && <p className="text-sm uppercase tracking-wide text-[#616161]">{p.marca}</p>}
-        <h1 className="text-3xl font-semibold tracking-tight">{p.nombre}</h1>
+        <h1 className="text-[clamp(1.9rem,3.5vw,2.6rem)] font-semibold leading-tight tracking-tight">{p.nombre}</h1>
         <div>
           <div className="flex items-center gap-3">
             <PrecioTienda producto={elegido} grande />
@@ -197,7 +198,7 @@ export default function DetalleProducto() {
                   agregar(elegido, cantidad);
                   abrir();
                 }}
-                className="w-full rounded-md border border-[#303030] py-3 font-medium hover:bg-[#f3f3f3]"
+                className="w-full rounded-full border-2 border-[#303030] py-3.5 font-semibold transition hover:bg-[#f3f3f3]"
               >
                 Agregar al carrito
               </button>
@@ -207,7 +208,7 @@ export default function DetalleProducto() {
                   agregar(elegido, cantidad);
                   navigate(`/tienda/${subdominio}/checkout`);
                 }}
-                className="w-full rounded-md bg-[var(--tienda)] py-3 font-medium text-[var(--tienda-texto)] hover:brightness-90"
+                className="w-full rounded-full bg-[var(--tienda)] py-3.5 font-semibold text-[var(--tienda-texto)] shadow-[0_12px_30px_-12px_var(--tienda)] transition hover:brightness-95"
               >
                 Comprar ahora
               </button>
@@ -218,6 +219,16 @@ export default function DetalleProducto() {
             {variante ? 'Agotado' : 'Combinación no disponible'}
           </button>
         )}
+
+        {/* Lo que ofrece la tienda, junto a los botones: es donde el cliente duda */}
+        <ul className="space-y-2.5 rounded-2xl bg-[#f6f6f7] p-4 text-sm text-[#444]">
+          {garantiasDe(tienda, paises ?? []).map((g) => (
+            <li key={g.icono} className="flex items-center gap-3">
+              <span className="text-[var(--tienda)]"><IconoGarantia icono={g.icono} tamano={20} /></span>
+              <span><b className="font-medium text-[#1a1a1a]">{g.titulo}.</b> {g.texto}</span>
+            </li>
+          ))}
+        </ul>
 
         {p.descripcion && <p className="whitespace-pre-line border-t border-[#e3e3e3] pt-5 text-[#303030]/85">{p.descripcion}</p>}
       </div>

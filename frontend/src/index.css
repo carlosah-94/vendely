@@ -83,3 +83,80 @@ body {
     transition: none !important;
   }
 }
+
+/*
+ * Identidad de Vendely (portada, login y marca del panel).
+ * Tinta: azul noche. Mango: el color de las acciones principales. Pitaya: detalles.
+ * Bricolage Grotesque para los titulares; Inter para el texto.
+ */
+:root {
+  --v-tinta: #15123b;
+  --v-tinta-2: #221d57;
+  --v-mango: #ffb31f;
+  --v-mango-2: #ffc54d;
+  --v-pitaya: #ff4f8b;
+  --v-papel: #f5f4ff;
+}
+
+.letra-marca {
+  font-family: "Bricolage Grotesque", "Inter", sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+.letra-titular {
+  font-family: "Bricolage Grotesque", "Inter", sans-serif;
+  font-variation-settings: "opsz" 96;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+
+/* Muro de tiendas: el "video" de fondo de la portada y del login. */
+.muro-tiendas__plano {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(-12deg) scale(1.15);
+}
+.muro-tiendas__columna {
+  animation: muro-subir linear infinite;
+}
+.muro-tiendas__columna--baja {
+  animation-name: muro-bajar;
+}
+@keyframes muro-subir {
+  from { transform: translateY(0); }
+  to { transform: translateY(calc(-50% - 10px)); }
+}
+@keyframes muro-bajar {
+  from { transform: translateY(calc(-50% - 10px)); }
+  to { transform: translateY(0); }
+}
+
+/* Aviso de "nuevo pedido" que aparece y se va en la portada. */
+.aviso-pedido {
+  animation: aviso-pedido 5s ease-in-out infinite;
+}
+@keyframes aviso-pedido {
+  0%, 100% { opacity: 0; transform: translateY(12px) scale(0.97); }
+  12%, 80% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Cinta que corre de lado (plantilla Moderna). */
+.cinta {
+  animation: cinta 28s linear infinite;
+}
+@keyframes cinta {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .muro-tiendas__columna,
+  .aviso-pedido,
+  .cinta {
+    animation: none !important;
+  }
+  .aviso-pedido {
+    opacity: 1;
+  }
+}

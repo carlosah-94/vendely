@@ -61,9 +61,9 @@ export default function Login() {
 
   return (
     <LayoutAcceso>
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold text-slate-900">Iniciar sesión</h1>
-        <p className="text-sm text-slate-500">Accede al panel de tu tienda</p>
+      <div className="mb-8">
+        <h1 className="letra-titular text-4xl text-[var(--v-tinta)]">Hola de nuevo</h1>
+        <p className="mt-2 text-[15px] text-slate-500">Inicia sesión para entrar al panel de tu tienda.</p>
       </div>
 
       <form onSubmit={enviar} className="space-y-4">
@@ -120,7 +120,7 @@ export default function Login() {
         <button
           type="submit"
           disabled={enviando}
-          className="w-full rounded-lg bg-slate-900 py-2.5 font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+          className="w-full rounded-full bg-[var(--v-tinta)] py-3 font-semibold text-white transition hover:bg-[var(--v-tinta-2)] disabled:opacity-60"
         >
           {enviando ? 'Ingresando...' : pideCodigo ? 'Verificar' : 'Iniciar sesión'}
         </button>

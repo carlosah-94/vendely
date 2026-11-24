@@ -1,22 +1,17 @@
 import { Link } from 'react-router-dom';
 import { BotonComprar, tieneVariosPrecios } from './comprar';
 import { enOferta, formatoMoneda } from '../../utils/formato';
-import { metodosDeTienda, textoMetodos } from '../../utils/metodosPago';
+import { claseGrilla, hayFiltros, productoEstrella } from '../../utils/catalogo';
 import ImagenProducto from '../ImagenProducto';
 import Mensaje from '../Mensaje';
 import FiltrosCatalogo from './FiltrosCatalogo';
 import Paginador from './Paginador';
+import Destacado from './Destacado';
+import Garantias, { garantiasDe } from './Garantias';
 
 /** Fotos reales de la tienda: las primeras que tengan imagen. */
 function conFoto(productos, cuantas) {
   return productos.filter((p) => p.imagenUrl).slice(0, cuantas);
-}
-
-/** "Envíos a todo Perú, Chile y Francia" con los países de la tienda. */
-function textoEnvio(paises) {
-  if (!paises.length) return 'Envíos a todo el país';
-  const nombres = paises.map((p) => p.nombre);
-  return nombres.length === 1 ? `Envíos a todo ${nombres[0]}` : `Envíos a ${nombres.slice(0, -1).join(', ')} y ${nombres.at(-1)}`;
 }
 
 /**
@@ -30,6 +25,9 @@ export default function VitrinaModerna({ tienda, subdominio, paises, todos, prod
   cargando, error, elegirCategoria, agregarAlCarrito, filtros, total, paginas, cambiarFiltro, irAPagina }) {
   const collage = conFoto(todos, 3);
   const base = `/tienda/${subdominio}`;
+  const unico = todos.length === 1 && !hayFiltros(filtros);
+  // Frases de la cinta que corre: los productos y lo que ofrece la tienda.
+  const frases = [...todos.slice(0, 4).map((p) => p.nombre), ...garantiasDe(tienda, paises).map((g) => g.titulo)];
 
   return (
     <div className="bg-white">
@@ -42,9 +40,9 @@ export default function VitrinaModerna({ tienda, subdominio, paises, todos, prod
             {tienda.descripcion && <p className="max-w-md text-lg leading-relaxed opacity-90">{tienda.descripcion}</p>}
             <div className="flex flex-wrap gap-3">
               <a href="#catalogo" className="rounded-full bg-[var(--tienda-texto)] px-7 py-3.5 font-semibold text-[var(--tienda)] transition hover:opacity-90">
-                Ver productos
+                {unico ? 'Comprar ahora' : 'Ver productos'}
               </a>
-              {categorias[0] && (
+              {categorias[0] && !unico && (
                 <button
                   type="button"
                   onClick={() => {
@@ -69,7 +67,7 @@ export default function VitrinaModerna({ tienda, subdominio, paises, todos, prod
                   aria-label={p.nombre}
                   className={[
                     'absolute overflow-hidden rounded-[1.75rem] bg-white shadow-[0_24px_60px_-20px_rgba(0,0,0,0.45)] ring-4 ring-white transition-transform duration-300 hover:-translate-y-1',
-                    collage.length === 1 ? 'inset-x-6 inset-y-0' : '',
+                    collage.length === 1 ? 'inset-x-8 inset-y-2 rotate-2' : '',
                     collage.length > 1 && i === 0 ? 'left-0 top-0 h-[78%] w-[62%] -rotate-3' : '',
                     collage.length > 1 && i === 1 ? 'bottom-0 right-0 h-[64%] w-[52%] rotate-3' : '',
                     i === 2 ? 'right-[8%] top-[4%] h-[34%] w-[30%] rotate-6' : '',
@@ -88,26 +86,28 @@ export default function VitrinaModerna({ tienda, subdominio, paises, todos, prod
         </div>
       </section>
 
-      {/* Franja con datos reales de la tienda */}
-      <section className="border-b border-[#ececea] bg-[#f6f6f4]">
-        <div className="mx-auto grid max-w-6xl gap-4 px-5 py-5 text-sm text-[#3a3a3a] sm:grid-cols-3">
-          <p><b className="text-[#141414]">{textoEnvio(paises)}</b><br />Calculamos el envío antes de pagar.</p>
-          {/* Los métodos reales de la tienda (antes decía siempre "PayPal"). */}
-          {metodosDeTienda(tienda).length > 0 && (
-            <p>
-              <b className="text-[#141414]">Paga con {textoMetodos(metodosDeTienda(tienda))}</b><br />
-              Con tarjeta, en una página segura.
-            </p>
-          )}
-          <p>
-            <b className="text-[#141414]">{tienda.permiteInvitados ? 'Compra sin crear cuenta' : 'Sigue tus pedidos'}</b><br />
-            {tienda.permiteInvitados ? 'Solo te pedimos tu correo y tu dirección.' : 'Con tu cuenta ves el estado de cada compra.'}
-          </p>
+      {/* Cinta que corre de lado (dos copias para que no tenga corte) */}
+      {frases.length > 0 && (
+        <div className="overflow-hidden bg-[var(--tienda-texto)] py-3.5 text-[var(--tienda)]" aria-hidden="true">
+          <div className="cinta flex w-max">
+            {[0, 1].map((copia) => (
+              <div key={copia} className="flex shrink-0 items-center">
+                {[...frases, ...frases].map((f, i) => (
+                  <span key={i} className="letra-ancha flex items-center gap-6 whitespace-nowrap pr-6 text-lg">
+                    {f}
+                    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0l2 6 6 2-6 2-2 6-2-6-6-2 6-2z" fill="currentColor" /></svg>
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
         </div>
-      </section>
+      )}
+
+      <Garantias tienda={tienda} paises={paises} estilo="moderna" />
 
       {/* Categorías con foto */}
-      {categorias.length > 0 && (
+      {categorias.length > 0 && !unico && (
         <section className="mx-auto max-w-6xl px-5 pt-14">
           <h2 className="mb-5 text-3xl">Compra por categoría</h2>
           <div className="-mx-5 flex snap-x gap-4 overflow-x-auto px-5 pb-2">
@@ -141,6 +141,20 @@ export default function VitrinaModerna({ tienda, subdominio, paises, todos, prod
         </section>
       )}
 
+      {/* Un solo producto: se luce en grande. Con 4 o más, el estrella va antes del catálogo. */}
+      {unico ? (
+        <div>
+          <Destacado id="catalogo" producto={todos[0]} tienda={tienda} paises={paises} subdominio={subdominio}
+            onAgregar={agregarAlCarrito} estilo="moderna" etiqueta="Nuestro producto" />
+        </div>
+      ) : (
+      <>
+      {todos.length >= 4 && (
+        <div className="mt-14">
+          <Destacado producto={productoEstrella(todos)} tienda={tienda} paises={paises} subdominio={subdominio}
+            onAgregar={agregarAlCarrito} estilo="moderna" etiqueta="Destacado" />
+        </div>
+      )}
       {/* Catálogo: el primer producto va en grande */}
       <section id="catalogo" className="mx-auto max-w-6xl scroll-mt-20 px-5 pt-14">
         <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
@@ -157,17 +171,15 @@ export default function VitrinaModerna({ tienda, subdominio, paises, todos, prod
           <p className="text-[#616161]">Cargando productos...</p>
         ) : productos.length === 0 && !error ? (
           <p className="text-[#616161]">
-            {elegida || filtros.q || filtros.min || filtros.max || filtros.stock
-              ? 'Ningún producto coincide con esos filtros.'
-              : 'Esta tienda todavía no tiene productos.'}
+            {hayFiltros(filtros) ? 'Ningún producto coincide con esos filtros.' : 'Esta tienda está preparando sus productos. Vuelve pronto.'}
           </p>
         ) : (
           <>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <div className={`grid gap-4 ${claseGrilla(productos.length)}`}>
             {productos.map((p, i) => (
               <article
                 key={p.idProducto}
-                className={`group flex flex-col rounded-3xl bg-[#f6f6f4] p-2.5 ${i === 0 && productos.length > 2 ? 'col-span-2 md:row-span-2' : ''}`}
+                className={`group flex flex-col rounded-3xl bg-[#f6f6f4] p-2.5 ${i === 0 && productos.length > 4 ? 'col-span-2 md:row-span-2' : ''}`}
               >
                 <Link to={`${base}/producto/${p.idProducto}`} className="relative block overflow-hidden rounded-[1.25rem] bg-white">
                   <ImagenProducto url={p.imagenUrl} nombre={p.nombre} className="transition-transform duration-500 group-hover:scale-[1.04]" />
@@ -182,7 +194,7 @@ export default function VitrinaModerna({ tienda, subdominio, paises, todos, prod
                   )}
                 </Link>
                 <div className="flex flex-1 flex-col justify-between gap-3 px-1.5 pb-1 pt-3">
-                  <Link to={`${base}/producto/${p.idProducto}`} className={`font-semibold text-[#141414] hover:underline ${i === 0 && productos.length > 2 ? 'text-xl' : 'text-sm'}`}>
+                  <Link to={`${base}/producto/${p.idProducto}`} className={`font-semibold text-[#141414] hover:underline ${(i === 0 && productos.length > 4) || productos.length <= 2 ? 'text-xl' : 'text-sm'}`}>
                     {p.nombre}
                   </Link>
                   <BotonComprar
@@ -200,6 +212,8 @@ export default function VitrinaModerna({ tienda, subdominio, paises, todos, prod
           </>
         )}
       </section>
+      </>
+      )}
     </div>
   );
 }

@@ -5,6 +5,9 @@ import Mensaje from '../Mensaje';
 import FiltrosCatalogo from './FiltrosCatalogo';
 import Paginador from './Paginador';
 import { BotonComprar, tieneVariosPrecios } from './comprar';
+import Destacado from './Destacado';
+import Garantias from './Garantias';
+import { claseGrilla, hayFiltros, productoEstrella } from '../../utils/catalogo';
 
 /**
  * Plantilla Boutique ("atelier", solo plan Pro).
@@ -12,10 +15,11 @@ import { BotonComprar, tieneVariosPrecios } from './comprar';
  * una serifa fina y grande. El resto es silencioso: fondo blanco, mucho aire, fotos verticales
  * (4:5, como en moda), nombres en serifa y el color de la tienda solo en detalles.
  */
-export default function VitrinaBoutique({ tienda, subdominio, todos, productos, categorias, elegida,
+export default function VitrinaBoutique({ tienda, subdominio, paises, todos, productos, categorias, elegida,
   cargando, error, elegirCategoria, agregarAlCarrito, filtros, total, paginas, cambiarFiltro, irAPagina }) {
   const portada = todos.find((p) => p.imagenUrl);
   const base = `/tienda/${subdominio}`;
+  const unico = todos.length === 1 && !hayFiltros(filtros);
 
   return (
     <div className="bg-white text-[#222]">
@@ -29,7 +33,7 @@ export default function VitrinaBoutique({ tienda, subdominio, todos, productos, 
           <h1 className="letra-serifa max-w-4xl text-[clamp(3rem,9vw,7.5rem)] font-normal leading-[0.9]">{tienda.nombre}</h1>
           <div className="mt-8 flex flex-wrap items-center gap-6">
             <a href="#catalogo" className="border border-current px-9 py-3.5 text-sm tracking-[0.12em] transition hover:bg-white hover:text-[#222]">
-              Ver la colección
+              {unico ? 'Comprar ahora' : 'Ver la colección'}
             </a>
             {portada && (
               <Link to={`${base}/producto/${portada.idProducto}`} className="text-sm text-white/85 underline-offset-4 hover:underline">
@@ -48,8 +52,10 @@ export default function VitrinaBoutique({ tienda, subdominio, todos, productos, 
         </section>
       )}
 
+      <Garantias tienda={tienda} paises={paises} estilo="boutique" />
+
       {/* Categorías: retratos verticales con el nombre debajo */}
-      {categorias.length > 0 && (
+      {categorias.length > 0 && !unico && (
         <section className="mx-auto max-w-6xl px-6 pb-20">
           <div className="grid grid-cols-2 gap-6 md:grid-cols-3">
             {categorias.slice(0, 6).map((c) => {
@@ -82,6 +88,17 @@ export default function VitrinaBoutique({ tienda, subdominio, todos, productos, 
         </section>
       )}
 
+      {unico ? (
+        <Destacado id="catalogo" producto={todos[0]} tienda={tienda} paises={paises} subdominio={subdominio}
+          onAgregar={agregarAlCarrito} estilo="boutique" etiqueta="La pieza" />
+      ) : (
+      <>
+      {todos.length >= 4 && (
+        <div className="border-t border-[#ebe9e6]">
+          <Destacado producto={productoEstrella(todos)} tienda={tienda} paises={paises} subdominio={subdominio}
+            onAgregar={agregarAlCarrito} estilo="boutique" etiqueta="Pieza destacada" />
+        </div>
+      )}
       {/* Colección */}
       <section id="catalogo" className="mx-auto max-w-6xl scroll-mt-20 border-t border-[#ebe9e6] px-6 pt-16">
         <div className="mb-10 flex flex-wrap items-baseline justify-between gap-4">
@@ -111,13 +128,11 @@ export default function VitrinaBoutique({ tienda, subdominio, todos, productos, 
           <p className="text-[#6b6b6b]">Cargando la colección...</p>
         ) : productos.length === 0 && !error ? (
           <p className="text-[#6b6b6b]">
-            {elegida || filtros.q || filtros.min || filtros.max || filtros.stock
-              ? 'Ninguna pieza coincide con esos filtros.'
-              : 'La colección se está preparando.'}
+            {hayFiltros(filtros) ? 'Ninguna pieza coincide con esos filtros.' : 'La colección se está preparando. Vuelve pronto.'}
           </p>
         ) : (
           <>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-14 md:grid-cols-3">
+          <div className={`grid gap-x-6 gap-y-14 ${claseGrilla(productos.length, 3)}`}>
             {productos.map((p) => (
               <article key={p.idProducto} className="group flex flex-col">
                 <Link to={`${base}/producto/${p.idProducto}`} className="relative block overflow-hidden bg-[#f3f2f0]">
@@ -153,6 +168,8 @@ export default function VitrinaBoutique({ tienda, subdominio, todos, productos, 
           </>
         )}
       </section>
+      </>
+      )}
     </div>
   );
 }
