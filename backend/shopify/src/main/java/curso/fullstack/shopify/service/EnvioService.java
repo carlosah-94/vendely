@@ -118,6 +118,14 @@ public class EnvioService {
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "La dirección no existe"));
         boolean internacional = Boolean.TRUE.equals(c.getInternacional());
 
+        // Si la tienda bajó a un plan sin envíos internacionales, sus tarifas siguen guardadas
+        // (vuelven a usarse si mejora el plan), pero no se vende al extranjero.
+        if (internacional && !planService.permite(yo.idTienda(), FuncionPlan.ENVIO_INTERNACIONAL)) {
+            return new CotizacionEnvioResponse(false, true, c.getIdPais(), c.getPais(), null, null, null, null,
+                    "Esta tienda no envía a " + c.getPais() + " por ahora. Elige una dirección en "
+                            + paisDeLaTienda(yo.idTienda()) + ".");
+        }
+
         if (c.getCosto() == null) {
             String mensaje = internacional
                     ? "Esta tienda todavía no envía a " + c.getPais() + ". Elige otra dirección o escribe a la tienda."
@@ -150,7 +158,9 @@ public class EnvioService {
         Tienda t = tiendaRepository.findBySubdominio(subdominio.trim().toLowerCase(Locale.ROOT))
                 .filter(Tienda::estaActiva)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "La tienda no existe"));
+        boolean internacional = planService.permite(t.getIdTienda(), FuncionPlan.ENVIO_INTERNACIONAL);
         return envioRepository.paisesDeEnvio(t.getIdTienda()).stream()
+                .filter(p -> internacional || !Boolean.TRUE.equals(p.getInternacional()))
                 .map(p -> new PaisEnvioResponse(p.getIdPais(), p.getNombre(), Boolean.TRUE.equals(p.getInternacional())))
                 .toList();
     }
@@ -168,7 +178,16 @@ public class EnvioService {
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El país de la tienda no existe"));
         return new EnviosResponse(t.getIdPais(), pais.getNombre(), pais.getIdMoneda(),
                 envioRepository.nacionales(t.getIdTienda()).stream().map(TarifaResponse::desde).toList(),
-                envioRepository.internacionales(t.getIdTienda()).stream().map(TarifaResponse::desde).toList());
+                envioRepository.internacionales(t.getIdTienda()).stream().map(TarifaResponse::desde).toList(),
+                planService.permite(t.getIdTienda(), FuncionPlan.ENVIO_INTERNACIONAL));
+    }
+
+    /** "Perú": el nombre del país de la tienda, para los mensajes. */
+    private String paisDeLaTienda(Long idTienda) {
+        return tiendaRepository.findById(idTienda)
+                .flatMap(t -> direccionRepository.pais(t.getIdPais()))
+                .map(DireccionRepository.PaisInfo::getNombre)
+                .orElse("el país de la tienda");
     }
 
     /** Reglas que la base también revisa (CHECK), validadas antes para dar un mensaje claro. */

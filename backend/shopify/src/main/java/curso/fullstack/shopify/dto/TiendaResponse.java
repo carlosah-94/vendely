@@ -37,7 +37,8 @@ public record TiendaResponse(
         List<String> permisos,      // PEDIDOS, PRODUCTOS, INVENTARIO, CLIENTES (el dueño las tiene todas)
         DisenoTienda diseno,        // letra, botones, acento, fondo, portada, anuncio y secciones (lo guardado)
         String tema,                // tema aplicado (Tienda online → Temas) o null
-        OffsetDateTime temaAplicadoEl
+        OffsetDateTime temaAplicadoEl,
+        Integer maxProductos        // límite de productos del plan (null = sin límite)
 ) {
     private static final List<String> TODOS = Arrays.stream(PermisoTienda.values()).map(Enum::name).toList();
 
@@ -62,6 +63,7 @@ public record TiendaResponse(
                 plan == null || Boolean.TRUE.equals(plan.getPermitePersonalizar()),
                 plan == null || Boolean.TRUE.equals(plan.getPermitePlantillas()),
                 esDueno, lista, DisenoTienda.de(t),
-                t.getTema(), t.getTemaAplicadoEl());
+                t.getTema(), t.getTemaAplicadoEl(),
+                plan == null ? null : plan.getMaxProductos() == null ? null : plan.getMaxProductos().intValue());
     }
 }

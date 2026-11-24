@@ -96,8 +96,8 @@ public class VerificadorTienda {
 
     /**
      * Qué puede hacer esta cuenta en la tienda: 404 si no existe, 403 si no es el dueño ni un
-     * empleado activo. Un empleado suspendido, o de una tienda cuyo plan ya no incluye empleados,
-     * tampoco entra.
+     * empleado activo. Un empleado suspendido, o que quedó fuera del límite del plan (la tienda
+     * bajó de plan y sobran empleados), tampoco entra.
      */
     public Acceso acceso(UsuarioAutenticado yo, Long idTienda) {
         Tienda tienda = buscar(idTienda);
@@ -115,8 +115,14 @@ public class VerificadorTienda {
         if (!empleado.estaActivo()) {
             throw new ApiException(HttpStatus.FORBIDDEN, "El dueño suspendió tu acceso a esta tienda");
         }
-        if (!planPermiteEmpleados(tienda)) {
+        int maximo = maxEmpleados(tienda);
+        if (maximo == 0) {
             throw new ApiException(HttpStatus.FORBIDDEN, "El plan de esta tienda ya no incluye empleados");
+        }
+        if (!dentroDelPlan(empleado, maximo)) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "El plan de esta tienda ahora permite " + maximo
+                    + (maximo == 1 ? " empleado" : " empleados") + " y tu cuenta quedó fuera del límite. "
+                    + "Pide al dueño que suspenda a otro empleado o que mejore el plan");
         }
         return new Acceso(tienda, false, permisosDe(empleado));
     }
@@ -129,9 +135,27 @@ public class VerificadorTienda {
 
     /** true si el plan de la tienda incluye al menos un empleado. */
     public boolean planPermiteEmpleados(Tienda tienda) {
+        return maxEmpleados(tienda) > 0;
+    }
+
+    /**
+     * true si este empleado activo puede entrar con el plan actual de la tienda. Si la tienda bajó
+     * de plan y tiene más empleados activos que los que permite, entran los más antiguos; los demás
+     * esperan a que el dueño suspenda a otros o mejore el plan. No se borra ni se suspende a nadie.
+     */
+    public boolean dentroDelPlan(EmpleadoTienda empleado, Tienda tienda) {
+        return empleado.estaActivo() && dentroDelPlan(empleado, maxEmpleados(tienda));
+    }
+
+    private boolean dentroDelPlan(EmpleadoTienda empleado, int maximo) {
+        return maximo > 0 && empleadoRepository.activosAntes(empleado.getIdTienda(), empleado.getIdLogin()) < maximo;
+    }
+
+    /** Cuántos empleados permite el plan de la tienda (0 si el plan no existe o no incluye). */
+    private int maxEmpleados(Tienda tienda) {
         return planRepository.findById(tienda.getIdPlan())
-                .map(p -> p.getMaxEmpleados() != null && p.getMaxEmpleados() > 0)
-                .orElse(false);
+                .map(p -> p.getMaxEmpleados() == null ? 0 : p.getMaxEmpleados().intValue())
+                .orElse(0);
     }
 
     // ------------------------------------------------------------------ apoyo

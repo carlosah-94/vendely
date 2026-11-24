@@ -44,6 +44,7 @@ export default function Plan() {
   const [error, setError] = useState('');
   const [aviso, setAviso] = useState(null);           // { tipo, texto }
   const [pagando, setPagando] = useState(null);       // idPlan que se está pagando
+  const [porConfirmar, setPorConfirmar] = useState(null); // idPlan menor: antes de pagar se confirma lo que se pierde
   const [version, setVersion] = useState(0);         // sube para volver a cargar el plan
   const procesado = useRef(false);                    // evita confirmar dos veces el mismo regreso
 
@@ -166,6 +167,12 @@ export default function Plan() {
                 {!datos.venceEl && `Comisión por venta: ${Number(actual.comision)} %`}
                 {datos.venceEl && programados.length === 0 && 'Si no renuevas, vuelve al plan Gratis sin borrar nada.'}
               </p>
+              {datos.venceEl && programados.length === 0 && datos.alVencer?.length > 0 && (
+                <details className="mt-1 text-[12px] text-[#616161]">
+                  <summary className="cursor-pointer text-[#1650d0] hover:underline">Qué cambia si vuelves a Gratis</summary>
+                  <ListaPierde items={datos.alVencer} />
+                </details>
+              )}
               {programados.map((s) => (
                 <p key={s.idSuscripcion} className="mt-1 text-[12px] text-[#00527c]">
                   Después: <b>{s.plan}</b> del {formatoFecha(s.fechaInicio)} al {formatoFecha(s.fechaFin)}
@@ -200,7 +207,7 @@ export default function Plan() {
                   </ul>
                   {!gratis && op && (
                     <>
-                      <p className="mt-5 rounded-lg bg-[#f7f7f7] px-3 py-2 text-[12px] text-[#616161]">
+                      <div className="mt-5 rounded-lg bg-[#f7f7f7] px-3 py-2 text-[12px] text-[#616161]">
                         {op.tipo === 'SUBIR' && Number(op.creditoUsd) > 0 && (
                           <>Pagas <b className="text-[#101010]">{usd(op.montoUsd)}</b>: {usd(op.precioUsd)} menos {usd(op.creditoUsd)} de crédito por los días que no usaste. Empieza hoy.</>
                         )}
@@ -210,12 +217,29 @@ export default function Plan() {
                         {op.tipo === 'BAJAR' && (
                           <>Pagas <b className="text-[#101010]">{usd(op.montoUsd)}</b>. Empieza el {formatoFecha(op.empiezaEl)}, cuando termina lo que ya pagaste.</>
                         )}
+                        {op.tipo === 'BAJAR' && op.dejaraDeTener?.length > 0 && (
+                          <div className="mt-2 border-t border-[#e6e6e6] pt-2">
+                            <b className="text-[#101010]">Desde ese día:</b>
+                            <ListaPierde items={op.dejaraDeTener} />
+                          </div>
+                        )}
                         {op.tipo === 'RENOVAR' && (
                           <>Pagas <b className="text-[#101010]">{usd(op.montoUsd)}</b>. Los 30 días se suman desde el {formatoFecha(op.empiezaEl)}</>
                         )}
-                      </p>
+                      </div>
+                      {porConfirmar === p.idPlan ? (
+                        <div className="mt-2 rounded-lg border border-[#f0c94d] bg-[#fff8db] p-3 text-[12px] text-[#4f4700]">
+                          <p>Nada se borra y todo vuelve si después mejoras el plan. ¿Cambias a {p.nombre}?</p>
+                          <div className="mt-2 flex gap-2">
+                            <button onClick={() => { setPorConfirmar(null); elegir(p); }} disabled={pagando !== null} className={`${BOTON} flex-1`}>
+                              Sí, cambiar
+                            </button>
+                            <button onClick={() => setPorConfirmar(null)} className={`${BOTON_SECUNDARIO} flex-1`}>No</button>
+                          </div>
+                        </div>
+                      ) : (
                       <button
-                        onClick={() => elegir(p)}
+                        onClick={() => (op.tipo === 'BAJAR' && op.dejaraDeTener?.length > 0 ? setPorConfirmar(p.idPlan) : elegir(p))}
                         disabled={pagando !== null}
                         className={`mt-2 w-full ${op.tipo === 'SUBIR' ? BOTON : BOTON_SECUNDARIO}`}
                       >
@@ -224,6 +248,7 @@ export default function Plan() {
                           : op.tipo === 'RENOVAR' ? 'Renovar 30 días'
                             : op.tipo === 'SUBIR' ? `Mejorar a ${p.nombre}` : `Cambiar a ${p.nombre}`}
                       </button>
+                      )}
                     </>
                   )}
                   {gratis && !esActual && (
@@ -293,6 +318,15 @@ export default function Plan() {
 }
 
 /** Texto seguro para meter en el HTML del comprobante. */
+/** Lo que la tienda dejaría de tener al pasar a un plan menor (lo arma el backend con lo que usa hoy). */
+function ListaPierde({ items }) {
+  return (
+    <ul className="mt-1 list-disc space-y-0.5 pl-4">
+      {items.map((t) => <li key={t}>{t}</li>)}
+    </ul>
+  );
+}
+
 function html(texto) {
   return String(texto ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 }

@@ -10,7 +10,8 @@ public record EnviosResponse(
         String pais,
         String moneda,          // los costos van en esta moneda
         List<TarifaResponse> nacionales,
-        List<TarifaResponse> internacionales
+        List<TarifaResponse> internacionales,
+        Boolean internacionalIncluido   // false: el plan actual no incluye envíos internacionales (las tarifas quedan guardadas)
 ) {
     /**
      * Una tarifa. idZona = id de la región (nacional) o código del país (internacional).

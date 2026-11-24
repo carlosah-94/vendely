@@ -2,6 +2,7 @@ package curso.fullstack.shopify.dto;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.List;
 
 /**
  * Lo que pasaria si el dueno elige este plan hoy.
@@ -14,5 +15,8 @@ public record OpcionPlanResponse(
         BigDecimal precioUsd,       // precio de lista del plan
         BigDecimal creditoUsd,      // descuento por los dias no usados (solo al SUBIR)
         BigDecimal montoUsd,        // lo que se cobrara en PayPal
-        OffsetDateTime empiezaEl
+        OffsetDateTime empiezaEl,
+        // Solo al BAJAR: lo que la tienda dejará de tener desde empiezaEl. Nada se borra: todo
+        // vuelve a verse si después mejora el plan. Vacío si no pierde nada.
+        List<String> dejaraDeTener
 ) {}
