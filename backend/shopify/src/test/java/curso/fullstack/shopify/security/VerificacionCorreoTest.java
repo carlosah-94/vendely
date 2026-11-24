@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import curso.fullstack.shopify.DatosPrueba;
 import curso.fullstack.shopify.PruebaIntegracion;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -24,9 +25,9 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.web.client.RestClientException;
 
 /**
- * Verificación del correo al registrar un dueño (VerificacionCorreoService).
+ * Verificación del correo al registrar un dueño y un cliente (VerificacionCorreoService).
  *
- * Resend está simulado: el código se lee del asunto del correo que "se envió"
+ * El envío está simulado (CorreoClient): el código se lee del asunto del correo que "se envió"
  * ("Tu código de Vendely: 123456"). Cada prueba usa un correo, usuario y DNI nuevos.
  */
 class VerificacionCorreoTest extends PruebaIntegracion {
@@ -41,7 +42,7 @@ class VerificacionCorreoTest extends PruebaIntegracion {
         correo = "verifica" + n + "@vendely.test";
         usuario = "verifica" + n;
         dni = String.format("%08d", ThreadLocalRandom.current().nextInt(100_000_000));
-        when(resend.estaConfigurado()).thenReturn(true);
+        when(correos.estaConfigurado()).thenReturn(true);
     }
 
     // ------------------------------------------------------------------ camino feliz
@@ -65,11 +66,11 @@ class VerificacionCorreoTest extends PruebaIntegracion {
 
     @Test
     void sinResendNoSeEnviaNadaPeroElCodigoQuedaGuardado() throws Exception {
-        when(resend.estaConfigurado()).thenReturn(false);
+        when(correos.estaConfigurado()).thenReturn(false);
 
         enviarCodigo(correo).andExpect(status().isOk()).andExpect(jsonPath("$.requerido").value(true));
 
-        verify(resend, never()).enviar(anyString(), anyString(), anyString(), any(), any());
+        verify(correos, never()).enviar(anyString(), anyString(), anyString(), any(), any());
         assertThat(filas(correo)).isEqualTo(1);
     }
 
@@ -149,7 +150,7 @@ class VerificacionCorreoTest extends PruebaIntegracion {
         enviarCodigo(existente)
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.campos.correo").exists());
-        verify(resend, never()).enviar(anyString(), anyString(), anyString(), any(), any());
+        verify(correos, never()).enviar(anyString(), anyString(), anyString(), any(), any());
     }
 
     @Test
@@ -167,7 +168,7 @@ class VerificacionCorreoTest extends PruebaIntegracion {
 
     @Test
     void siElCorreoNoSaleResponde502YNoQuedaCodigo() throws Exception {
-        when(resend.enviar(eq(correo), anyString(), anyString(), isNull(), isNull()))
+        when(correos.enviar(eq(correo), anyString(), anyString(), isNull(), isNull()))
                 .thenThrow(new RestClientException("Resend no responde"));
 
         enviarCodigo(correo).andExpect(status().isBadGateway());
@@ -175,22 +176,123 @@ class VerificacionCorreoTest extends PruebaIntegracion {
         assertThat(filas(correo)).as("se puede volver a pedir enseguida").isZero();
     }
 
+    // ------------------------------------------------------------------ cliente de una tienda
+
+    @Test
+    void elClienteConElCodigoCorrectoCreaSuCuentaEnLaTienda() throws Exception {
+        DatosPrueba.Tienda t = datos.nuevaTienda();
+        String codigo = pedirCodigo(correo, t.subdominio());
+
+        registrarCliente(t.subdominio(), codigo).andExpect(status().isCreated());
+
+        assertThat(loginRepository.existsByCorreoAndIdTienda(correo, t.idTienda())).isTrue();
+        assertThat(filas(correo)).as("el código usado se borra").isZero();
+    }
+
+    @Test
+    void elCorreoDelCodigoDelClienteLlevaElNombreDeLaTienda() throws Exception {
+        DatosPrueba.Tienda t = datos.nuevaTienda();
+        enviarCodigo(correo, t.subdominio()).andExpect(status().isOk());
+
+        ArgumentCaptor<String> asunto = ArgumentCaptor.forClass(String.class);
+        verify(correos).enviar(eq(correo), asunto.capture(), anyString(), isNull(), isNull());
+        String nombre = jdbc.queryForObject("SELECT nombre FROM tiendas WHERE id_tienda = ?", String.class, t.idTienda());
+        assertThat(asunto.getValue()).startsWith("Tu código de " + nombre + ": ");
+    }
+
+    @Test
+    void elClienteSinCodigoNoSeRegistra() throws Exception {
+        DatosPrueba.Tienda t = datos.nuevaTienda();
+        pedirCodigo(correo, t.subdominio());
+
+        registrarCliente(t.subdominio(), null)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos.codigoVerificacion").exists());
+        assertThat(loginRepository.existsByCorreoAndIdTienda(correo, t.idTienda())).isFalse();
+    }
+
+    @Test
+    void elClienteConUnCodigoEquivocadoNoSeRegistra() throws Exception {
+        DatosPrueba.Tienda t = datos.nuevaTienda();
+        String codigo = pedirCodigo(correo, t.subdominio());
+        String malo = codigo.equals("000000") ? "111111" : "000000";
+
+        registrarCliente(t.subdominio(), malo).andExpect(status().isBadRequest());
+        assertThat(loginRepository.existsByCorreoAndIdTienda(correo, t.idTienda())).isFalse();
+    }
+
+    @Test
+    void unCorreoQueYaEsClienteDeEsaTiendaNoRecibeCodigo() throws Exception {
+        DatosPrueba.Tienda t = datos.nuevaTienda();
+        String delCliente = t.correoCliente();
+
+        enviarCodigo(delCliente, t.subdominio())
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.campos.correo").value("El correo ya está registrado en esta tienda"));
+        verify(correos, never()).enviar(anyString(), anyString(), anyString(), any(), any());
+    }
+
+    @Test
+    void elMismoCorreoPuedeSerClienteDeOtraTiendaODuenoYRecibeCodigo() throws Exception {
+        DatosPrueba.Tienda una = datos.nuevaTienda();
+        DatosPrueba.Tienda otra = datos.nuevaTienda();
+        correo = una.correoCliente();
+
+        String codigo = pedirCodigo(correo, otra.subdominio());
+        registrarCliente(otra.subdominio(), codigo).andExpect(status().isCreated());
+    }
+
+    @Test
+    void elCodigoParaUnaTiendaQueNoExisteResponde404() throws Exception {
+        enviarCodigo(correo, "no-existe-esta-tienda").andExpect(status().isNotFound());
+        verify(correos, never()).enviar(anyString(), anyString(), anyString(), any(), any());
+    }
+
     // ------------------------------------------------------------------ apoyo
 
     private ResultActions enviarCodigo(String paraCorreo) throws Exception {
-        return mvc.perform(post("/api/auth/registro/codigo")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(Map.of("correo", paraCorreo))));
+        return enviarCodigo(paraCorreo, null);
     }
 
-    /** Pide el código y lo lee del asunto del correo que se mandó a Resend (simulado). */
+    /** Con subdominio, el código es para registrarse como cliente de esa tienda. */
+    private ResultActions enviarCodigo(String paraCorreo, String subdominio) throws Exception {
+        Map<String, Object> cuerpo = new LinkedHashMap<>();
+        cuerpo.put("correo", paraCorreo);
+        if (subdominio != null) {
+            cuerpo.put("subdominio", subdominio);
+        }
+        return mvc.perform(post("/api/auth/registro/codigo")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(cuerpo)));
+    }
+
     private String pedirCodigo(String paraCorreo) throws Exception {
-        enviarCodigo(paraCorreo).andExpect(status().isOk());
+        return pedirCodigo(paraCorreo, null);
+    }
+
+    /** Pide el código y lo lee del asunto del correo que se "envió" (simulado). */
+    private String pedirCodigo(String paraCorreo, String subdominio) throws Exception {
+        enviarCodigo(paraCorreo, subdominio).andExpect(status().isOk());
         ArgumentCaptor<String> asunto = ArgumentCaptor.forClass(String.class);
-        verify(resend, org.mockito.Mockito.atLeastOnce())
+        verify(correos, org.mockito.Mockito.atLeastOnce())
                 .enviar(eq(correo), asunto.capture(), anyString(), isNull(), isNull());
         String texto = asunto.getValue();
         return texto.substring(texto.length() - 6);
+    }
+
+    private ResultActions registrarCliente(String subdominio, String codigo) throws Exception {
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("subdominio", subdominio);
+        r.put("usuario", usuario);
+        r.put("correo", correo);
+        r.put("contrasena", "Clave1234");
+        r.put("nombres", "Cliente");
+        r.put("primerApellido", "Verifica");
+        r.put("telefono", "+51987654321");
+        r.put("codigoVerificacion", codigo);
+        return mvc.perform(post("/api/auth/registro/cliente")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(r)));
     }
 
     private ResultActions registrar(String codigo) throws Exception {

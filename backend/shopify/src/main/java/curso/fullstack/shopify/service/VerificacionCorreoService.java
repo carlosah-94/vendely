@@ -1,9 +1,11 @@
 package curso.fullstack.shopify.service;
 
 import curso.fullstack.shopify.dto.CodigoEnviadoResponse;
+import curso.fullstack.shopify.entity.Tienda;
 import curso.fullstack.shopify.entity.VerificacionCorreo;
 import curso.fullstack.shopify.exception.ApiException;
 import curso.fullstack.shopify.repository.LoginRepository;
+import curso.fullstack.shopify.repository.TiendaRepository;
 import curso.fullstack.shopify.repository.VerificacionCorreoRepository;
 import java.security.SecureRandom;
 import java.time.Duration;
@@ -21,11 +23,14 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClientException;
 
 /**
- * Verificación del correo antes de crear la cuenta del dueño (como en Shopify).
+ * Verificación del correo antes de crear una cuenta (como en Shopify): la del dueño de tienda
+ * en Vendely y la del cliente en una tienda. Así cada cuenta queda con un correo que existe y
+ * que es de quien se registra: sin el código que llega a ese buzón, la cuenta no se crea.
  *
  * Flujo:
- *  1. {@link #enviar}: el registro pide un código para su correo; se genera uno de 6 dígitos,
- *     se guarda su hash y se envía por correo con Resend.
+ *  1. {@link #enviar}: el registro pide un código para su correo (con el subdominio si es un
+ *     cliente); se genera uno de 6 dígitos, se guarda su hash y se envía con CorreoClient
+ *     (Brevo o Resend).
  *  2. {@link #comprobar}: al crear la cuenta, AuthService exige ese código. Si no es correcto,
  *     no se crea nada.
  *  3. {@link #consumir}: con la cuenta creada, el código se borra (no sirve dos veces).
@@ -33,7 +38,10 @@ import org.springframework.web.client.RestClientException;
  * Límites: el código dura 10 minutos, se acepta un máximo de 5 intentos por código y no se
  * envía otro al mismo correo antes de un minuto.
  *
- * Sin RESEND_API_KEY (en local) no se envía nada: el código se escribe en el log del backend,
+ * El código prueba que el correo es tuyo, sin importar para qué cuenta se pidió: por eso hay
+ * una sola fila por correo, aunque esa persona sea dueño en Vendely y cliente en otra tienda.
+ *
+ * Sin clave de correo (en local) no se envía nada: el código se escribe en el log del backend,
  * igual que los demás correos quedan "simulados". Se puede apagar todo con
  * VERIFICAR_CORREO=false (por ejemplo, para correr la colección de Postman).
  */
@@ -52,31 +60,49 @@ public class VerificacionCorreoService {
 
     private final VerificacionCorreoRepository verificaciones;
     private final LoginRepository loginRepository;
+    private final TiendaRepository tiendaRepository;
     private final PasswordEncoder passwordEncoder;
-    private final ResendClient resend;
+    private final CorreoClient correos;
     private final boolean activa;
 
     public VerificacionCorreoService(VerificacionCorreoRepository verificaciones, LoginRepository loginRepository,
-            PasswordEncoder passwordEncoder, ResendClient resend,
+            TiendaRepository tiendaRepository, PasswordEncoder passwordEncoder, CorreoClient correos,
             @Value("${app.registro.verificar-correo:true}") boolean activa) {
         this.verificaciones = verificaciones;
         this.loginRepository = loginRepository;
+        this.tiendaRepository = tiendaRepository;
         this.passwordEncoder = passwordEncoder;
-        this.resend = resend;
+        this.correos = correos;
         this.activa = activa;
     }
 
     // ------------------------------------------------------------------ 1. enviar
 
+    /** Código para el registro del dueño de tienda (sin subdominio). */
     @Transactional
     public CodigoEnviadoResponse enviar(String correoCrudo) {
+        return enviar(correoCrudo, null);
+    }
+
+    /**
+     * Envía el código. Sin subdominio es para el registro de un dueño; con subdominio, para el
+     * registro de un cliente en esa tienda (el correo lleva el nombre de la tienda).
+     */
+    @Transactional
+    public CodigoEnviadoResponse enviar(String correoCrudo, String subdominio) {
         String correo = normalizar(correoCrudo);
+        Tienda tienda = subdominio == null || subdominio.isBlank() ? null : tiendaActiva(subdominio);
         if (!activa) {
             return new CodigoEnviadoResponse(false, correo, 0, 0);
         }
         // Si ya hay cuenta con ese correo, se avisa ahora y no después de escribir el código.
-        if (loginRepository.existsByCorreoAndIdTiendaIsNull(correo)) {
+        // Un dueño es único en Vendely; un cliente, dentro de su tienda (puede serlo de varias).
+        if (tienda == null && loginRepository.existsByCorreoAndIdTiendaIsNull(correo)) {
             throw new ApiException(HttpStatus.CONFLICT, "El correo ya está registrado", Map.of("correo", "El correo ya está registrado"));
+        }
+        if (tienda != null && loginRepository.existsByCorreoAndIdTienda(correo, tienda.getIdTienda())) {
+            String mensaje = "El correo ya está registrado en esta tienda";
+            throw new ApiException(HttpStatus.CONFLICT, mensaje, Map.of("correo", mensaje));
         }
 
         OffsetDateTime ahora = OffsetDateTime.now();
@@ -97,7 +123,7 @@ public class VerificacionCorreoService {
 
         // Si el correo no sale, la transacción se deshace: no queda un código que nadie recibió
         // ni la espera de un minuto para pedir otro.
-        mandar(correo, codigo);
+        mandar(correo, codigo, tienda == null ? "Vendely" : tienda.getNombre());
         return new CodigoEnviadoResponse(true, correo, VIGENCIA.toSeconds(), ESPERA_REENVIO.toSeconds());
     }
 
@@ -157,30 +183,56 @@ public class VerificacionCorreoService {
 
     // ------------------------------------------------------------------ apoyo
 
-    private void mandar(String correo, String codigo) {
-        if (!resend.estaConfigurado()) {
-            // Solo en local (sin RESEND_API_KEY): así se puede probar el registro sin cuentas.
-            log.warn("RESEND_API_KEY vacío: el código de verificación para {} es {} (no se envió ningún correo)", correo, codigo);
+    /**
+     * El asunto termina en el código ("Tu código de Moda Lima: 123456"): así se ve sin abrir el
+     * correo, y las pruebas lo leen de ahí.
+     */
+    private void mandar(String correo, String codigo, String para) {
+        if (!correos.estaConfigurado()) {
+            // Solo en local (sin BREVO_API_KEY ni RESEND_API_KEY): así se prueba el registro sin cuentas.
+            log.warn("Sin servicio de correo: el código de verificación para {} es {} (no se envió ningún correo)",
+                    ocultar(correo), codigo);
             return;
         }
         try {
-            resend.enviar(correo, "Tu código de Vendely: " + codigo, html(codigo), null, null);
-            log.info("Código de verificación enviado a {}", correo);
+            correos.enviar(correo, "Tu código de " + para + ": " + codigo, html(codigo, para), null, null);
+            log.info("Código de verificación enviado a {} con {}", ocultar(correo), correos.servicio());
         } catch (RestClientException e) {
-            log.error("No se pudo enviar el código de verificación a {}: {}", correo, e.getMessage());
+            log.error("No se pudo enviar el código de verificación a {}: {}", ocultar(correo), e.getMessage());
             throw new ApiException(HttpStatus.BAD_GATEWAY, "No pudimos enviar el código. Inténtalo de nuevo en un momento.");
         }
     }
 
-    private static String html(String codigo) {
+    private static String html(String codigo, String para) {
         return """
                 <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;color:#1f2937">
                   <h2 style="margin:0 0 12px">Verifica tu correo</h2>
-                  <p>Usa este código para terminar de crear tu cuenta en Vendely:</p>
+                  <p>Usa este código para terminar de crear tu cuenta en %s:</p>
                   <p style="font-size:32px;font-weight:bold;letter-spacing:8px;margin:24px 0">%s</p>
                   <p style="color:#6b7280;font-size:14px">Vence en %d minutos. Si no pediste crear una cuenta, ignora este correo.</p>
                 </div>
-                """.formatted(codigo, VIGENCIA.toMinutes());
+                """.formatted(escapar(para), codigo, VIGENCIA.toMinutes());
+    }
+
+    /** La tienda del subdominio: 404 si no existe, 403 si está suspendida (igual que AuthService). */
+    private Tienda tiendaActiva(String subdominio) {
+        Tienda t = tiendaRepository.findBySubdominio(subdominio.trim().toLowerCase(Locale.ROOT))
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "La tienda no existe"));
+        if (!t.estaActiva()) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "La tienda está suspendida");
+        }
+        return t;
+    }
+
+    /** El nombre de la tienda va dentro del HTML del correo: se escapan los caracteres especiales. */
+    private static String escapar(String texto) {
+        return texto.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
+    }
+
+    /** c***@vendely.pe: los logs no guardan correos completos. */
+    private static String ocultar(String correo) {
+        int arroba = correo.indexOf('@');
+        return arroba <= 1 ? "***" : correo.charAt(0) + "***" + correo.substring(arroba);
     }
 
     private static ApiException error(String mensaje) {

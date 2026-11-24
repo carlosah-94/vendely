@@ -112,11 +112,15 @@ public class AuthService {
         if (loginRepository.existsByUsuarioAndIdTienda(r.usuario().trim(), tienda.getIdTienda())) {
             throw new ApiException(HttpStatus.CONFLICT, "El nombre de usuario ya está en uso en esta tienda");
         }
+        // Igual que el dueño: el correo tiene que estar verificado. Va después de los otros
+        // controles para que, si el usuario ya existe, el código no se gaste.
+        verificacionCorreo.comprobar(correo, r.codigoVerificacion());
 
         Login login = nuevaCuenta(RolUsuario.CLIENTE, tienda.getIdTienda(), r.usuario(), correo, r.contrasena(),
                 r.nombres(), r.primerApellido(), r.segundoApellido(), r.telefono(),
                 Boolean.TRUE.equals(r.aceptaMarketing()));
         loginRepository.saveAndFlush(login);
+        verificacionCorreo.consumir(correo);     // el código ya se usó: no sirve para otra cuenta
         log.info("Cliente registrado: idLogin={}, tienda={}", login.getIdLogin(), tienda.getIdTienda());
         return respuesta(login);
     }

@@ -66,7 +66,7 @@ shopity/
 ### Pendiente
 
 - Probar de punta a punta el pago en producción (necesita las credenciales de prueba de PayPal o Mercado Pago en Render; sin ellas la API responde 503). Con ese pago real quedan por comprobar las dos cosas que cuelgan de él: la comisión que se guarda en el pedido y los correos de confirmación.
-- Enviar correos de verdad: sin `RESEND_API_KEY` se registran como "simulado" y no salen.
+- Enviar correos de verdad: sin `BREVO_API_KEY` (o `RESEND_API_KEY`) se registran como "simulado" y no salen.
 - Ofertas (tablas `ofertas` y `oferta_productos`): existen en la base, pero aún no tienen API ni pantalla.
 - Habilitar más países (México, Colombia, Argentina y Ecuador ya tienen su primer nivel territorial; falta cargar su lista completa, como `04_habilitar_chile.sql`).
 - Paginación en los listados y documentación Swagger/OpenAPI.
@@ -216,10 +216,12 @@ Variables de entorno (las lee `application.yml`):
 | `FRONTEND_URL` | `https://shopity-7zya.vercel.app` (adonde vuelve el comprador después de pagar) |
 | `MERCADOPAGO_ACCESS_TOKEN`, `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` | opcionales, credenciales **de prueba** |
 | `MERCADOPAGO_WEBHOOK_SECRET`, `PAYPAL_WEBHOOK_ID` | opcionales, para recibir los avisos de pago |
-| `RESEND_API_KEY` | opcional; sin ella los correos se registran como "simulado" y no se envían |
+| `BREVO_API_KEY`, `BREVO_REMITENTE_CORREO` | recomendadas: con las dos, los correos salen por Brevo y llegan a cualquier persona sin dominio propio (300 al día gratis). El remitente es un correo tuyo verificado en Brevo (Senders). Brevo puede mostrar otro dominio en el remitente; puede llegar a spam |
+| `BREVO_REMITENTE_NOMBRE` | opcional, `Vendely` por defecto: el nombre que ve quien recibe |
+| `RESEND_API_KEY` | opcional, se usa si no está Brevo; sin ninguna de las dos los correos se registran como "simulado" y no se envían |
 | `CLOUDINARY_URL` | opcional; sin ella no se pueden subir fotos, solo pegar enlaces |
 | `RESEND_REMITENTE` | opcional, `Vendely <onboarding@resend.dev>` por defecto. Con ese remitente Resend solo envía al correo de la cuenta de Resend: para que el código de registro llegue a cualquier persona hay que verificar un dominio y usar un remitente de ese dominio |
-| `VERIFICAR_CORREO` | `true` (por defecto). Con `true` y sin un dominio verificado en Resend, nadie más puede registrarse: mientras tanto, `false` |
+| `VERIFICAR_CORREO` | `true` (por defecto): el dueño y el cliente reciben un código al registrarse. Necesita Brevo (o Resend con un dominio verificado); si no, nadie más que el dueño de la cuenta de Resend podría registrarse y conviene `false` |
 | `FLYWAY_LOCATIONS` | `classpath:db/migration` (sin los usuarios de prueba) |
 
 `CORS_ORIGENES` se compara letra por letra: va sin `/` al final y, si hay varias direcciones, separadas solo por comas, sin espacios. Si no coincide, el navegador bloquea las peticiones con un error de CORS.
@@ -286,9 +288,9 @@ La API usa **JWT** (JSON Web Token) sin sesiones: al iniciar sesión el backend 
 
 | Endpoint | Acceso | Qué hace |
 |---|---|---|
-| `POST /api/auth/registro/codigo` | Abierto | Envía un código de 6 dígitos al correo del futuro dueño |
+| `POST /api/auth/registro/codigo` | Abierto | Envía un código de 6 dígitos al correo. Sin `subdominio`, para el futuro dueño; con `subdominio`, para un cliente de esa tienda |
 | `POST /api/auth/registro/dueno` | Abierto | Crea la cuenta del panel (ADMIN_TIENDA) y sus datos de propietario; exige el código del correo |
-| `POST /api/auth/registro/cliente` | Abierto | Crea la cuenta de un cliente en una tienda (por `subdominio`) |
+| `POST /api/auth/registro/cliente` | Abierto | Crea la cuenta de un cliente en una tienda (por `subdominio`); exige el código del correo |
 | `POST /api/auth/login` | Abierto | Sin `subdominio`: cuenta del panel. Con `subdominio`: cliente de esa tienda |
 | `GET /api/auth/yo` | Con token | Datos de quien inició sesión |
 | `POST /api/auth/cambiar-contrasena` | Con token | Cambia la contraseña y entrega un token nuevo |
