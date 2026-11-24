@@ -104,7 +104,7 @@ export default function DetalleProducto() {
     <div className="mx-auto grid max-w-6xl gap-10 px-4 pt-10 md:grid-cols-2 md:gap-14">
       {/* Galería: foto grande y, si hay varias, miniaturas para cambiarla */}
       <div className="space-y-3">
-        <div className="overflow-hidden rounded-3xl bg-[#f4f4f4]">
+        <div className="tarjeta-tienda overflow-hidden bg-[var(--fondo-suave)]">
           <ImagenProducto key={foto} url={foto} nombre={p.nombre} />
         </div>
         {fotos.length > 1 && (
@@ -131,7 +131,7 @@ export default function DetalleProducto() {
           <div className="flex items-center gap-3">
             <PrecioTienda producto={elegido} grande />
             {enOferta(elegido) && (
-              <span className="rounded-full bg-[var(--tienda)] px-2.5 py-0.5 text-xs font-medium text-[var(--tienda-texto)]">Oferta</span>
+              <span className="rounded-full bg-[var(--acento)] px-2.5 py-0.5 text-xs font-medium text-[var(--acento-texto)]">Oferta</span>
             )}
           </div>
           <p className="text-sm text-[#616161]">Impuestos incluidos.</p>
@@ -154,7 +154,7 @@ export default function DetalleProducto() {
                     onClick={() => elegir(i, valor)}
                     disabled={estadoV === 'no-existe'}
                     aria-pressed={activo}
-                    className={`min-w-12 rounded-full border px-4 py-2 text-sm ${
+                    className={`boton-tienda min-w-12 border px-4 py-2 text-sm ${
                       activo ? 'border-[var(--tienda)] bg-[var(--tienda)] text-[var(--tienda-texto)]' : 'border-[#c9c9c9] hover:border-[#303030]'
                     } ${estadoV !== 'disponible' ? 'line-through opacity-50' : ''} disabled:cursor-not-allowed`}
                   >
@@ -198,7 +198,7 @@ export default function DetalleProducto() {
                   agregar(elegido, cantidad);
                   abrir();
                 }}
-                className="w-full rounded-full border-2 border-[#303030] py-3.5 font-semibold transition hover:bg-[#f3f3f3]"
+                className="boton-tienda w-full border-2 border-[#303030] py-3.5 font-semibold transition hover:bg-[#f3f3f3]"
               >
                 Agregar al carrito
               </button>
@@ -208,7 +208,7 @@ export default function DetalleProducto() {
                   agregar(elegido, cantidad);
                   navigate(`/tienda/${subdominio}/checkout`);
                 }}
-                className="w-full rounded-full bg-[var(--tienda)] py-3.5 font-semibold text-[var(--tienda-texto)] shadow-[0_12px_30px_-12px_var(--tienda)] transition hover:brightness-95"
+                className="boton-tienda w-full bg-[var(--tienda)] py-3.5 font-semibold text-[var(--tienda-texto)] shadow-[0_12px_30px_-12px_var(--tienda)] transition hover:brightness-95"
               >
                 Comprar ahora
               </button>
@@ -221,7 +221,7 @@ export default function DetalleProducto() {
         )}
 
         {/* Lo que ofrece la tienda, junto a los botones: es donde el cliente duda */}
-        <ul className="space-y-2.5 rounded-2xl bg-[#f6f6f7] p-4 text-sm text-[#444]">
+        <ul className="space-y-2.5 tarjeta-tienda bg-[var(--fondo-suave)] p-4 text-sm text-[#444]">
           {garantiasDe(tienda, paises ?? []).map((g) => (
             <li key={g.icono} className="flex items-center gap-3">
               <span className="text-[var(--tienda)]"><IconoGarantia icono={g.icono} tamano={20} /></span>

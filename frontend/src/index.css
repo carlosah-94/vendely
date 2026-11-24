@@ -77,6 +77,48 @@ body {
   border-radius: 0;
 }
 
+/*
+ * Personalización de la tienda (Personalizar → Estilo; utils/diseno.js). Va DESPUÉS de las
+ * plantillas para ganarles: las clases fuente-* y botones-* cambian lo que trae cada plantilla.
+ * Estas reglas no están en una capa de Tailwind, así que también ganan a sus utilidades.
+ *
+ * Botones y tarjetas: las piezas marcadas con "boton-tienda" y "tarjeta-tienda" toman el radio
+ * de las variables. Cada plantilla trae el suyo y "botones-*" lo reemplaza.
+ */
+.tienda-diseno { --radio-boton: 9999px; --radio-tarjeta: 1rem; background: var(--fondo, #fff); }
+.plantilla-moderna { --radio-boton: 9999px; --radio-tarjeta: 1.5rem; }
+.plantilla-boutique { --radio-boton: 0; --radio-tarjeta: 0; }
+.tienda-diseno.botones-redondo { --radio-boton: 9999px; --radio-tarjeta: 1.25rem; }
+.tienda-diseno.botones-suave { --radio-boton: 0.5rem; --radio-tarjeta: 0.75rem; }
+.tienda-diseno.botones-recto { --radio-boton: 0; --radio-tarjeta: 0; }
+.tienda-diseno .boton-tienda { border-radius: var(--radio-boton); }
+.tienda-diseno .tarjeta-tienda { border-radius: var(--radio-tarjeta); }
+
+/* Letra: el texto y los títulos (h1-h3 y los nombres con letra-ancha / letra-serifa). */
+.tienda-diseno.fuente-moderna,
+.tienda-diseno.fuente-expresiva,
+.tienda-diseno.fuente-impacto { font-family: "Inter", sans-serif; font-weight: 400; }
+.tienda-diseno.fuente-elegante { font-family: "Jost", "Inter", sans-serif; font-weight: 300; }
+
+.tienda-diseno.fuente-moderna :is(h1, h2, .letra-ancha, .letra-serifa) {
+  font-family: "Inter", sans-serif; font-stretch: 100%; font-weight: 700; letter-spacing: -0.035em;
+}
+.tienda-diseno.fuente-expresiva :is(h1, h2, .letra-ancha, .letra-serifa) {
+  font-family: "Bricolage Grotesque", "Inter", sans-serif; font-stretch: 100%; font-weight: 700;
+  font-variation-settings: "opsz" 96; letter-spacing: -0.035em;
+}
+.tienda-diseno.fuente-impacto :is(h1, h2, .letra-ancha, .letra-serifa) {
+  font-family: "Archivo", "Inter", sans-serif; font-stretch: 125%; font-weight: 800; letter-spacing: -0.01em;
+}
+.tienda-diseno.fuente-elegante :is(h1, h2, h3, .letra-ancha, .letra-serifa) {
+  font-family: "Cormorant Garamond", Georgia, serif; font-stretch: 100%; font-weight: 500; letter-spacing: 0;
+}
+.tienda-diseno.fuente-elegante :is(b, strong, .font-semibold, .font-bold) { font-weight: 500; }
+/* Las plantillas Moderna y Boutique cambian h3 o el peso del texto: con otra letra se devuelve. */
+.tienda-diseno.plantilla-boutique:is(.fuente-moderna, .fuente-expresiva, .fuente-impacto) h3 {
+  font-family: inherit; font-weight: 500;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .plantilla-moderna *,
   .plantilla-boutique * {

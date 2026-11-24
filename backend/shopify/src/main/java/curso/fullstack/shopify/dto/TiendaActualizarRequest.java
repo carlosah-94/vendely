@@ -29,5 +29,33 @@ public record TiendaActualizarRequest(
 
         // Opcional: si no se envia, la plantilla no cambia. Moderna y Boutique solo con plan Pro.
         @Pattern(regexp = "^(clasica|moderna|boutique)$", message = "La plantilla debe ser clasica, moderna o boutique")
-        String plantilla
+        String plantilla,
+
+        // ---- Personalización (V12). Todos opcionales: null = no cambia; "" en los textos = quitarlo.
+        // Qué permite cada plan lo valida TiendaService.actualizar.
+
+        @Pattern(regexp = "^$|^#[0-9A-Fa-f]{6}$", message = "El color de acento debe tener el formato #RRGGBB")
+        String colorAcento,
+
+        @Size(max = 120, message = "El anuncio puede tener hasta 120 caracteres")
+        String textoAnuncio,
+
+        Boolean mostrarAnuncio,
+
+        @Size(max = 500) @Pattern(regexp = "^$|^https?://.+", message = "La imagen de portada debe ser una dirección http o https")
+        String imagenPortadaUrl,
+
+        @Pattern(regexp = "^(auto|moderna|expresiva|elegante|impacto)$",
+                message = "La letra debe ser auto, moderna, expresiva, elegante o impacto")
+        String fuente,
+
+        @Pattern(regexp = "^(auto|redondo|suave|recto)$", message = "Los botones deben ser auto, redondo, suave o recto")
+        String estiloBotones,
+
+        @Pattern(regexp = "^(blanco|hueso|perla|arena)$", message = "El fondo debe ser blanco, hueso, perla o arena")
+        String fondo,
+
+        Boolean mostrarGarantias,
+        Boolean mostrarDestacado,
+        Boolean mostrarCategorias
 ) {}

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsString;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -155,6 +156,90 @@ class PlanServiceTest extends PruebaIntegracion {
                 .andExpect(jsonPath("$.plantilla").value("boutique"));
     }
 
+    // ------------------------------------------------------------------ personalización (V12)
+
+    @Test
+    void ocultarSeccionesSePuedeConCualquierPlan() throws Exception {
+        actualizarTienda("\"mostrarGarantias\":false,\"mostrarDestacado\":false,\"mostrarCategorias\":false")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.diseno.mostrarGarantias").value(false))
+                .andExpect(jsonPath("$.diseno.mostrarDestacado").value(false))
+                .andExpect(jsonPath("$.diseno.mostrarCategorias").value(false));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @CsvSource(delimiter = '|', value = {
+            "\"fuente\":\"elegante\"",
+            "\"estiloBotones\":\"recto\"",
+            "\"colorAcento\":\"#DB2777\"",
+            "\"textoAnuncio\":\"Envío gratis desde S/ 100\"",
+            "\"mostrarAnuncio\":false",
+            "\"imagenPortadaUrl\":\"https://res.cloudinary.com/demo/portada.jpg\""})
+    void laMarcaSoloSePersonalizaConPlanBasicoOPro(String campo) throws Exception {
+        actualizarTienda(campo)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.mensaje").value(containsString(MEJORA)));
+
+        datos.cambiarPlan(tienda.idTienda(), 2);
+        actualizarTienda(campo).andExpect(status().isOk());
+    }
+
+    @Test
+    void elColorDeFondoSoloConPlanProYVolverABlancoSiempreSePuede() throws Exception {
+        datos.cambiarPlan(tienda.idTienda(), 2);
+        actualizarTienda("\"fondo\":\"arena\"")
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.mensaje").value(containsString(MEJORA)));
+
+        datos.cambiarPlan(tienda.idTienda(), 3);
+        actualizarTienda("\"fondo\":\"arena\"")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.diseno.fondo").value("arena"));
+
+        datos.cambiarPlan(tienda.idTienda(), 1);
+        actualizarTienda("\"fondo\":\"blanco\"").andExpect(status().isOk());
+    }
+
+    @Test
+    void unValorQueNoExisteSeRechazaCon400() throws Exception {
+        datos.cambiarPlan(tienda.idTienda(), 3);
+        actualizarTienda("\"fuente\":\"comic\"").andExpect(status().isBadRequest());
+        actualizarTienda("\"fondo\":\"negro\"").andExpect(status().isBadRequest());
+        actualizarTienda("\"colorAcento\":\"rosado\"").andExpect(status().isBadRequest());
+    }
+
+    /**
+     * Al bajar de plan nada se borra: la vitrina deja de mostrar lo que el plan ya no incluye,
+     * el panel lo sigue viendo guardado y el dueño puede seguir editando sus datos.
+     */
+    @Test
+    void alBajarDePlanLaVitrinaOcultaLoQueYaNoIncluyeSinBorrarlo() throws Exception {
+        datos.cambiarPlan(tienda.idTienda(), 3);
+        String diseno = "\"fuente\":\"elegante\",\"estiloBotones\":\"recto\",\"fondo\":\"hueso\","
+                + "\"colorAcento\":\"#DB2777\",\"textoAnuncio\":\"Nueva colección\",\"mostrarDestacado\":false";
+        actualizarTienda(diseno).andExpect(status().isOk());
+
+        datos.cambiarPlan(tienda.idTienda(), 2);   // Básico: se va el fondo, queda la marca
+        vitrina()
+                .andExpect(jsonPath("$.diseno.fondo").value("blanco"))
+                .andExpect(jsonPath("$.diseno.fuente").value("elegante"))
+                .andExpect(jsonPath("$.diseno.textoAnuncio").value("Nueva colección"));
+
+        datos.cambiarPlan(tienda.idTienda(), 1);   // Gratis: solo las secciones
+        vitrina()
+                .andExpect(jsonPath("$.diseno.fuente").value("auto"))
+                .andExpect(jsonPath("$.diseno.estiloBotones").value("auto"))
+                .andExpect(jsonPath("$.diseno.colorAcento").doesNotExist())
+                .andExpect(jsonPath("$.diseno.textoAnuncio").doesNotExist())
+                .andExpect(jsonPath("$.diseno.mostrarDestacado").value(false));
+
+        // Reenviar lo mismo que ya tenía guardado no exige plan: puede seguir cambiando el nombre.
+        actualizarTienda(diseno)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.diseno.fondo").value("hueso"))
+                .andExpect(jsonPath("$.diseno.fuente").value("elegante"));
+    }
+
     @Test
     void elEnvioInternacionalSoloConPlanPro() throws Exception {
         tarifaInternacional("CL")
@@ -180,6 +265,10 @@ class PlanServiceTest extends PruebaIntegracion {
                 .header("Authorization", token(tienda.idDueno()))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"nombre\":\"Mi tienda\",\"correoContacto\":\"ventas@prueba.pe\"," + campoExtra + "}"));
+    }
+
+    private ResultActions vitrina() throws Exception {
+        return mvc.perform(get("/api/public/tiendas/" + tienda.subdominio())).andExpect(status().isOk());
     }
 
     private ResultActions tarifaInternacional(String pais) throws Exception {
