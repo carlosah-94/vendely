@@ -1,0 +1,175 @@
+package curso.fullstack.shopify.security;
+
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.nullValue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import curso.fullstack.shopify.DatosPrueba;
+import curso.fullstack.shopify.PruebaIntegracion;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.http.MediaType;
+
+/**
+ * Acceso de soporte (V16): el dueño deja entrar a soporte de Vendely a armar su tienda.
+ *
+ * Lo que se comprueba: sin permiso, soporte no entra; con permiso entra a esa tienda (y solo a
+ * esa), con cualquier plan, y queda anotado lo que cambia; lo que es decisión del dueño (plan,
+ * empleados, eliminar ventas, el propio permiso) le sigue dando 403; y al quitarlo o vencer,
+ * ya no entra.
+ */
+class AccesoSoporteTest extends PruebaIntegracion {
+
+    private DatosPrueba.Tienda tienda;
+    private long soporte;
+
+    @BeforeEach
+    void tiendaGratisYUnaCuentaDeSoporte() {
+        tienda = datos.nuevaTienda();          // plan Gratis: sin cupo de empleados
+        soporte = datos.nuevoSuperadmin();
+    }
+
+    @Test
+    void sinPermisoDelDuenoSoporteNoEntra() throws Exception {
+        mvc.perform(get(ruta("productos")).header("Authorization", token(soporte)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.mensaje").value(VerificadorTienda.SIN_PERMISO_SOPORTE));
+        // La base es compartida: otras pruebas dejan tiendas con permiso. Esta no debe estar en la lista.
+        mvc.perform(get("/api/panel/tiendas").header("Authorization", token(soporte)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(enLista(""), hasSize(0)));
+    }
+
+    @Test
+    void conPermisoEntraArmaLaTiendaYQuedaAnotado() throws Exception {
+        permitir(3);
+
+        // La ve en su lista, marcada como soporte (no como dueño).
+        mvc.perform(get("/api/panel/tiendas").header("Authorization", token(soporte)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(enLista(""), hasSize(1)))
+                .andExpect(jsonPath(enLista(".soporte"), contains(true)))
+                .andExpect(jsonPath(enLista(".esDueno"), contains(false)));
+
+        // Crea una categoría (aunque la tienda sea Gratis) y ve los envíos.
+        mvc.perform(post(ruta("categorias")).header("Authorization", token(soporte))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"nombre\":\"Polos\"}"))
+                .andExpect(status().isCreated());
+        mvc.perform(get(ruta("envios")).header("Authorization", token(soporte)))
+                .andExpect(status().isOk());
+
+        // El dueño ve el permiso y, en el registro, el cambio de soporte (las lecturas no se anotan).
+        mvc.perform(get(ruta("soporte")).header("Authorization", token(tienda.idDueno())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.activoHasta", notNullValue()))
+                .andExpect(jsonPath("$.registro", hasSize(2)))
+                .andExpect(jsonPath("$.registro[0].accion").value("CAMBIO"))
+                .andExpect(jsonPath("$.registro[0].metodo").value("POST"))
+                .andExpect(jsonPath("$.registro[0].ruta").value(ruta("categorias")))
+                .andExpect(jsonPath("$.registro[1].accion").value("PERMITIDO"));
+    }
+
+    @Test
+    void elPermisoEsSoloParaEsaTienda() throws Exception {
+        permitir(1);
+        DatosPrueba.Tienda otra = datos.nuevaTienda();
+
+        mvc.perform(get("/api/panel/tiendas/" + otra.idTienda() + "/productos").header("Authorization", token(soporte)))
+                .andExpect(status().isForbidden());
+    }
+
+    @ParameterizedTest(name = "con permiso, soporte no toca {0}")
+    @ValueSource(strings = {"empleados", "soporte"})
+    void loQueDecideElDuenoNoLoTocaSoporte(String recurso) throws Exception {
+        permitir(1);
+
+        mvc.perform(get(ruta(recurso)).header("Authorization", token(soporte)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.mensaje").value(VerificadorTienda.SOPORTE_NO_PUEDE));
+    }
+
+    @Test
+    void soporteNoEliminaVentasNiSeDaPermisoASiMismo() throws Exception {
+        long variante = datos.nuevoProducto(tienda.idTienda(), "50.00", 10);
+        long idPedido = crearPedido(tienda, variante, 1);
+        permitir(1);
+
+        mvc.perform(delete(ruta("pedidos/" + idPedido)).header("Authorization", token(soporte)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.mensaje").value(VerificadorTienda.SOPORTE_NO_PUEDE));
+        mvc.perform(post(ruta("soporte")).header("Authorization", token(soporte))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"dias\":7}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void unEmpleadoNoDaPermisoDeSoporte() throws Exception {
+        datos.cambiarPlan(tienda.idTienda(), 2);
+        long empleado = datos.nuevoEmpleado(tienda.idTienda(), true, true, true, true);
+
+        mvc.perform(post(ruta("soporte")).header("Authorization", token(empleado))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"dias\":7}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void alQuitarloYaNoEntra() throws Exception {
+        permitir(7);
+
+        mvc.perform(delete(ruta("soporte")).header("Authorization", token(tienda.idDueno())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.activoHasta", nullValue()))
+                .andExpect(jsonPath("$.registro[0].accion").value("QUITADO"));
+        mvc.perform(get(ruta("productos")).header("Authorization", token(soporte)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void alVencerYaNoEntra() throws Exception {
+        permitir(1);
+        jdbc.update("UPDATE tiendas SET soporte_hasta = now() - interval '1 minute' WHERE id_tienda = ?",
+                tienda.idTienda());
+
+        mvc.perform(get(ruta("productos")).header("Authorization", token(soporte)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.mensaje").value(VerificadorTienda.SIN_PERMISO_SOPORTE));
+    }
+
+    @ParameterizedTest(name = "{0} días no es válido")
+    @ValueSource(ints = {0, 8})
+    void elPermisoDuraDe1A7Dias(int dias) throws Exception {
+        mvc.perform(post(ruta("soporte")).header("Authorization", token(tienda.idDueno()))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"dias\":" + dias + "}"))
+                .andExpect(status().isBadRequest());
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT count(*) FROM tiendas WHERE id_tienda = ? AND soporte_hasta IS NOT NULL",
+                Integer.class, tienda.idTienda()));
+    }
+
+    // ------------------------------------------------------------------ apoyo
+
+    private void permitir(int dias) throws Exception {
+        mvc.perform(post(ruta("soporte")).header("Authorization", token(tienda.idDueno()))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"dias\":" + dias + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.activoHasta", notNullValue()));
+    }
+
+    /** JSONPath a la tienda de esta prueba dentro de la lista de /api/panel/tiendas (y a un campo suyo). */
+    private String enLista(String campo) {
+        return "$[?(@.idTienda == " + tienda.idTienda() + ")]" + campo;
+    }
+
+    private String ruta(String recurso) {
+        return "/api/panel/tiendas/" + tienda.idTienda() + "/" + recurso;
+    }
+}

@@ -83,7 +83,9 @@ public final class Canales {
         }
         Long idTienda = Long.valueOf(m.group(1));
         return usuario != null
-                && (usuario.rol() == RolUsuario.ADMIN_TIENDA || usuario.rol() == RolUsuario.EMPLEADO)
+                // SUPERADMIN: soporte de Vendely, solo si el dueño le dio permiso (lo decide acceso).
+                && (usuario.rol() == RolUsuario.ADMIN_TIENDA || usuario.rol() == RolUsuario.EMPLEADO
+                        || usuario.rol() == RolUsuario.SUPERADMIN)
                 && acceso.puede(usuario, idTienda, m.group(2));
     }
 }

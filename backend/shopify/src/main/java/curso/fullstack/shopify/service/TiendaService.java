@@ -94,11 +94,18 @@ public class TiendaService {
 
     /**
      * Las tiendas que la cuenta puede abrir en el panel: las suyas si es dueño; si es empleado,
-     * aquellas donde está activo (y cuyo plan todavía incluye empleados). Cada una dice qué puede
-     * hacer ahí, para que el panel muestre solo esas opciones.
+     * aquellas donde está activo (y cuyo plan todavía incluye empleados); si es soporte de Vendely,
+     * las que le dieron permiso y no ha vencido. Cada una dice qué puede hacer ahí, para que el
+     * panel muestre solo esas opciones.
      */
     @Transactional(readOnly = true)
     public List<TiendaResponse> misTiendas(UsuarioAutenticado yo) {
+        if (yo.rol() == RolUsuario.SUPERADMIN) {
+            return tiendaRepository.findBySoporteHastaAfterOrderBySoporteHastaAsc(java.time.OffsetDateTime.now())
+                    .stream()
+                    .map(t -> responderConAcceso(verificadorTienda.acceso(yo, t.getIdTienda())))
+                    .toList();
+        }
         if (yo.rol() == RolUsuario.EMPLEADO) {
             return empleadoRepository.findByIdLoginAndEstadoOrderByIdTiendaAsc(yo.idLogin(), EmpleadoTienda.ACTIVO)
                     .stream()
@@ -142,7 +149,8 @@ public class TiendaService {
                 r.permiteInvitados());
         tiendaRepository.saveAndFlush(t);
         log.info("Tienda actualizada: idTienda={}", idTienda);
-        return responder(t);
+        // Con lo que puede quien la editó: el dueño, o soporte de Vendely (que no es el dueño).
+        return yo.rol() == RolUsuario.SUPERADMIN ? responderConAcceso(verificadorTienda.acceso(yo, idTienda)) : responder(t);
     }
 
     /**
@@ -219,7 +227,7 @@ public class TiendaService {
     private TiendaResponse responderConAcceso(VerificadorTienda.Acceso acceso) {
         Tienda t = acceso.tienda();
         return TiendaResponse.desde(t, paisDe(t), planService.planDe(t.getIdTienda()), acceso.esDueno(),
-                acceso.permisos());
+                acceso.soporte(), acceso.permisos());
     }
 
     /** Moneda, impuesto y divisiones del país de la tienda. */

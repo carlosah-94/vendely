@@ -139,6 +139,11 @@ public class DatosPrueba {
 
     // ------------------------------------------------------------------ apoyo
 
+    /** Una cuenta del equipo de Vendely (rol 1, SUPERADMIN). */
+    public long nuevoSuperadmin() {
+        return nuevaCuenta(1, null, "soporte" + CONTADOR.incrementAndGet() + "-" + System.nanoTime() % 100000);
+    }
+
     private long nuevaCuenta(int rol, Long idTienda, String usuario) {
         return jdbc.queryForObject("""
                 INSERT INTO login (id_rol, id_tienda, usuario, correo, contrasena_hash, nombres, primer_apellido)

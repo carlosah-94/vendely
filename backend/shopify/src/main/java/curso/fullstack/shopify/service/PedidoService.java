@@ -260,7 +260,7 @@ public class PedidoService {
      */
     @Transactional
     public void eliminar(UsuarioAutenticado yo, Long idTienda, Long idPedido) {
-        verificadorTienda.delDueno(yo, idTienda);
+        verificadorTienda.soloElDueno(yo, idTienda);
         Pedido p = buscarEnTienda(idPedido, idTienda);
 
         // Con un pago aprobado el dinero ya se cobró: borrar la venta descuadraría la caja.

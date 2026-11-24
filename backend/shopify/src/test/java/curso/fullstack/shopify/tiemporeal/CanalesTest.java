@@ -62,8 +62,10 @@ class CanalesTest {
     }
 
     @Test
-    void elSuperadminNoEntraALosCanalesDeUnaTienda() {
-        assertFalse(Canales.puedeEscuchar(ADMIN, "/topic/tiendas/1/pedidos", (u, t) -> true));
+    void elSuperadminEntraSoloSiElDuenoLeDioAccesoDeSoporte() {
+        // Quién tiene permiso de soporte lo decide VerificadorTienda (la base): aquí, la respuesta.
+        assertTrue(Canales.puedeEscuchar(ADMIN, "/topic/tiendas/1/pedidos", (u, t) -> true));
+        assertFalse(Canales.puedeEscuchar(ADMIN, "/topic/tiendas/1/pedidos", (u, t) -> false));
     }
 
     @Test

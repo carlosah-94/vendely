@@ -67,7 +67,8 @@ export default function InicioPanel() {
     );
   }
 
-  const dueno = esDuenoDe(tienda);
+  // Soporte de Vendely arma la tienda con permiso del dueño: ve lo mismo que él aquí.
+  const dueno = esDuenoDe(tienda) || Boolean(tienda?.soporte);
 
   const cargando = cargandoTiendas || datos.idTienda !== idTienda;
   const hoy = new Date().toDateString();
@@ -125,7 +126,7 @@ export default function InicioPanel() {
               rel="noreferrer"
               className="rounded-full bg-white px-4 py-2 text-[13px] font-semibold text-[var(--v-tinta)] hover:bg-[var(--v-papel)]"
             >
-              Ver mi tienda
+              {tienda?.soporte ? 'Ver tienda' : 'Ver mi tienda'}
             </a>
           )}
           {dueno && (

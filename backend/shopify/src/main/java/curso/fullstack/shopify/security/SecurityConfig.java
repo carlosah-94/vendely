@@ -39,7 +39,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  * Convención de rutas para los demás módulos:
  *   /api/auth/**     registro e inicio de sesión (abiertas)
  *   /api/public/**   catálogo de las tiendas (GET abierto para visitantes)
- *   /api/panel/**    panel de la tienda: su dueño (ADMIN_TIENDA) y sus empleados (EMPLEADO)
+ *   /api/panel/**    panel de la tienda: su dueño (ADMIN_TIENDA), sus empleados (EMPLEADO) y soporte (SUPERADMIN, con permiso)
  *   /api/cliente/**  cuenta, carrito y pedidos del cliente (CLIENTE)
  *   /api/admin/**    administración de Vendely (SUPERADMIN)
  */
@@ -79,9 +79,10 @@ public class SecurityConfig {
                 // que el token viaja dentro, en el CONNECT de STOMP, y lo valida AutorizacionStomp.
                 // Lo que cada uno puede escuchar lo deciden Canales, no esta regla.
                 .requestMatchers("/ws", "/ws/**").permitAll()
-                // El panel lo usan el dueño y sus empleados; qué puede hacer cada uno en cada tienda
-                // lo decide VerificadorTienda (dueño: todo; empleado: solo sus permisos).
-                .requestMatchers("/api/panel/**").hasAnyRole("ADMIN_TIENDA", "EMPLEADO")
+                // El panel lo usan el dueño y sus empleados, y soporte de Vendely en las tiendas cuyo
+                // dueño le dio permiso. Qué puede hacer cada uno en cada tienda lo decide
+                // VerificadorTienda (dueño: todo; empleado: sus permisos; soporte: casi todo).
+                .requestMatchers("/api/panel/**").hasAnyRole("ADMIN_TIENDA", "EMPLEADO", "SUPERADMIN")
                 .requestMatchers("/api/cliente/**").hasRole("CLIENTE")
                 .requestMatchers("/api/admin/**").hasRole("SUPERADMIN")
                 .anyRequest().authenticated())

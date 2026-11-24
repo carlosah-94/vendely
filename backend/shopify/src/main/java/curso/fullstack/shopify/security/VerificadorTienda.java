@@ -8,14 +8,19 @@ import curso.fullstack.shopify.entity.Tienda;
 import curso.fullstack.shopify.exception.ApiException;
 import curso.fullstack.shopify.repository.EmpleadoTiendaRepository;
 import curso.fullstack.shopify.repository.PlanRepository;
+import curso.fullstack.shopify.entity.RegistroSoporte;
 import curso.fullstack.shopify.repository.PropietarioRepository;
+import curso.fullstack.shopify.repository.RegistroSoporteRepository;
 import curso.fullstack.shopify.repository.TiendaRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 /**
  * Comprueba quién puede entrar a una tienda desde el panel.
@@ -29,19 +34,31 @@ import org.springframework.stereotype.Component;
  * Es como el portero de un edificio: tener llave del edificio (token) no te deja entrar a
  * cualquier departamento. El dueño entra al suyo con todas las llaves; un empleado, solo a las
  * habitaciones cuya llave le dio el dueño.
+ *
+ * Soporte de Vendely (SUPERADMIN) entra solo a las tiendas cuyo dueño le dio permiso y mientras
+ * no venza (tiendas.soporte_hasta, V16): ahí puede lo mismo que el dueño, MENOS lo que pasa por
+ * soloElDueno (plan y pagos, empleados, eliminar ventas, el propio permiso de soporte). Cada
+ * cambio que hace queda anotado en soporte_registro para que el dueño lo vea.
  */
 @Component
 public class VerificadorTienda {
 
     private static final String NO_ES_TUYA = "Esta tienda no es tuya";
+    static final String SIN_PERMISO_SOPORTE = "El dueño de esta tienda no ha dado acceso a soporte de Vendely, o ya venció";
+    static final String SOPORTE_NO_PUEDE = "Esto lo hace solo el dueño de la tienda: soporte de Vendely no puede";
+    /** Para anotar una sola vez cada petición de soporte, aunque se verifique varias veces. */
+    private static final String YA_ANOTADO = VerificadorTienda.class.getName() + ".anotado";
 
     private final PropietarioRepository propietarioRepository;
     private final TiendaRepository tiendaRepository;
     private final EmpleadoTiendaRepository empleadoRepository;
     private final PlanRepository planRepository;
+    private final RegistroSoporteRepository registroSoporteRepository;
 
     public VerificadorTienda(PropietarioRepository propietarioRepository, TiendaRepository tiendaRepository,
-            EmpleadoTiendaRepository empleadoRepository, PlanRepository planRepository) {
+            EmpleadoTiendaRepository empleadoRepository, PlanRepository planRepository,
+            RegistroSoporteRepository registroSoporteRepository) {
+        this.registroSoporteRepository = registroSoporteRepository;
         this.propietarioRepository = propietarioRepository;
         this.tiendaRepository = tiendaRepository;
         this.empleadoRepository = empleadoRepository;
@@ -49,11 +66,12 @@ public class VerificadorTienda {
     }
 
     /**
-     * Qué puede hacer una cuenta en una tienda. esDueno = todo; si no, solo sus permisos.
+     * Qué puede hacer una cuenta en una tienda. esDueno = todo; soporte = soporte de Vendely con
+     * permiso del dueño (todos los permisos, pero no lo que es soloElDueno); si no, solo sus permisos.
      */
-    public record Acceso(Tienda tienda, boolean esDueno, Set<PermisoTienda> permisos) {
+    public record Acceso(Tienda tienda, boolean esDueno, boolean soporte, Set<PermisoTienda> permisos) {
         public boolean puede(PermisoTienda permiso) {
-            return esDueno || permisos.contains(permiso);
+            return esDueno || soporte || permisos.contains(permiso);
         }
     }
 
@@ -70,6 +88,9 @@ public class VerificadorTienda {
      */
     public Tienda delDueno(UsuarioAutenticado yo, Long idTienda) {
         Tienda tienda = buscar(idTienda);
+        if (yo.rol() == RolUsuario.SUPERADMIN) {
+            return conSoporte(yo, tienda);
+        }
         if (yo.rol() == RolUsuario.EMPLEADO) {
             throw new ApiException(HttpStatus.FORBIDDEN,
                     trabajaAqui(yo, idTienda) ? "Solo el dueño de la tienda puede hacer esto" : NO_ES_TUYA);
@@ -78,6 +99,18 @@ public class VerificadorTienda {
             throw new ApiException(HttpStatus.FORBIDDEN, NO_ES_TUYA);
         }
         return tienda;
+    }
+
+    /**
+     * Como delDueno, pero soporte de Vendely tampoco entra: plan y pagos, empleados, eliminar
+     * ventas y el propio permiso de soporte son decisiones del dueño.
+     */
+    public Tienda soloElDueno(UsuarioAutenticado yo, Long idTienda) {
+        if (yo.rol() == RolUsuario.SUPERADMIN) {
+            buscar(idTienda);   // 404 si no existe
+            throw new ApiException(HttpStatus.FORBIDDEN, SOPORTE_NO_PUEDE);
+        }
+        return delDueno(yo, idTienda);
     }
 
     /**
@@ -105,7 +138,10 @@ public class VerificadorTienda {
             if (!esDuenoDe(yo, tienda)) {
                 throw new ApiException(HttpStatus.FORBIDDEN, NO_ES_TUYA);
             }
-            return new Acceso(tienda, true, EnumSet.allOf(PermisoTienda.class));
+            return new Acceso(tienda, true, false, EnumSet.allOf(PermisoTienda.class));
+        }
+        if (yo.rol() == RolUsuario.SUPERADMIN) {
+            return new Acceso(conSoporte(yo, tienda), false, true, EnumSet.allOf(PermisoTienda.class));
         }
         if (yo.rol() != RolUsuario.EMPLEADO) {
             throw new ApiException(HttpStatus.FORBIDDEN, NO_ES_TUYA);
@@ -124,7 +160,7 @@ public class VerificadorTienda {
                     + (maximo == 1 ? " empleado" : " empleados") + " y tu cuenta quedó fuera del límite. "
                     + "Pide al dueño que suspenda a otro empleado o que mejore el plan");
         }
-        return new Acceso(tienda, false, permisosDe(empleado));
+        return new Acceso(tienda, false, false, permisosDe(empleado));
     }
 
     /** Los permisos marcados de un empleado. */
@@ -156,6 +192,40 @@ public class VerificadorTienda {
         return planRepository.findById(tienda.getIdPlan())
                 .map(p -> p.getMaxEmpleados() == null ? 0 : p.getMaxEmpleados().intValue())
                 .orElse(0);
+    }
+
+    // ------------------------------------------------------------------ soporte de Vendely
+
+    /** La tienda, si su dueño le dio permiso a soporte y no venció. Anota los cambios que hace. */
+    private Tienda conSoporte(UsuarioAutenticado yo, Tienda tienda) {
+        if (!tienda.soporteActivo()) {
+            throw new ApiException(HttpStatus.FORBIDDEN, SIN_PERMISO_SOPORTE);
+        }
+        anotarCambio(yo, tienda);
+        return tienda;
+    }
+
+    /**
+     * Anota en soporte_registro la petición que está modificando algo (no las lecturas GET).
+     * Si la petición falla, su transacción se deshace y la anotación también: queda solo lo que
+     * de verdad cambió. Fuera de una petición HTTP (WebSocket) no hay nada que anotar.
+     */
+    private void anotarCambio(UsuarioAutenticado yo, Tienda tienda) {
+        if (!(RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes atributos)) {
+            return;
+        }
+        HttpServletRequest peticion = atributos.getRequest();
+        String metodo = peticion.getMethod();
+        if ("GET".equals(metodo) || "HEAD".equals(metodo) || "OPTIONS".equals(metodo)
+                || peticion.getAttribute(YA_ANOTADO) != null) {
+            return;
+        }
+        peticion.setAttribute(YA_ANOTADO, Boolean.TRUE);
+        RegistroSoporte r = RegistroSoporte.de(tienda.getIdTienda(), yo.idLogin(), RegistroSoporte.CAMBIO);
+        r.setMetodo(metodo);
+        String ruta = peticion.getRequestURI();
+        r.setRuta(ruta.length() > 300 ? ruta.substring(0, 300) : ruta);
+        registroSoporteRepository.save(r);
     }
 
     // ------------------------------------------------------------------ apoyo

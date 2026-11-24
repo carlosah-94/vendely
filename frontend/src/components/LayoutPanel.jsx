@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Campanita from './Campanita';
 import MenuCuenta from './MenuCuenta';
@@ -7,9 +7,10 @@ import { ToastProvider } from '../context/ToastContext';
 import { useTiendaActual } from '../hooks/useTiendaActual';
 import {
   IconoBuscar, IconoCategoria, IconoCheck, IconoClientes, IconoDescuento, IconoEmpleados, IconoInforme, IconoEnlaceExterno, IconoEnvio, IconoInicio,
-  IconoInventario, IconoMenu, IconoPedidos, IconoProductos, IconoTienda,
+  IconoInventario, IconoMenu, IconoPedidos, IconoProductos, IconoSoporte, IconoTienda,
 } from './Iconos';
-import { esDuenoDe, puede } from '../utils/permisos';
+import { esDuenoDe, esSoporte, puede } from '../utils/permisos';
+import { formatoFecha } from '../utils/formato';
 import MarcaVendely from './marca/MarcaVendely';
 
 /**
@@ -18,6 +19,7 @@ import MarcaVendely from './marca/MarcaVendely';
  * permiso = la ve el dueño o un empleado con ese permiso · soloDueno = solo la ve el dueño.
  * iconoSolo = el ícono de una sub-opción cuando su opción de arriba no se muestra (por ejemplo,
  * un empleado con Inventario pero sin Productos): entonces va como opción principal.
+ * sinSoporte = soporte de Vendely no la ve aunque entre con permiso del dueño (son decisiones del dueño).
  * Sin permiso ni soloDueno, la ven todos.
  */
 const MENU_TIENDA = [
@@ -30,9 +32,10 @@ const MENU_TIENDA = [
   { ruta: '/panel/descuentos', texto: 'Descuentos', icono: IconoDescuento, permiso: 'PRODUCTOS' },
   { ruta: '/panel/informes', texto: 'Informes', icono: IconoInforme, soloDueno: true },
   { ruta: '/panel/envios', texto: 'Envíos', icono: IconoEnvio, soloDueno: true },
-  { ruta: '/panel/tiendas', texto: 'Mis tiendas', icono: IconoTienda },
-  { ruta: '/panel/empleados', texto: 'Empleados', icono: IconoEmpleados, soloDueno: true },
-  { ruta: '/panel/plan', texto: 'Plan', icono: IconoCheck, soloDueno: true },
+  { ruta: '/panel/tiendas', texto: 'Mis tiendas', icono: IconoTienda, sinSoporte: true },
+  { ruta: '/panel/empleados', texto: 'Empleados', icono: IconoEmpleados, soloDueno: true, sinSoporte: true },
+  { ruta: '/panel/plan', texto: 'Plan', icono: IconoCheck, soloDueno: true, sinSoporte: true },
+  { ruta: '/panel/soporte', texto: 'Soporte de Vendely', icono: IconoSoporte, soloDueno: true, sinSoporte: true },
 ];
 
 /** Opciones del menú según el rol de la cuenta. */
@@ -43,6 +46,7 @@ const MENU = {
     { ruta: '/admin/tiendas', texto: 'Tiendas de Vendely', icono: IconoTienda },
     { ruta: '/admin/cuentas', texto: 'Cuentas', icono: IconoClientes },
     { ruta: '/admin/planes', texto: 'Planes', icono: IconoCheck },
+    { ruta: '/admin/soporte', texto: 'Soporte a tiendas', icono: IconoSoporte },
   ],
 };
 
@@ -60,19 +64,26 @@ const NOMBRE_ROL = {
 export default function LayoutPanel() {
   const { usuario } = useAuth();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [busqueda, setBusqueda] = useState('');
 
-  const esPanelTienda = usuario.rol === 'ADMIN_TIENDA' || usuario.rol === 'EMPLEADO';
-  // El superadmin no tiene tiendas: no se piden (el backend le respondería 403).
-  const { tienda } = useTiendaActual(esPanelTienda);
+  // Modo soporte: el superadmin dentro del panel de una tienda que le dio permiso.
+  const enSoporte = usuario.rol === 'SUPERADMIN' && pathname.startsWith('/panel');
+  const esPanelTienda = usuario.rol === 'ADMIN_TIENDA' || usuario.rol === 'EMPLEADO' || enSoporte;
+  // Fuera del modo soporte el superadmin no trabaja en tiendas: no se piden.
+  const { tienda, tiendas, cargando: cargandoTiendas } = useTiendaActual(esPanelTienda);
   // Mientras carga la tienda elegida, el dueño ve su menú completo; un empleado, solo lo común.
   const duenoAqui = usuario.rol === 'ADMIN_TIENDA' && (!tienda || esDuenoDe(tienda));
+  const soporteAqui = enSoporte && esSoporte(tienda);
   const permite = (permiso) => usuario.rol === 'ADMIN_TIENDA' ? duenoAqui : puede(tienda, permiso);
-  const visible = (o) => (o.soloDueno ? duenoAqui : o.permiso ? permite(o.permiso) : true);
+  const visible = (o) => {
+    if (enSoporte && (o.sinSoporte || !soporteAqui)) return o.ruta === '/panel';
+    return o.soloDueno ? duenoAqui || soporteAqui : o.permiso ? permite(o.permiso) : true;
+  };
   const opciones = [];
   let padreVisible = false;
-  for (const o of MENU[usuario.rol] ?? []) {
+  for (const o of (enSoporte ? MENU_TIENDA : MENU[usuario.rol]) ?? []) {
     if (!o.sub) {
       padreVisible = visible(o);
     }
@@ -117,7 +128,7 @@ export default function LayoutPanel() {
         </>
       )}
       {/* Bajo "Tienda online": Temas (elegir uno) y Personalizar (ajustar los detalles) */}
-      {duenoAqui && [['/panel/temas', 'Temas'], ['/panel/personalizar', 'Personalizar']].map(([ruta, texto]) => (
+      {(duenoAqui || soporteAqui) && [['/panel/temas', 'Temas'], ['/panel/personalizar', 'Personalizar']].map(([ruta, texto]) => (
         <NavLink
           key={ruta}
           to={ruta}
@@ -176,11 +187,12 @@ export default function LayoutPanel() {
             {/* Pedidos nuevos en vivo (issue #4). Va dentro del ToastProvider, que muestra el aviso. */}
             {esPanelTienda && permite('PEDIDOS') && <Campanita />}
             <Link to="/cuenta/perfil" title="Mi perfil" className="flex items-center gap-2.5 rounded-xl px-1.5 py-1 hover:bg-[#1f1f1f]">
-              <span className="hidden text-right leading-tight lg:block">
-                <span className="block text-[13px] font-medium text-white">{usuario.nombres} {usuario.primerApellido}</span>
-                <span className="block text-[12px] text-[#8a8a8a]">{NOMBRE_ROL[usuario.rol] ?? usuario.rol}</span>
+              {/* Una línea cada dato: un nombre largo se corta con "…" en vez de salirse de la barra */}
+              <span className="hidden min-w-0 max-w-[10.5rem] text-right leading-tight lg:block">
+                <span className="block truncate text-[13px] font-medium text-white">{usuario.nombres} {usuario.primerApellido}</span>
+                <span className="block truncate text-[12px] text-[#8a8a8a]">{enSoporte ? 'Modo soporte' : NOMBRE_ROL[usuario.rol] ?? usuario.rol}</span>
               </span>
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--v-mango)] text-[13px] font-bold text-[var(--v-tinta)]">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--v-mango)] text-[13px] font-bold text-[var(--v-tinta)]">
                 {inicial}
               </span>
             </Link>
@@ -206,6 +218,14 @@ export default function LayoutPanel() {
           <main className="min-w-0 flex-1 pb-2 pr-2 md:pl-0 pl-2">
             <div className="min-h-full rounded-2xl bg-[#f1f1f1] px-4 py-6 md:px-8 md:py-7">
               <div className="mx-auto max-w-6xl">
+                {enSoporte && (
+                  <AvisoSoporte
+                    tienda={tienda}
+                    hayTiendas={tiendas.length > 0}
+                    cargando={cargandoTiendas}
+                    onSalir={() => navigate('/admin/soporte')}
+                  />
+                )}
                 <Outlet />
               </div>
             </div>
@@ -213,6 +233,38 @@ export default function LayoutPanel() {
         </div>
       </div>
     </ToastProvider>
+  );
+}
+
+/**
+ * Franja de arriba en modo soporte: recuerda que se trabaja en la tienda de un cliente, con su
+ * permiso y hasta cuándo, y que lo que se cambie queda registrado para el dueño.
+ */
+function AvisoSoporte({ tienda, hayTiendas, cargando, onSalir }) {
+  if (cargando) {
+    return null;
+  }
+  return (
+    <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#f0c94d] bg-[#fff8db] px-4 py-3 text-[13px] text-[#4f4700]">
+      <div className="flex items-start gap-2.5">
+        <span className="mt-0.5 text-[#8a6d00]"><IconoSoporte tamano={18} /></span>
+        {tienda && esSoporte(tienda) ? (
+          <p>
+            <span className="font-semibold text-[#3d3700]">Modo soporte: {tienda.nombre}.</span>{' '}
+            Entras con permiso de su dueño (vence el {formatoFecha(tienda.soporteHasta)}). Lo que cambies
+            queda registrado y el dueño lo ve.
+          </p>
+        ) : (
+          <p>
+            <span className="font-semibold text-[#3d3700]">{hayTiendas ? 'Elige una tienda.' : 'Ninguna tienda te ha dado acceso.'}</span>{' '}
+            El dueño tiene que entrar a Soporte de Vendely en su panel y tocar "Dar acceso".
+          </p>
+        )}
+      </div>
+      <button onClick={onSalir} className="rounded-lg border border-[#d8b73a] bg-white px-3 py-1.5 font-semibold text-[#3d3700] hover:bg-[#fffdf2]">
+        Salir del modo soporte
+      </button>
+    </div>
   );
 }
 

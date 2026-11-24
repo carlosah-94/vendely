@@ -17,6 +17,9 @@ public interface TiendaRepository extends JpaRepository<Tienda, Long> {
     // Las tiendas de un dueño, de la más antigua a la más nueva
     List<Tienda> findByIdPropietarioOrderByIdTiendaAsc(Long idPropietario);
 
+    /** Tiendas cuyo dueño dio permiso a soporte de Vendely y todavía no vence. */
+    List<Tienda> findBySoporteHastaAfterOrderBySoporteHastaAsc(java.time.OffsetDateTime ahora);
+
     /**
      * Tarifa de envío por defecto a cada región del país de la tienda, en su moneda:
      * 10.00 en monedas con céntimos (S/ 10) y 3990 en monedas sin decimales (CLP 3.990).
