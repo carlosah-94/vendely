@@ -133,6 +133,15 @@ public class Tienda {
     @Column(name = "mostrar_categorias", nullable = false)
     private Boolean mostrarCategorias = true;
 
+    /** Tema aplicado en Tienda online → Temas (V13). null = nunca aplicó uno. Catálogo: utils/temas.js. */
+    @Setter
+    @Column(name = "tema", length = 20)
+    private String tema;
+
+    @Setter
+    @Column(name = "tema_aplicado_el")
+    private OffsetDateTime temaAplicadoEl;
+
     /** 1 activa · 0 suspendida */
     @Setter
     @Column(name = "estado", nullable = false)

@@ -113,21 +113,21 @@ export default function LayoutPanel() {
           <VerTienda />
         </>
       )}
-      {duenoAqui && (
-        <>
-          <NavLink
-            to="/panel/personalizar"
-            onClick={() => setMenuAbierto(false)}
-            className={({ isActive }) =>
-              `flex h-[30px] items-center rounded-xl pl-[37px] pr-2.5 ${
-                isActive ? 'bg-[#2b2b2b] font-semibold text-[#fcfcfc] shadow-[inset_3px_0_0_var(--v-mango)]' : 'text-[#dcdcdc] hover:bg-[#1f1f1f]'
-              }`
-            }
-          >
-            Personalizar
-          </NavLink>
-        </>
-      )}
+      {/* Bajo "Tienda online": Temas (elegir uno) y Personalizar (ajustar los detalles) */}
+      {duenoAqui && [['/panel/temas', 'Temas'], ['/panel/personalizar', 'Personalizar']].map(([ruta, texto]) => (
+        <NavLink
+          key={ruta}
+          to={ruta}
+          onClick={() => setMenuAbierto(false)}
+          className={({ isActive }) =>
+            `flex h-[30px] items-center rounded-xl pl-[37px] pr-2.5 ${
+              isActive ? 'bg-[#2b2b2b] font-semibold text-[#fcfcfc] shadow-[inset_3px_0_0_var(--v-mango)]' : 'text-[#dcdcdc] hover:bg-[#1f1f1f]'
+            }`
+          }
+        >
+          {texto}
+        </NavLink>
+      ))}
 
       <button
         onClick={cerrarSesion}

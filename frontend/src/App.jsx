@@ -18,6 +18,7 @@ import Envios from './pages/Envios';
 import Inventario from './pages/Inventario';
 import NuevaVenta from './pages/NuevaVenta';
 import PersonalizarTienda from './pages/PersonalizarTienda';
+import Temas from './pages/Temas';
 import Plan from './pages/Plan';
 import Portada from './pages/Portada';
 import Productos from './pages/Productos';
@@ -82,6 +83,7 @@ export default function App() {
           </Route>
           <Route element={<RequierePermiso soloDueno />}>
             <Route path="/panel/envios" element={<Envios />} />
+            <Route path="/panel/temas" element={<Temas />} />
             <Route path="/panel/personalizar" element={<PersonalizarTienda />} />
             <Route path="/panel/plan" element={<Plan />} />
             <Route path="/panel/empleados" element={<Empleados />} />
