@@ -9,7 +9,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useCarrito } from '../../context/CarritoContext';
 import { mensajeDeError } from '../../services/api';
 import { cotizarEnvio, listarPaises } from '../../services/envios';
-import { crearDireccion, crearPedido, iniciarPago, listarDirecciones, verMiPedido } from '../../services/tienda';
+import { crearDireccion, crearPedido, iniciarPago, listarDirecciones, validarCupon, verMiPedido } from '../../services/tienda';
 import { estiloInput } from '../../utils/estilos';
 import { formatoMoneda } from '../../utils/formato';
 import { METODOS_PAGO, metodosDeTienda } from '../../utils/metodosPago';
@@ -40,6 +40,11 @@ export default function Checkout() {
   const [revision, setRevision] = useState(0);
   const [revisionHecha, setRevisionHecha] = useState(null);
   const [pedidoPagado, setPedidoPagado] = useState(null); // número del pedido que ya se pagó
+  // Código de descuento: { codigo, descuento, subtotal } (subtotal con el que se calculó).
+  const [cupon, setCupon] = useState(null);
+  const [codigoEscrito, setCodigoEscrito] = useState('');
+  const [errorCupon, setErrorCupon] = useState('');
+  const [aplicando, setAplicando] = useState(false);
   // Envío a la dirección elegida: { idDireccion, subtotal, datos } (datos null = calculando).
   const [envio, setEnvio] = useState(null);
   // Método de pago: los que ofrece la tienda; por defecto el primero (el método base).
@@ -114,6 +119,39 @@ export default function Checkout() {
     };
   }, [subdominio, huella, claveRevision, vaciar]);
 
+  // Si el carrito cambia con un código aplicado, el descuento se vuelve a calcular (o se quita si ya no alcanza).
+  useEffect(() => {
+    if (!cupon || cupon.subtotal === subtotal) return undefined;
+    let vigente = true;
+    validarCupon(cupon.codigo, subtotal)
+      .then((r) => vigente && setCupon({ codigo: r.codigo, descuento: Number(r.descuento), subtotal }))
+      .catch((e) => {
+        if (!vigente) return;
+        setCupon(null);
+        setErrorCupon(mensajeDeError(e));
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [cupon, subtotal]);
+
+  async function aplicarCupon(e) {
+    e.preventDefault();
+    const codigo = codigoEscrito.trim();
+    if (!codigo) return;
+    setAplicando(true);
+    setErrorCupon('');
+    try {
+      const r = await validarCupon(codigo, subtotal);
+      setCupon({ codigo: r.codigo, descuento: Number(r.descuento), subtotal });
+      setCodigoEscrito('');
+    } catch (ex) {
+      setErrorCupon(mensajeDeError(ex));
+    } finally {
+      setAplicando(false);
+    }
+  }
+
   async function pagar() {
     setError('');
     setEnviando(true);
@@ -123,6 +161,7 @@ export default function Checkout() {
         pedido = await crearPedido({
           idDireccionEnvio: idDireccion,
           lineas: items.map((i) => ({ idVariante: i.idVariante, cantidad: i.cantidad })),
+          codigoCupon: cupon?.codigo ?? null,
         });
         setPedidoCreado(pedido);
       }
@@ -169,6 +208,10 @@ export default function Checkout() {
     );
   }
 
+  // Con un pedido ya creado (se reintenta el pago), manda el código que quedó en ese pedido.
+  const codigoAplicado = pedidoCreado ? pedidoCreado.codigoCupon : cupon?.codigo;
+  const descuentoCupon = pedidoCreado ? Number(pedidoCreado.descuentoCupon ?? 0) : (cupon?.descuento ?? 0);
+
   const resumen = (
     <div className="space-y-4">
       <ul className="space-y-4">
@@ -187,11 +230,47 @@ export default function Checkout() {
           </li>
         ))}
       </ul>
+      {/* Código de descuento (no se puede cambiar si el pedido ya se creó) */}
+      {!pedidoCreado && (
+        <form onSubmit={aplicarCupon} className="space-y-1 border-t border-[#d9d9d9] pt-4">
+          <div className="flex gap-2">
+            <input
+              value={codigoEscrito}
+              onChange={(e) => setCodigoEscrito(e.target.value)}
+              placeholder="Código de descuento"
+              aria-label="Código de descuento"
+              className="min-w-0 flex-1 rounded-md border border-[#d9d9d9] bg-white px-3 py-2.5 text-sm uppercase placeholder:normal-case"
+            />
+            <button
+              type="submit"
+              disabled={aplicando || !codigoEscrito.trim()}
+              className="rounded-md border border-[#d9d9d9] bg-white px-4 text-sm font-medium hover:bg-[#f5f5f5] disabled:opacity-50"
+            >
+              {aplicando ? '...' : 'Aplicar'}
+            </button>
+          </div>
+          {errorCupon && <p role="alert" className="text-xs text-red-700">{errorCupon}</p>}
+        </form>
+      )}
       <dl className="space-y-2 border-t border-[#d9d9d9] pt-4 text-sm">
         <div className="flex justify-between">
           <dt>Subtotal</dt>
           <dd>{formatoMoneda(subtotal)}</dd>
         </div>
+        {codigoAplicado && descuentoCupon > 0 && (
+          <div className="flex items-center justify-between">
+            <dt className="flex items-center gap-2">
+              Descuento
+              <span className="rounded bg-[#e3e3e3] px-1.5 py-0.5 text-xs font-medium">{codigoAplicado}</span>
+              {!pedidoCreado && (
+                <button type="button" onClick={() => setCupon(null)} className="text-xs text-violet-700 hover:underline">
+                  Quitar
+                </button>
+              )}
+            </dt>
+            <dd>- {formatoMoneda(descuentoCupon)}</dd>
+          </div>
+        )}
         <div className="flex justify-between">
           <dt>Envío</dt>
           <dd className={costoEnvio == null ? 'text-[#616161]' : ''}>
@@ -204,7 +283,7 @@ export default function Checkout() {
           <dt>Total</dt>
           <dd>
             <span className="mr-2 text-xs font-normal text-[#616161]">{tienda.moneda ?? 'PEN'}</span>
-            {formatoMoneda(subtotal + (costoEnvio ?? 0))}
+            {formatoMoneda(subtotal - descuentoCupon + (costoEnvio ?? 0))}
           </dd>
         </div>
         <p className="text-xs text-[#616161]">
@@ -227,7 +306,7 @@ export default function Checkout() {
           {/* En celular el resumen se pliega arriba */}
           <details className="rounded-md border border-[#e3e3e3] bg-[#f5f5f5] p-4 md:hidden">
             <summary className="cursor-pointer text-sm font-medium text-violet-700">
-              Mostrar resumen del pedido · {formatoMoneda(subtotal)}
+              Mostrar resumen del pedido · {formatoMoneda(subtotal - descuentoCupon)}
             </summary>
             <div className="mt-4">{resumen}</div>
           </details>

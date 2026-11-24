@@ -203,6 +203,9 @@ public class ComprobanteService {
         t.setWidthPercentage(60);
         t.setHorizontalAlignment(Element.ALIGN_RIGHT);
         fila(t, "Productos", dinero(p.getMoneda(), p.getSubtotal()), false);
+        if (p.getDescuentoCupon() != null && p.getDescuentoCupon().signum() > 0) {
+            fila(t, "Código de descuento", "- " + dinero(p.getMoneda(), p.getDescuentoCupon()), false);
+        }
         fila(t, "Envío", dinero(p.getMoneda(), p.getCostoEnvio()), false);
         fila(t, "Valor sin " + nombreImpuesto, dinero(p.getMoneda(), sinImpuesto), false);
         fila(t, nombreImpuesto + " incluido", dinero(p.getMoneda(), impuesto), false);

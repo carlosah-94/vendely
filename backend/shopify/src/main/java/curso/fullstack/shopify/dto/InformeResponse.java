@@ -22,7 +22,10 @@ public record InformeResponse(
         Clientes clientes,
         List<EstadoPedidos> estados
 ) {
-    /** ventas = suma de los totales (productos + envío); ticketPromedio = ventas / pedidos. */
+    /**
+     * ventas = suma de los totales (productos - código + envío); ticketPromedio = ventas / pedidos;
+     * descuentos = lo rebajado por ofertas automáticas y por códigos de descuento.
+     */
     public record Resumen(BigDecimal ventas, long pedidos, BigDecimal ticketPromedio, long unidades,
                           BigDecimal descuentos, BigDecimal envios, long clientes) {}
 

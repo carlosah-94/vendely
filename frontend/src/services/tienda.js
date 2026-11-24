@@ -55,6 +55,15 @@ export async function crearDireccion(datos) {
   return (await api.post('/cliente/direcciones', datos)).data;
 }
 
+/**
+ * ¿Sirve este código de descuento para un carrito con este subtotal? Devuelve
+ * { codigo, tipoDescuento, valor, descuento }, o un error 400 con el motivo. Es una vista previa:
+ * al crear el pedido (datos.codigoCupon) el backend lo vuelve a revisar.
+ */
+export async function validarCupon(codigo, subtotal) {
+  return (await api.post('/cliente/cupones/validar', { codigo, subtotal })).data;
+}
+
 export async function crearPedido(datos) {
   return (await api.post('/cliente/pedidos', datos)).data;
 }
