@@ -430,7 +430,7 @@ function Editor({ tienda, tiendas, idTienda, onCambiarTienda }) {
           </div>
         </form>
 
-        <div className={`${TARJETA} overflow-hidden lg:sticky lg:top-4`}>
+        <div className={`${TARJETA} overflow-hidden lg:sticky lg:top-[4.5rem]`}>
           <VistaPreviaTienda subdominio={tienda.subdominio} borrador={borrador} />
         </div>
       </div>

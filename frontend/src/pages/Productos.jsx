@@ -276,10 +276,7 @@ export default function Productos() {
                   </td>
                   {/* En la moneda de la tienda: soles en Perú, pesos en Chile. */}
                   <td className="whitespace-nowrap px-4 py-3 text-right text-[#303030]">
-                    {formatoMoneda(p.precio)}
-                    {p.precioComparacion && (
-                      <span className="block text-xs text-[#8a8a8a] line-through">{formatoMoneda(p.precioComparacion)}</span>
-                    )}
+                    <PrecioLista producto={p} />
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">
                     {/* Sin stock: se resalta en rojo para que el dueño lo note. */}
@@ -368,5 +365,39 @@ function LimiteDelPlan({ tienda, cantidad }) {
       </p>
       <Link to="/panel/plan" className="rounded-lg bg-[#303030] px-3 py-1.5 font-semibold text-white hover:bg-[#1a1a1a]">Ver planes</Link>
     </div>
+  );
+}
+
+/**
+ * Precio en la lista. Con variantes de distinto precio se muestra el rango (S/ 49.90 - S/ 54.90),
+ * como Shopify; el precio tachado solo cuando todas las variantes lo tienen, para no hacer creer
+ * que todo el producto está en oferta porque una talla lo está.
+ */
+function PrecioLista({ producto: p }) {
+  const variantes = p.variantes?.length > 1 ? p.variantes : null;
+  if (!variantes) {
+    return (
+      <>
+        {formatoMoneda(p.precio)}
+        {p.precioComparacion && (
+          <span className="block text-xs text-[#8a8a8a] line-through">{formatoMoneda(p.precioComparacion)}</span>
+        )}
+      </>
+    );
+  }
+  const precios = variantes.map((v) => Number(v.precio));
+  const min = Math.min(...precios);
+  const max = Math.max(...precios);
+  const enOfertaTodas = variantes.every((v) => v.precioComparacion && Number(v.precioComparacion) > Number(v.precio));
+  return (
+    <>
+      {min === max ? formatoMoneda(min) : `${formatoMoneda(min)} - ${formatoMoneda(max)}`}
+      {!enOfertaTodas && variantes.some((v) => v.precioComparacion) && (
+        <span className="block text-xs text-[#8a8a8a]">Algunas en oferta</span>
+      )}
+      {enOfertaTodas && min === max && (
+        <span className="block text-xs text-[#8a8a8a] line-through">{formatoMoneda(variantes[0].precioComparacion)}</span>
+      )}
+    </>
   );
 }

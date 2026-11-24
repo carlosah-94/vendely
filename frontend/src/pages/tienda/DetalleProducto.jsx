@@ -9,6 +9,7 @@ import { mensajeDeError } from '../../services/api';
 import { enOferta } from '../../utils/formato';
 import { obtenerProducto } from '../../services/tienda';
 import { useTiempoReal } from '../../hooks/useTiempoReal';
+import { useTituloPagina } from '../../hooks/useTituloPagina';
 import { canales } from '../../services/tiempoReal';
 import { IconoGarantia, garantiasDe } from '../../components/tienda/Garantias';
 
@@ -55,6 +56,9 @@ export default function DetalleProducto() {
       vigente = false;
     };
   }, [subdominio, idProducto, clave, version]);
+
+  useTituloPagina(estado.clave === clave && estado.producto && tienda
+    ? `${estado.producto.nombre} | ${tienda.nombre}` : null);
 
   if (estado.clave !== clave) {
     return <p className="p-10 text-center text-[#616161]">Cargando producto...</p>;

@@ -16,9 +16,9 @@ export function garantiasDe(tienda, paises) {
     metodos.length > 0 && {
       icono: 'pago', titulo: `Paga con ${textoMetodos(metodos)}`, texto: 'Con tarjeta, en una página segura.',
     },
-    tienda.permiteInvitados
-      ? { icono: 'cuenta', titulo: 'Compra sin crear cuenta', texto: 'Solo tu correo y tu dirección.' }
-      : { icono: 'cuenta', titulo: 'Sigue tus pedidos', texto: 'Con tu cuenta ves el estado de cada compra.' },
+    // El checkout pide cuenta (RequiereCliente): no se promete "compra sin crear cuenta" porque no
+    // existe ese camino. Lo que sí es cierto es que con la cuenta se sigue cada pedido.
+    { icono: 'cuenta', titulo: 'Sigue tus pedidos', texto: 'Con tu cuenta ves el estado de cada compra.' },
   ].filter(Boolean);
 }
 

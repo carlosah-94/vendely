@@ -184,8 +184,10 @@ export default function InicioPanel() {
           className="flex items-center justify-between gap-3 rounded-xl border border-[#ffd79d] bg-[#fff5c5] px-4 py-3 text-[13px] text-[#4f4700] hover:brightness-[0.98]"
         >
           <span>
-            <b>{porReponer.length} {porReponer.length === 1 ? 'producto necesita' : 'productos necesitan'} reposición</b>
-            {' · '}{porReponer.slice(0, 3).map((f) => f.producto).join(', ')}{porReponer.length > 3 ? '...' : ''}
+            {/* Cuenta variantes, no productos: "Polo (M / Blanco)" y "Polo (L / Blanco)" son dos. */}
+            <b>{porReponer.length} {porReponer.length === 1 ? 'variante necesita' : 'variantes necesitan'} reposición</b>
+            {' · '}{porReponer.slice(0, 3).map((f) => (f.variante && f.variante !== 'Única' ? `${f.producto} (${f.variante})` : f.producto)).join(', ')}
+            {porReponer.length > 3 ? '...' : ''}
           </span>
           <span className="shrink-0 font-medium underline">Ver inventario</span>
         </Link>

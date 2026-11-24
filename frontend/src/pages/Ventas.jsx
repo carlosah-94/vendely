@@ -219,7 +219,9 @@ export default function Ventas() {
                         <Link to={`/panel/ventas/${v.idPedido}`} className="text-violet-600 hover:underline">
                           Ver detalle
                         </Link>
-                        {puedeEliminar && (
+                        {/* Con el pago aprobado el dinero ya se cobró: el backend no deja borrarla (409),
+                            así que el botón ni aparece. Se puede cancelar desde el detalle. */}
+                        {puedeEliminar && v.estadoPago !== 'APROBADO' && (
                           <button onClick={() => setPorEliminar(v.idPedido)} className="text-red-600 hover:underline">
                             Eliminar
                           </button>

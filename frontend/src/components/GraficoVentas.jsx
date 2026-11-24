@@ -78,7 +78,9 @@ export default function GraficoVentas({ dias, moneda }) {
             </g>
           ))}
           {dias.map((d, i) => (i % paso === 0 || i === dias.length - 1) && (
-            <text key={d.fecha} x={x(i)} y={ALTO - 8} textAnchor="middle" fontSize="11" fill="#616161">
+            // La última fecha se alinea a la derecha: centrada se cortaba en el borde ("24 no").
+            <text key={d.fecha} x={x(i)} y={ALTO - 8} fontSize="11" fill="#616161"
+              textAnchor={dias.length > 1 && i === dias.length - 1 ? 'end' : 'middle'}>
               {fechaCorta(d.fecha)}
             </text>
           ))}
