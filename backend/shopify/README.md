@@ -9,7 +9,7 @@ API del proyecto Vendely (clon de Shopify). Permite que un dueño cree su tienda
 - Spring Data JPA (Hibernate con `ddl-auto: validate`) y PostgreSQL 16
 - Flyway: crea y versiona el esquema al arrancar
 - Jakarta Bean Validation y Lombok
-- Mercado Pago (Checkout Pro, modo de prueba)
+- Mercado Pago (Checkout Pro) y PayPal (Sandbox), en modo de prueba: el cliente elige
 
 ## Cómo ejecutarlo
 
@@ -113,7 +113,7 @@ Paquete base: `curso.fullstack.shopify`
 | GET, POST | `/api/cliente/direcciones` | Lista / agrega direcciones |
 | GET, POST | `/api/cliente/pedidos` | Mis pedidos / crea un pedido |
 | GET | `/api/cliente/pedidos/{idPedido}` | Detalle de un pedido |
-| POST | `/api/cliente/pedidos/{idPedido}/pago` | Inicia el pago en Mercado Pago |
+| POST | `/api/cliente/pedidos/{idPedido}/pago` | Inicia el pago con `{"metodo": "PAYPAL"}` o `{"metodo": "MERCADO_PAGO"}`; sin cuerpo, el primero disponible (ver "Métodos de pago") |
 | POST | `/api/cliente/pedidos/{idPedido}/pago/confirmar` | Confirma el resultado del pago |
 | GET | `/api/cliente/pedidos/{idPedido}/comprobante` | Su comprobante de compra en PDF |
 
@@ -254,6 +254,30 @@ Se genera con OpenPDF e incluye los datos de la tienda y del cliente, la direcci
 
 Se descarga desde el panel y desde "Mis pedidos", y se adjunta al correo de confirmación. El del cliente se busca con el `idLogin` del token: pedir el comprobante de otro cliente responde 404.
 
+## Métodos de pago
+
+El cliente elige con qué pagar: **PayPal** (Sandbox) o **Mercado Pago** (Checkout Pro). Qué métodos ofrece cada tienda lo decide `MetodoPagoService`, con dos condiciones que tienen que cumplirse a la vez:
+
+1. **El servidor tiene la pasarela configurada:** `PAYPAL_CLIENT_ID` y `PAYPAL_CLIENT_SECRET`, o `MERCADOPAGO_ACCESS_TOKEN`. Una pasarela sin credenciales no se ofrece a nadie.
+2. **El plan de la tienda la incluye** (`FuncionPlan.METODOS_PAGO`). Gratis tiene un solo método, el **método base**: el primero configurado, en el orden del enum `MetodoPago` (PayPal y después Mercado Pago). Básico y Pro tienen todos.
+
+El método base es "el primero configurado" y no "PayPal" a secas a propósito: si el servidor solo tiene Mercado Pago, una tienda Gratis igual puede cobrar.
+
+La misma regla se usa en dos lugares, así el frontend y el backend nunca se contradicen:
+
+- `GET /api/public/tiendas/{subdominio}` devuelve `metodosPago`, por ejemplo `["PAYPAL", "MERCADO_PAGO"]`. El checkout muestra una opción por cada uno; con uno solo no pregunta nada.
+- `POST /api/cliente/pedidos/{id}/pago` valida el método recibido:
+
+| Respuesta | Cuándo |
+|---|---|
+| `200` con `urlPago` | El método está disponible para la tienda |
+| `400` | El método no existe (`"BITCOIN"`) |
+| `403` "Mejora tu plan" | Está configurado, pero el plan de la tienda no lo incluye |
+| `409` | Esa pasarela no tiene credenciales en el servidor |
+| `503` | No hay ninguna pasarela configurada |
+
+Sin cuerpo (o con `metodo` vacío) se usa el primer método disponible, lo mismo que hacía el backend antes de existir la elección. La confirmación, los webhooks y la conciliación no cambian: cada pago ya guarda su `proveedor` y se verifica en su propia pasarela.
+
 ## Avisos de pago (webhook)
 
 Un pago no puede depender de que el comprador vuelva a la pantalla: si cierra la pestaña en la pasarela, el pedido se quedaría pendiente con el dinero ya cobrado. Hay dos respaldos para eso.
@@ -320,6 +344,7 @@ Para correr una sola clase: `mvn test -Dtest=PagoServiceTest`. Desde NetBeans: c
 |---|---|
 | `security/AislamientoTiendasTest` | Que un dueño no entre a otra tienda: un endpoint de cada controller del panel responde 403 con el token de otro dueño y 404 si la tienda no existe. Si se borra la llamada a `verificadorTienda.delDueno(...)` de cualquiera de ellos, falla. |
 | `service/PagoServiceTest` | Que solo se apruebe un pago consultado en la pasarela, de **este** pedido y por **el** monto exacto; que confirmar dos veces deje un solo pago aprobado y un solo evento; que un cliente no confirme el pedido de otro. |
+| `service/MetodoPagoTest` | Qué métodos de pago ofrece cada tienda según las pasarelas configuradas y su plan, y que el backend rechace un método no configurado (409), no incluido en el plan (403) o inexistente (400). |
 | `service/PedidoServiceTest` | Que una venta sea todo o nada: si falta stock en una línea, el inventario queda exactamente como estaba. Líneas repetidas, eliminar con devolución de stock y productos que no están a la venta. |
 | `service/PlanServiceTest` | Los límites de cada plan y el texto "Mejora tu plan" del 403, del que depende `esErrorDePlan()` en el frontend. |
 | `security/SesionTest` | Que un token deje de servir si está firmado con otra clave, vencido, emitido antes del cambio de contraseña o si la cuenta se suspendió; y que el login no revele qué correos existen. |
@@ -344,7 +369,7 @@ El CI (`.github/workflows/ci.yml`) las corre en cada PR con `mvn package`; el ru
 - Ventas desde el panel: registro, consulta y eliminación con ajuste de stock
 - Catálogo público y distritos
 - Direcciones del cliente y pedidos desde la tienda
-- Integración con Mercado Pago en modo de prueba
+- Pago en modo de prueba con PayPal o Mercado Pago, a elección del cliente según el plan de la tienda
 - Manejo de errores unificado y logs con rotación
 - Colección de Postman en `postman/`
 - Pruebas automatizadas con JUnit, MockMvc y Testcontainers (ver "Pruebas automatizadas")

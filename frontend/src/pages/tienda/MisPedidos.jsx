@@ -5,6 +5,7 @@ import Mensaje from '../../components/Mensaje';
 import { mensajeDeError } from '../../services/api';
 import { descargarMiComprobante, iniciarPago, listarMisPedidos, verMiPedido } from '../../services/tienda';
 import { formatoFecha, formatoMoneda } from '../../utils/formato';
+import { METODOS_PAGO, metodosDeTienda } from '../../utils/metodosPago';
 import { useTiempoReal } from '../../hooks/useTiempoReal';
 import { canales } from '../../services/tiempoReal';
 
@@ -17,7 +18,8 @@ const NOMBRE_ESTADO = {
 
 /** Pedidos del cliente en esta tienda, con su detalle (productos, envío y total) y pago. */
 export default function MisPedidos() {
-  const { subdominio } = useOutletContext();
+  const { subdominio, tienda } = useOutletContext();
+  const metodos = metodosDeTienda(tienda);
   const [estado, setEstado] = useState({ cargado: false, pedidos: [], error: '' });
   // Tiempo real (issue #4): el backend avisa a esta cuenta cuando uno de sus pedidos se paga,
   // se envia, se entrega o se cancela. Se recarga la lista y, si ese pedido esta abierto, su
@@ -70,11 +72,11 @@ export default function MisPedidos() {
     }
   }
 
-  async function pagar(idPedido) {
+  async function pagar(idPedido, metodo) {
     setError('');
     try {
-      const { urlPago } = await iniciarPago(idPedido);
-      window.location.href = urlPago;
+      const { urlPago } = await iniciarPago(idPedido, metodo);
+      window.location.assign(urlPago);   // se va a la pasarela (como en Plan.jsx)
     } catch (e) {
       setError(mensajeDeError(e));
     }
@@ -155,15 +157,18 @@ export default function MisPedidos() {
                       </>
                     )}
                     <div className="flex flex-wrap items-center gap-3">
-                      {sinPagar && (
+                      {/* Un botón por cada método que ofrece la tienda (antes decía siempre
+                          "Mercado Pago", aunque el backend cobrara con PayPal). */}
+                      {sinPagar && p.estado !== 'CANCELADO' && metodos.map((m) => (
                         <button
+                          key={m}
                           type="button"
-                          onClick={() => pagar(p.idPedido)}
+                          onClick={() => pagar(p.idPedido, m)}
                           className="rounded-md bg-[var(--tienda)] px-5 py-2 text-sm font-medium text-[var(--tienda-texto)] hover:brightness-90"
                         >
-                          Pagar con Mercado Pago
+                          Pagar con {METODOS_PAGO[m].nombre}
                         </button>
-                      )}
+                      ))}
                       {/* En un pedido cancelado no se ofrece: el comprobante no dice que se
                           canceló, así que entregarlo confundiría más de lo que ayuda. */}
                       {!sinPagar && p.estado !== 'CANCELADO' && (

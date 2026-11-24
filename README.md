@@ -53,7 +53,7 @@ shopity/
 | Doble autenticación (código de 6 dígitos) y cambio de contraseña | Sí | Sí (`/cuenta/seguridad`, en el menú de dueños y superadmin) |
 | Tiempo real: pedidos nuevos, stock y estado del envío sin recargar (WebSockets) | Sí | Sí (campanita en el panel; Pedidos, Inventario, la tienda y Mis pedidos se actualizan solos) |
 | Cliente: ingreso, direcciones (también en otros países), costo de envío, checkout y "Mis pedidos" | Sí | Sí (`/tienda/:subdominio/checkout`, `/mis-pedidos`) |
-| Pago en modo de prueba: PayPal Sandbox o Mercado Pago | Sí | Sí (`/tienda/:subdominio/pago/resultado`) |
+| Pago en modo de prueba: el cliente elige PayPal Sandbox o Mercado Pago (según el plan de la tienda) | Sí | Sí (elección en el checkout y `/tienda/:subdominio/pago/resultado`) |
 | Seguimiento del envío: enviado (con empresa y número), entregado y cancelado | Sí | Sí (en el detalle de la venta y en "Mis pedidos") |
 | Correos de confirmación, de envío y de stock bajo, con su registro | Sí | Sí (los correos del pedido, en el detalle de la venta) |
 | Comprobante de compra en PDF | Sí | Sí (se descarga desde el panel y desde "Mis pedidos") |
@@ -559,7 +559,7 @@ Cada tienda tiene su vitrina en `/tienda/{subdominio}` (por ejemplo `/tienda/mod
 | `GET /api/cliente/pedidos` | CLIENTE | Mis pedidos |
 | `GET /api/cliente/pedidos/{idPedido}` | CLIENTE | Detalle de un pedido |
 | `POST /api/cliente/pedidos` | CLIENTE | Crear un pedido desde el carrito |
-| `POST /api/cliente/pedidos/{idPedido}/pago` | CLIENTE | Iniciar el pago (PayPal o Mercado Pago) |
+| `POST /api/cliente/pedidos/{idPedido}/pago` | CLIENTE | Iniciar el pago con el método elegido: `{"metodo": "PAYPAL"}` o `{"metodo": "MERCADO_PAGO"}` (sin cuerpo, el primero que ofrece la tienda) |
 | `POST /api/cliente/pedidos/{idPedido}/pago/confirmar` | CLIENTE | Confirmar el resultado del pago |
 | `POST /api/public/pagos/webhook/mercadopago` | Mercado Pago | Aviso de la pasarela (firmado; no lo llama el navegador) |
 | `POST /api/public/pagos/webhook/paypal` | PayPal | Aviso de la pasarela (firmado; no lo llama el navegador) |
@@ -583,7 +583,7 @@ Cada tienda tiene su vitrina en `/tienda/{subdominio}` (por ejemplo `/tienda/mod
 - **Catálogo:** el filtrado y la paginación los hace la base, no el navegador: la tienda pide solo los doce productos que va a mostrar. Los filtros viajan en la URL (`?q=polo&categoria=3&min=20&max=80&stock=1&orden=precio_asc&pagina=2`), así que un enlace con filtros abierto en otra pestaña muestra exactamente lo mismo.
 - **Fotos:** se suben a Cloudinary, no al servidor. En Render el disco es temporal: se borra en cada despliegue y cada vez que el contenedor se duerme, así que una foto guardada ahí desaparecería sola. Sin `CLOUDINARY_URL` el botón de subir responde 503 y se pueden seguir pegando enlaces, que es como funcionaba antes.
 - **Direcciones:** en un país con lista oficial (Perú, Chile) el distrito o la comuna se elige de la lista; en otros países se escriben región, ciudad y código postal. Si la tienda no tiene tarifa para ese destino, el checkout lo avisa y no deja crear el pedido.
-- **Pago en modo de prueba:** se usa **PayPal Sandbox** si están `PAYPAL_CLIENT_ID` y `PAYPAL_CLIENT_SECRET`; si no, **Mercado Pago Checkout Pro** si está `MERCADOPAGO_ACCESS_TOKEN`. PayPal cobra en dólares, así que el monto en soles se convierte con `PAYPAL_TIPO_CAMBIO` (3.75 soles por dólar por defecto). Sin credenciales, iniciar el pago responde 503 "El pago en línea no está disponible por ahora".
+- **Pago en modo de prueba: el cliente elige entre PayPal Sandbox y Mercado Pago Checkout Pro.** Una tienda ofrece un método solo si el servidor tiene sus credenciales (`PAYPAL_CLIENT_ID` y `PAYPAL_CLIENT_SECRET`, o `MERCADOPAGO_ACCESS_TOKEN`) **y** su plan lo incluye: el plan Gratis tiene un solo método (el primero configurado, PayPal si está), y Básico y Pro, los dos. Con un solo método el checkout no pregunta nada. PayPal cobra en dólares, así que el monto en soles se convierte con `PAYPAL_TIPO_CAMBIO` (3.75 soles por dólar por defecto); Mercado Pago cobra en la moneda de la tienda. Sin ninguna pasarela configurada, iniciar el pago responde 503 "El pago en línea no está disponible por ahora".
 - Al confirmar, el backend consulta el pago en la pasarela y compara estado, pedido y monto: nunca confía en lo que diga el navegador.
 - **Después del pago:** el pedido pasa de *sin enviar* a *enviado* (el dueño escribe la empresa y el número de seguimiento) y de ahí a *entregado*. Cancelar solo se puede antes de enviar: devuelve el stock al inventario y, si ya se había cobrado, deja el pago como reembolsado. Cada cambio queda con su fecha, y el cliente ve esa línea de tiempo en "Mis pedidos".
 - **Correos:** al aprobarse el pago salen dos (la confirmación al cliente, con el comprobante en PDF adjunto, y el aviso de venta nueva al dueño); al marcar el envío, uno al cliente con el número de seguimiento; y cuando a un producto le queda menos que su stock mínimo, un aviso al dueño. Se envían en segundo plano y cada intento queda registrado (enviado, fallido con su motivo, o simulado si no hay `RESEND_API_KEY`): un correo que no sale no afecta a la venta.

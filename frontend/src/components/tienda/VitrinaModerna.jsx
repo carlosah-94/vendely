@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { BotonComprar, tieneVariosPrecios } from './comprar';
 import { enOferta, formatoMoneda } from '../../utils/formato';
+import { metodosDeTienda, textoMetodos } from '../../utils/metodosPago';
 import ImagenProducto from '../ImagenProducto';
 import Mensaje from '../Mensaje';
 import FiltrosCatalogo from './FiltrosCatalogo';
@@ -91,7 +92,13 @@ export default function VitrinaModerna({ tienda, subdominio, paises, todos, prod
       <section className="border-b border-[#ececea] bg-[#f6f6f4]">
         <div className="mx-auto grid max-w-6xl gap-4 px-5 py-5 text-sm text-[#3a3a3a] sm:grid-cols-3">
           <p><b className="text-[#141414]">{textoEnvio(paises)}</b><br />Calculamos el envío antes de pagar.</p>
-          <p><b className="text-[#141414]">Paga con PayPal</b><br />Tarjeta o saldo PayPal, en una página segura.</p>
+          {/* Los métodos reales de la tienda (antes decía siempre "PayPal"). */}
+          {metodosDeTienda(tienda).length > 0 && (
+            <p>
+              <b className="text-[#141414]">Paga con {textoMetodos(metodosDeTienda(tienda))}</b><br />
+              Con tarjeta, en una página segura.
+            </p>
+          )}
           <p>
             <b className="text-[#141414]">{tienda.permiteInvitados ? 'Compra sin crear cuenta' : 'Sigue tus pedidos'}</b><br />
             {tienda.permiteInvitados ? 'Solo te pedimos tu correo y tu dirección.' : 'Con tu cuenta ves el estado de cada compra.'}
