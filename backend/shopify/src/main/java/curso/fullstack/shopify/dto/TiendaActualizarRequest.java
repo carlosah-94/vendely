@@ -83,5 +83,8 @@ public record TiendaActualizarRequest(
         String rubro,
 
         // Sección propia del rubro en la portada (V22). null = no cambia. Cualquier plan.
-        Boolean mostrarSeccionRubro
+        Boolean mostrarSeccionRubro,
+
+        // Textos y secciones de la plantilla por rubro (V23). null = no cambia. Cualquier plan.
+        @Valid ContenidoRubro contenidoRubro
 ) {}

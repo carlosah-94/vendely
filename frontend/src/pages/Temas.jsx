@@ -12,6 +12,7 @@ import { formatoFecha } from '../utils/formato';
 import { BOTON, BOTON_SECUNDARIO, TARJETA } from '../utils/panel';
 import { TEMAS, TEMAS_RUBRO, borradorTema, cuerpoAplicarTema, esTemaRubro, planPermiteTema, temaActual } from '../utils/temas';
 import { nombreRubro } from '../utils/rubros';
+import SelectorRubro from '../components/SelectorRubro';
 
 /**
  * "Tienda online → Temas", como la de Shopify: arriba el tema que la tienda tiene publicado (la
@@ -43,9 +44,33 @@ function Galeria({ tienda: inicial, tiendas, idTienda, onCambiarTienda }) {
 
   const { tema: actual, personalizado } = temaActual(tienda);
   const url = `${window.location.origin}/tienda/${tienda.subdominio}`;
-  // Plantillas por rubro (V22): primero la de su rubro (incluida en su plan), luego las demás.
+  // Plantilla por rubro (V22): solo la de SU rubro. Una pastelería no usa la de mascotas: si su
+  // negocio cambió, cambia el rubro (abajo) y la plantilla lo sigue.
   const suRubro = TEMAS_RUBRO.find((t) => t.rubro === tienda.rubro);
-  const otrosRubros = TEMAS_RUBRO.filter((t) => t !== suRubro);
+
+  async function cambiarRubro(rubro) {
+    setError('');
+    try {
+      // Los datos de siempre (el PUT los pide) y el rubro nuevo: el backend pasa la tienda a la
+      // plantilla de ese rubro si usaba la de su rubro. Las categorías y productos no cambian.
+      const { data } = await api.put(`/panel/tiendas/${idTienda}`, {
+        nombre: tienda.nombre,
+        descripcion: tienda.descripcion ?? null,
+        correoContacto: tienda.correoContacto,
+        logoUrl: tienda.logoUrl ?? null,
+        colorPrincipal: tienda.colorPrincipal ?? null,
+        permiteInvitados: tienda.permiteInvitados,
+        rubro,
+      });
+      setTienda(data);
+      setVersion((v) => v + 1);
+      avisar(`Rubro cambiado a ${nombreRubro(rubro)}`);
+      return true;
+    } catch (ex) {
+      setError(mensajeDeError(ex));
+      return false;
+    }
+  }
 
   async function aplicar(tema) {
     setAplicando(tema.valor);
@@ -115,10 +140,10 @@ function Galeria({ tienda: inicial, tiendas, idTienda, onCambiarTienda }) {
       {/* ---------------------------------------------------------------- Plantillas por rubro */}
       <div>
         <div className="mb-3">
-          <h2 className="text-[15px] font-semibold text-[#101010]">Plantillas para tu rubro</h2>
+          <h2 className="text-[15px] font-semibold text-[#101010]">Plantilla de tu rubro</h2>
           <p className="text-[12px] text-[#616161]">
-            Más que colores: cada una cambia la portada, los beneficios y trae una sección pensada para ese negocio.
-            {suRubro && <> La de <b>{nombreRubro(tienda.rubro)}</b> está incluida en todos los planes.</>}
+            Más que colores: cambia la portada, los beneficios y trae una sección pensada para tu negocio, que se adapta a
+            cómo trabajas (delivery, recojo, WhatsApp). Sus textos los cambias en Personalizar. Incluida en todos los planes.
           </p>
         </div>
         {suRubro && (
@@ -131,19 +156,7 @@ function Galeria({ tienda: inicial, tiendas, idTienda, onCambiarTienda }) {
             onAplicar={() => aplicar(suRubro)}
           />
         )}
-        <div className={`grid gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 ${suRubro ? 'mt-6' : ''}`}>
-          {otrosRubros.map((tema) => (
-            <TarjetaTema
-              key={tema.valor}
-              tema={tema}
-              tienda={tienda}
-              esActual={tema.valor === actual.valor && !personalizado}
-              aplicando={aplicando === tema.valor}
-              onVer={() => setEnGrande(tema)}
-              onAplicar={() => aplicar(tema)}
-            />
-          ))}
-        </div>
+        <CambiarRubro tienda={tienda} sinPlantilla={!suRubro} onGuardar={cambiarRubro} />
       </div>
 
       {/* ---------------------------------------------------------------- Descubre temas */}
@@ -245,6 +258,50 @@ function TarjetaTema({ tema, tienda, esActual, aplicando, onVer, onAplicar }) {
       </div>
       <p className="mt-1 text-[12px] leading-snug text-[#616161]">{tema.descripcion}</p>
     </article>
+  );
+}
+
+/** El rubro de la tienda y la opción de cambiarlo (la plantilla lo sigue). */
+function CambiarRubro({ tienda, sinPlantilla, onGuardar }) {
+  const [abierto, setAbierto] = useState(sinPlantilla);
+  const [rubro, setRubro] = useState(tienda.rubro ?? '');
+  const [guardando, setGuardando] = useState(false);
+
+  async function guardar() {
+    setGuardando(true);
+    const ok = await onGuardar(rubro);
+    setGuardando(false);
+    if (ok) setAbierto(false);
+  }
+
+  return (
+    <div className={`${TARJETA} mt-4 p-4`}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-[13px] text-[#303030]">
+          {sinPlantilla
+            ? <>Tu tienda todavía no tiene una plantilla de rubro. Elige qué vendes para usar una pensada para tu negocio.</>
+            : <>Tu rubro: <b>{nombreRubro(tienda.rubro)}</b>. ¿Tu negocio cambió?</>}
+        </p>
+        {!abierto && <button type="button" onClick={() => setAbierto(true)} className={`${BOTON_SECUNDARIO} text-[13px]`}>Cambiar rubro</button>}
+      </div>
+      {abierto && (
+        <div className="mt-4 space-y-3">
+          <SelectorRubro valor={rubro} onCambiar={setRubro} />
+          <p className="text-[12px] text-[#616161]">
+            Tu tienda pasará a la plantilla del rubro nuevo. Tus productos y categorías no cambian. Si elegiste un tema
+            general (Mercado, Minimal…), se mantiene.
+          </p>
+          <div className="flex gap-2">
+            <button type="button" disabled={guardando || !rubro || rubro === tienda.rubro} onClick={guardar} className={`${BOTON} text-[13px]`}>
+              {guardando ? 'Guardando...' : 'Guardar rubro'}
+            </button>
+            {!sinPlantilla && (
+              <button type="button" onClick={() => { setAbierto(false); setRubro(tienda.rubro ?? ''); }} className={`${BOTON_SECUNDARIO} text-[13px]`}>Cancelar</button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

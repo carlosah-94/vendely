@@ -35,10 +35,11 @@ public record TiendaPublicaResponse(
         // (cualquier plan) o si el plan incluye plantillas (Pro). Los temas clásicos van tal cual.
         String tema,
         String recojoDireccion, // dirección del local si tiene recojo activo (V18), o null
-        String recojoHorario
+        String recojoHorario,
+        List<String> distritosDelivery // distritos con delivery propio activo (V19), para la plantilla
 ) {
     public static TiendaPublicaResponse desde(Tienda t, DireccionRepository.PaisInfo p) {
-        return desde(t, p, null, List.of());
+        return desde(t, p, null, List.of(), List.of());
     }
 
     /**
@@ -48,7 +49,7 @@ public record TiendaPublicaResponse(
      * Los métodos de pago llegan ya filtrados por MetodoPagoService (servidor + plan).
      */
     public static TiendaPublicaResponse desde(Tienda t, DireccionRepository.PaisInfo p, Plan plan,
-                                              List<MetodoPago> metodosPago) {
+                                              List<MetodoPago> metodosPago, List<String> distritosDelivery) {
         boolean personaliza = plan == null || Boolean.TRUE.equals(plan.getPermitePersonalizar());
         boolean plantillas = plan == null || Boolean.TRUE.equals(plan.getPermitePlantillas());
         // La plantilla de SU rubro, sin cambios, se ve con sus colores y su letra en cualquier plan
@@ -64,6 +65,7 @@ public record TiendaPublicaResponse(
                 t.getCorreoContacto(), personaliza ? t.getLogoUrl() : null, colores ? t.getColorPrincipal() : null,
                 t.getPermiteInvitados(), plantillas ? t.getPlantilla() : "clasica", !personaliza, metodosPago,
                 DisenoTienda.de(t, colores, plantillas), t.getWhatsapp(), t.getRubro(), tema,
-                recojo ? t.getRecojoDireccion() : null, recojo ? t.getRecojoHorario() : null);
+                recojo ? t.getRecojoDireccion() : null, recojo ? t.getRecojoHorario() : null,
+                distritosDelivery == null ? List.of() : distritosDelivery);
     }
 }

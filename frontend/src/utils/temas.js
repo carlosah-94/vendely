@@ -151,8 +151,8 @@ export function temaPorValor(valor) {
 
 /** ¿El plan de la tienda (TiendaResponse) permite este tema? */
 export function planPermiteTema(tema, tienda) {
-  // La de su rubro: todos los planes. La de otro rubro: es una plantilla extra (Pro).
-  if (tema.plan === 'Rubro') return tema.rubro === tienda.rubro || tienda.permitePlantillas !== false;
+  // La de su rubro: todos los planes. La de otro rubro: ninguno (el backend también la rechaza).
+  if (tema.plan === 'Rubro') return tema.rubro === tienda.rubro;
   if (tema.plan === 'Pro') return tienda.permitePlantillas !== false;
   if (tema.plan === 'Básico') return tienda.permitePersonalizar !== false;
   return true;

@@ -14,30 +14,50 @@ export const TEXTOS = {
   horno: {
     etiqueta: 'Hecho en casa, todos los días',
     boton: 'Ver la carta',
+    sello: 'Hecho hoy',
+    anticipacion: '24 horas',
+    mostrarFechaEspecial: true,
+    mostrarPasos: true,
+    pasos: [
+      { titulo: 'Elige', texto: 'Mira la carta y elige lo que se te antoja.' },
+      { titulo: 'Personaliza', texto: 'Escribe el mensaje o los detalles de tu pedido.' },
+      { titulo: 'Recibe', texto: 'Te lo llevamos o pasas a recogerlo.' },
+    ],
     catalogo: 'Nuestra carta',
     vacio: { titulo: 'Estamos horneando algo rico', texto: 'Muy pronto verás aquí nuestra carta. Mientras tanto, puedes hacer tu pedido por WhatsApp.' },
   },
   circuito: {
     etiqueta: 'Originales, con garantía y boleta',
     boton: 'Explorar productos',
+    garantia: '12 meses',
+    mostrarMarcas: true,
     catalogo: 'Todos los productos',
     vacio: { titulo: 'Los equipos están en camino', texto: 'Estamos cargando el catálogo. Escríbenos y te contamos qué llega primero.' },
   },
   impulso: {
     etiqueta: 'Entrena sin límites',
     boton: 'Comprar ahora',
+    lema: 'Entrena, Supérate, No pares',
     catalogo: 'Todo el equipo',
     vacio: { titulo: 'Calentando motores', texto: 'El catálogo está por salir. Escríbenos y te asesoramos para tu entrenamiento.' },
   },
   pasarela: {
     etiqueta: 'Nueva colección',
     boton: 'Descubrir la colección',
+    tallas: 'ropa',
     catalogo: 'La colección',
     vacio: { titulo: 'La colección se presenta pronto', texto: 'Estamos preparando las prendas. Escríbenos para saber qué llega primero.' },
   },
   glow: {
     etiqueta: 'Belleza que se nota',
     boton: 'Ver favoritos',
+    sello: 'Original garantizado',
+    mostrarPasos: true,
+    pasos: [
+      { titulo: 'Limpia', texto: 'Prepara tu piel quitando impurezas.' },
+      { titulo: 'Trata', texto: 'Usa el producto según tu necesidad.' },
+      { titulo: 'Protege', texto: 'Sella e hidrata para lucir radiante.' },
+    ],
     catalogo: 'Nuestros favoritos',
     vacio: { titulo: 'Estamos preparando tu rutina', texto: 'Muy pronto verás aquí nuestros productos. Escríbenos y te recomendamos.' },
   },
@@ -50,10 +70,31 @@ export const TEXTOS = {
   huellitas: {
     etiqueta: 'Todo para tu engreído',
     boton: 'Ver productos',
+    globo1: '¡Guau!',
+    globo2: '¡Miau!',
     catalogo: 'Para tu engreído',
     vacio: { titulo: 'Preparando muchos mimos', texto: 'Pronto verás aquí todo para tu mascota. Escríbenos y te ayudamos a elegir.' },
   },
 };
+
+/**
+ * Los textos de la plantilla de esta tienda: los que el dueño escribió en Personalizar
+ * (diseno.contenidoRubro, V23) y, para lo que dejó vacío, los de la plantilla.
+ */
+export function textosDe(tienda) {
+  const base = TEXTOS[tienda.tema] ?? TEXTOS.horno;
+  const propio = tienda.diseno?.contenidoRubro ?? {};
+  const t = { ...base };
+  Object.entries(propio).forEach(([clave, valor]) => {
+    if (valor === null || valor === undefined || valor === '') return;
+    if (Array.isArray(valor) && valor.length === 0) return;
+    t[clave] = valor;
+  });
+  t.preguntas = propio.preguntas ?? [];
+  // La cinta de Impulso: palabras separadas por coma o por punto.
+  t.palabras = String(t.lema ?? '').split(/[,.•]/).map((x) => x.trim().toUpperCase()).filter(Boolean);
+  return t;
+}
 
 /** Las fotos de los productos (las que tienen imagen), para decorar portadas y collages. */
 export function fotosDe(todos, cantidad) {
@@ -72,6 +113,7 @@ export function datosReales(tienda, paises) {
     envio: textoEnvioCorto(paises),
     pago: metodos.length > 0 ? `Paga con ${textoMetodos(metodos)}` : null,
     recojo: tienda.recojoDireccion ? { direccion: tienda.recojoDireccion, horario: tienda.recojoHorario } : null,
+    distritos: tienda.distritosDelivery ?? [], // delivery propio por distritos (V19)
   };
 }
 
