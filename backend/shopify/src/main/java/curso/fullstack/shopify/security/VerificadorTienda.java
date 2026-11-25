@@ -216,7 +216,9 @@ public class VerificadorTienda {
         }
         HttpServletRequest peticion = atributos.getRequest();
         String metodo = peticion.getMethod();
+        // Responder en la conversación con el dueño (V17) no cambia nada de la tienda.
         if ("GET".equals(metodo) || "HEAD".equals(metodo) || "OPTIONS".equals(metodo)
+                || peticion.getRequestURI().endsWith("/soporte/mensajes")
                 || peticion.getAttribute(YA_ANOTADO) != null) {
             return;
         }
