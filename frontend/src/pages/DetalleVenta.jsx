@@ -15,6 +15,8 @@ import {
 import { formatoFecha, formatoMoneda } from '../utils/formato';
 import { useTiempoReal } from '../hooks/useTiempoReal';
 import { canales } from '../services/tiempoReal';
+import IconoChat from '../components/IconoChat';
+import { enlaceWhatsapp, normalizarWhatsapp } from '../utils/whatsapp';
 
 const NOMBRE_ESTADO = {
   SIN_ENVIAR: 'Sin enviar',
@@ -230,6 +232,18 @@ export default function DetalleVenta() {
           <>
             <p className="text-slate-800">{cliente.nombres} {cliente.primerApellido} {cliente.segundoApellido ?? ''}</p>
             <p className="text-slate-600">{cliente.correo}</p>
+            {cliente.telefono && (
+              <a
+                href={enlaceWhatsapp(normalizarWhatsapp(cliente.telefono, tienda?.idPais),
+                  `Hola ${cliente.nombres}, te escribimos de ${tienda?.nombre ?? 'la tienda'} por tu pedido #${venta.numeroPedido}.`)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-[#1f9d55] px-3 py-1.5 text-[13px] font-semibold text-[#17803f] hover:bg-[#effaf3]"
+              >
+                <IconoChat size={16} />
+                Escribir al cliente por WhatsApp
+              </a>
+            )}
             {cliente.direccion && (
               <p className="text-slate-600">{cliente.direccion.direccion}, {cliente.direccion.distrito ?? [cliente.direccion.ciudad, cliente.direccion.pais].filter(Boolean).join(", ")}</p>
             )}

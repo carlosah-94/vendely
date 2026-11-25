@@ -68,5 +68,15 @@ public record TiendaActualizarRequest(
 
         // Diseño avanzado del plan Pro (V15). null = no cambia. Quitarlo todo (portada de siempre,
         // sin promoción...) lo puede cualquier plan; usar algo de él, solo PLANTILLAS (Pro).
-        @Valid DisenoPro disenoPro
+        @Valid DisenoPro disenoPro,
+
+        // WhatsApp de la tienda (V17), con código de país: +51987654321. null = no cambia,
+        // "" = quitar el botón. Todos los planes: es la forma más común de vender en Perú.
+        @Pattern(regexp = "^$|^\\+[1-9][0-9]{7,14}$",
+                message = "El WhatsApp debe tener código de país, por ejemplo +51987654321")
+        String whatsapp,
+
+        // Qué vende (V17). null = no cambia. Cambiarlo no crea categorías: el kit es solo al crear.
+        @Pattern(regexp = "^(moda|tecnologia|comida|belleza|hogar|deporte|mascotas|otro)$", message = "Ese rubro no existe")
+        String rubro
 ) {}

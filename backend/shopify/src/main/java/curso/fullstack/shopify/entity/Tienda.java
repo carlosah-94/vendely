@@ -151,6 +151,16 @@ public class Tienda {
     @Column(name = "diseno_pro", columnDefinition = "jsonb")
     private DisenoPro disenoPro;
 
+    /** WhatsApp de la tienda con código de país (+51987654321), V17. null = sin botón de WhatsApp. Todos los planes. */
+    @Setter
+    @Column(name = "whatsapp", length = 16)
+    private String whatsapp;
+
+    /** Qué vende (V17): moda, tecnologia, comida, belleza, hogar, deporte, mascotas u otro. */
+    @Setter
+    @Column(name = "rubro", length = 20)
+    private String rubro;
+
     /** Hasta cuándo el equipo de Vendely puede entrar a armar la tienda (V16). null = sin permiso. */
     @Setter
     @Column(name = "soporte_hasta")

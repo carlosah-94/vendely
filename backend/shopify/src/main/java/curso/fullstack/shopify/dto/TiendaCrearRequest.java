@@ -32,5 +32,9 @@ public record TiendaCrearRequest(
         // País donde vende (ISO 3166-1). Opcional: si no viene, Perú. Define moneda, impuesto y
         // la lista de ubicaciones, y no se cambia después (T8). Solo países habilitados (T12).
         @Pattern(regexp = "^[A-Z]{2}$", message = "El país no es válido")
-        String idPais
+        String idPais,
+
+        // Qué vende (V17). Opcional. Con él se crean categorías, descripción y anuncio de inicio.
+        @Pattern(regexp = "^(moda|tecnologia|comida|belleza|hogar|deporte|mascotas|otro)$", message = "Ese rubro no existe")
+        String rubro
 ) {}

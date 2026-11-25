@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { NOMBRE_MONEDA, usePaisesHabilitados } from '../hooks/usePaisesHabilitados';
 import { api, mensajeDeError } from '../services/api';
 import { estiloInput } from '../utils/estilos';
+import SelectorRubro from '../components/SelectorRubro';
 
 /**
  * Países donde un dueño puede registrarse: los que tienen tipos de documento en la tabla
@@ -149,7 +150,7 @@ export default function Registro() {
   const [codigo, setCodigo] = useState('');
   const [ahora, setAhora] = useState(() => Date.now());
   const [cuenta, setCuenta] = useState(() => cuentaInicial(paisDelNavegador()));
-  const [tienda, setTienda] = useState({ nombre: '', subdominio: '', correoContacto: '', idPais: 'PE' });
+  const [tienda, setTienda] = useState({ nombre: '', subdominio: '', correoContacto: '', idPais: 'PE', rubro: '' });
   const paises = usePaisesHabilitados();
   // Mientras el dueño no escriba el subdominio a mano, se arma solo con el nombre de la tienda.
   const [subdominioEditado, setSubdominioEditado] = useState(false);
@@ -342,6 +343,7 @@ export default function Registro() {
         correoContacto: tienda.correoContacto.trim(),
         permiteInvitados: true,
         idPais: tienda.idPais,
+        rubro: tienda.rubro || null,
       });
       // Lo primero que hace un dueño con su tienda nueva es subir productos.
       navigate('/panel/productos', { replace: true });
@@ -494,6 +496,8 @@ export default function Registro() {
           <Campo etiqueta="Nombre de la tienda" error={errores.nombre}>
             <input value={tienda.nombre} onChange={cambiarTienda('nombre')} className={estiloInput(errores.nombre)} />
           </Campo>
+
+          <SelectorRubro valor={tienda.rubro} onCambiar={(rubro) => setTienda((t) => ({ ...t, rubro }))} />
 
           <Campo
             etiqueta="Dirección web"

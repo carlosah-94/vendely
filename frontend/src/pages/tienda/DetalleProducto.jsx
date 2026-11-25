@@ -6,12 +6,14 @@ import PrecioTienda from '../../components/tienda/PrecioTienda';
 import { disenoDe, etiquetaOferta } from '../../utils/diseno';
 import { useCarrito } from '../../context/CarritoContext';
 import { mensajeDeError } from '../../services/api';
-import { enOferta } from '../../utils/formato';
+import { enOferta, formatoMoneda } from '../../utils/formato';
 import { obtenerProducto } from '../../services/tienda';
 import { useTiempoReal } from '../../hooks/useTiempoReal';
 import { useTituloPagina } from '../../hooks/useTituloPagina';
 import { canales } from '../../services/tiempoReal';
 import { IconoGarantia, garantiasDe } from '../../components/tienda/Garantias';
+import IconoChat from '../../components/IconoChat';
+import { enlaceWhatsapp } from '../../utils/whatsapp';
 
 /** Valores iniciales: los de la primera variante con stock (o la primera, si todas están agotadas). */
 function valoresIniciales(p) {
@@ -225,6 +227,20 @@ export default function DetalleProducto() {
           <button type="button" disabled className="w-full cursor-not-allowed rounded-md bg-[#e3e3e3] py-3 font-medium text-[#8a8a8a]">
             {variante ? 'Agotado' : 'Combinación no disponible'}
           </button>
+        )}
+
+        {/* Preguntar antes de comprar: el chat se abre con el producto y el precio ya escritos */}
+        {tienda.whatsapp && (
+          <a
+            href={enlaceWhatsapp(tienda.whatsapp,
+              `Hola, me interesa "${elegido.nombre}" (${formatoMoneda(elegido.precio, tienda.moneda)}). ¿Está disponible?\n${window.location.href}`)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="boton-tienda flex w-full items-center justify-center gap-2 border border-[#1f9d55] py-3 text-sm font-semibold text-[#17803f] transition hover:bg-[#effaf3]"
+          >
+            <IconoChat size={18} />
+            Preguntar por WhatsApp
+          </a>
         )}
 
         {/* Lo que ofrece la tienda, junto a los botones: es donde el cliente duda */}

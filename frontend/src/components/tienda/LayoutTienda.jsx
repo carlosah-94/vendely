@@ -11,6 +11,8 @@ import { obtenerTienda } from '../../services/tienda';
 import { categoriasPublicas } from '../../services/categorias';
 import { IconoBuscar, IconoCarrito, IconoCuenta } from '../Iconos';
 import CarritoDrawer from './CarritoDrawer';
+import BotonWhatsapp from './BotonWhatsapp';
+import { whatsappLegible } from '../../utils/whatsapp';
 
 /** "Envíos a todo Perú y a España y Chile" según las tarifas de la tienda. */
 function textoEnvios(paises) {
@@ -159,6 +161,7 @@ function Marco({ subdominio }) {
           {tienda.nombre}
         </p>
         {tienda.correoContacto && <p className="mt-1">{tienda.correoContacto}</p>}
+        {tienda.whatsapp && <p className="mt-1">WhatsApp {whatsappLegible(tienda.whatsapp)}</p>}
         {paises.length > 0 && (
           <p className="mt-3 text-xs">Enviamos a: {paises.map((p) => p.nombre).join(' · ')}</p>
         )}
@@ -169,6 +172,7 @@ function Marco({ subdominio }) {
         </p>
       </footer>
       <CarritoDrawer subdominio={subdominio} />
+      <BotonWhatsapp tienda={tienda} />
     </div>
   );
 }
