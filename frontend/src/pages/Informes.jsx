@@ -46,10 +46,16 @@ function variacion(actual, anterior) {
   return Math.round(((a - b) / b) * 100);
 }
 
+/** Variación de la ganancia: solo tiene sentido si el periodo anterior también fue ganancia (> 0). */
+function variacionGanancia(actual, anterior) {
+  return Number(anterior) > 0 ? variacion(actual, anterior) : null;
+}
+
 /**
  * Informes estadísticos de la tienda (solo el dueño): ventas, pedidos, ticket promedio y
  * descuentos frente al periodo anterior, ventas por día, productos más vendidos, métodos de pago,
  * clientes nuevos o recurrentes y pedidos por estado. Solo cuentan los pedidos con el pago aprobado.
+ * También las finanzas: costo de lo vendido, ganancia (sin IGV) y margen, y cuánta plata hay en el almacén.
  */
 export default function Informes() {
   const { tiendas, tienda, idTienda, cambiarTienda, cargando: cargandoTiendas, error: errorTiendas } = useTiendaActual();
@@ -150,9 +156,14 @@ export default function Informes() {
             <Indicador titulo="Descuentos dados" valor={formatoMoneda(inf.actual.descuentos, moneda)} cambio={variacion(inf.actual.descuentos, inf.anterior.descuentos)} neutro />
           </div>
 
+          <Ganancias inf={inf} moneda={moneda} impuesto={tienda?.impuesto ?? 'IGV'} />
+
           <div className={`${TARJETA} p-4`}>
-            <h2 className="font-semibold text-[#101010]">Ventas por día</h2>
-            <p className="mb-2 text-xs text-[#616161]">Total de los pedidos pagados (productos + envío).</p>
+            <h2 className="font-semibold text-[#101010]">Ventas y ganancia por día</h2>
+            <p className="mb-2 text-xs text-[#616161]">
+              Ventas: total de los pedidos pagados (productos + envío). Ganancia: lo que queda después del costo y
+              sin {tienda?.impuesto ?? 'IGV'}, de los pedidos con costo cargado.
+            </p>
             {inf.actual.pedidos === 0
               ? <p className="py-10 text-center text-[13px] text-[#616161]">No hubo ventas pagadas en este periodo.</p>
               : <GraficoVentas dias={inf.porDia} moneda={moneda} />}
@@ -164,7 +175,8 @@ export default function Informes() {
               <Barras
                 filas={inf.productos.map((p) => ({
                   clave: p.idProducto, nombre: p.nombre, valor: Number(p.ingresos),
-                  texto: formatoMoneda(p.ingresos, moneda), detalle: `${p.unidades} u.`,
+                  texto: formatoMoneda(p.ingresos, moneda),
+                  detalle: `${p.unidades} u. · ${p.ganancia == null ? 'sin costo' : `gana ${formatoMoneda(p.ganancia, moneda)}`}`,
                 }))}
                 vacio="Todavía no hay productos vendidos en este periodo."
               />
@@ -211,16 +223,81 @@ export default function Informes() {
   );
 }
 
+/**
+ * Las finanzas del periodo. La ganancia se calcula así, y se explica en la pantalla para que no sea una caja negra:
+ *   ingresos por productos, sin el impuesto (que es del Estado) y sin el envío (que es del courier)
+ *   - lo que costaron esas unidades = ganancia.
+ * Solo entran los pedidos cuyos productos tienen costo; si hay pedidos sin costo se avisa cuántos.
+ */
+function Ganancias({ inf, moneda, impuesto }) {
+  const g = inf.actual.ganancia;
+  const ga = inf.anterior.ganancia;
+  const total = g.pedidosConCosto + g.pedidosSinCosto;
+  const inv = inf.inventario;
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <Indicador titulo="Ganancia" valor={formatoMoneda(g.ganancia, moneda)} cambio={variacionGanancia(g.ganancia, ga.ganancia)} destacado />
+        <Indicador titulo="Margen" valor={`${Number(g.margen).toFixed(1)} %`} cambio={null} sinCambio="Lo que queda de cada 100 de ingresos" />
+        <Indicador titulo="Ingresos sin impuesto" valor={formatoMoneda(g.ingresosNetos, moneda)} cambio={variacionGanancia(g.ingresosNetos, ga.ingresosNetos)} />
+        <Indicador titulo="Costo de lo vendido" valor={formatoMoneda(g.costo, moneda)} cambio={variacion(g.costo, ga.costo)} neutro />
+        <Indicador titulo={`${impuesto} cobrado`} valor={formatoMoneda(inf.actual.impuestos, moneda)} cambio={variacion(inf.actual.impuestos, inf.anterior.impuestos)} neutro sinCambio="Va para el Estado, no es ganancia" />
+      </div>
+
+      {g.pedidosSinCosto > 0 && (
+        <Mensaje
+          tipo="info"
+          texto={`${g.pedidosSinCosto} de ${total} pedidos pagados tienen productos sin costo y no cuentan en la ganancia. Agrega el costo en Productos para que se calcule completa.`}
+        />
+      )}
+
+      <div className={`${TARJETA} p-4`}>
+        <h2 className="font-semibold text-[#101010]">Cómo se calcula tu ganancia</h2>
+        <p className="mt-1 text-[13px] text-[#303030]">
+          Ingresos por productos sin {impuesto}{' '}
+          <strong>{formatoMoneda(g.ingresosNetos, moneda)}</strong> − costo de lo vendido{' '}
+          <strong>{formatoMoneda(g.costo, moneda)}</strong> = ganancia{' '}
+          <strong>{formatoMoneda(g.ganancia, moneda)}</strong> ({Number(g.margen).toFixed(1)} %).
+        </p>
+        <p className="mt-1 text-xs text-[#616161]">
+          El {impuesto} está incluido en los precios pero es del Estado, por eso se resta. El envío tampoco es tuyo: lo
+          cobras para pagarle al courier. Las ofertas y los códigos de descuento ya están descontados. Los pedidos
+          reembolsados o cancelados después de cobrar no cuentan.
+        </p>
+      </div>
+
+      <div className={`${TARJETA} p-4`}>
+        <h2 className="mb-1 font-semibold text-[#101010]">Tu inventario hoy</h2>
+        <p className="mb-3 text-xs text-[#616161]">
+          La plata que ya pusiste en mercadería y lo que ganarías si la vendes toda al precio de hoy (sin {impuesto}).
+        </p>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Cifra numero={inv.unidades} texto="Unidades en stock" ayuda="Productos activos y borradores" />
+          <Cifra numero={formatoMoneda(inv.capitalInvertido, moneda)} texto="Dinero invertido" ayuda="Stock × costo de cada producto" />
+          <Cifra numero={formatoMoneda(inv.valorDeVenta, moneda)} texto="Valor de venta" ayuda={`Stock × precio, con ${impuesto}`} />
+          <Cifra numero={formatoMoneda(inv.gananciaPotencial, moneda)} texto="Ganancia potencial" ayuda={`Si vendes todo, sin ${impuesto}`} />
+        </div>
+        {inv.productosSinCosto > 0 && (
+          <p className="mt-3 text-xs text-[#8a5a00]">
+            {inv.productosSinCosto === 1 ? '1 producto no tiene' : `${inv.productosSinCosto} productos no tienen`} costo y no entra
+            en estas cifras.
+          </p>
+        )}
+      </div>
+    </>
+  );
+}
+
 /** Un número grande con su cambio frente al periodo anterior (flecha + texto, no solo color). */
-function Indicador({ titulo, valor, cambio, neutro = false }) {
+function Indicador({ titulo, valor, cambio, neutro = false, destacado = false, sinCambio = 'Sin datos del periodo anterior' }) {
   const sube = cambio > 0;
   const color = neutro || cambio === 0 ? 'text-[#616161]' : sube ? 'text-[#0c5132]' : 'text-[#8e1f0b]';
   return (
-    <div className={`${TARJETA} p-4`}>
+    <div className={`${TARJETA} p-4 ${destacado ? 'ring-2 ring-[#0c5132]/30' : ''}`}>
       <p className="text-[13px] text-[#616161]">{titulo}</p>
       <p className="mt-1 text-2xl font-bold text-[#101010]">{valor}</p>
       <p className={`mt-1 text-xs ${cambio == null ? 'text-[#8a8a8a]' : color}`}>
-        {cambio == null ? 'Sin datos del periodo anterior' : `${sube ? '▲' : cambio < 0 ? '▼' : '='} ${Math.abs(cambio)} % vs. periodo anterior`}
+        {cambio == null ? sinCambio : `${sube ? '▲' : cambio < 0 ? '▼' : '='} ${Math.abs(cambio)} % vs. periodo anterior`}
       </p>
     </div>
   );
@@ -274,14 +351,22 @@ function exportarCsv(inf, tienda) {
     ['Ticket promedio', inf.actual.ticketPromedio],
     ['Unidades vendidas', inf.actual.unidades],
     ['Descuentos dados', inf.actual.descuentos],
+    ['Impuesto (IGV) cobrado', inf.actual.impuestos],
+    ['Ingresos sin impuesto (pedidos con costo)', inf.actual.ganancia.ingresosNetos],
+    ['Costo de lo vendido', inf.actual.ganancia.costo],
+    ['Ganancia', inf.actual.ganancia.ganancia],
+    ['Margen %', inf.actual.ganancia.margen],
+    ['Pedidos sin costo (no cuentan en la ganancia)', inf.actual.ganancia.pedidosSinCosto],
+    ['Dinero invertido en stock', inf.inventario.capitalInvertido],
+    ['Ganancia potencial del stock', inf.inventario.gananciaPotencial],
     ['Clientes nuevos', inf.clientes.nuevos],
     ['Clientes recurrentes', inf.clientes.recurrentes],
     [],
-    ['Día', 'Pedidos', 'Ventas'],
-    ...inf.porDia.map((d) => [d.fecha, d.pedidos, d.ventas]),
+    ['Día', 'Pedidos', 'Ventas', 'Ganancia'],
+    ...inf.porDia.map((d) => [d.fecha, d.pedidos, d.ventas, d.ganancia]),
     [],
-    ['Producto', 'Unidades', 'Ingresos'],
-    ...inf.productos.map((p) => [p.nombre, p.unidades, p.ingresos]),
+    ['Producto', 'Unidades', 'Ingresos', 'Ganancia'],
+    ...inf.productos.map((p) => [p.nombre, p.unidades, p.ingresos, p.ganancia ?? 'sin costo']),
   ];
   // BOM para que Excel lea bien las tildes.
   const texto = '﻿' + filas.map((f) => f.map(celda).join(',')).join('\r\n');

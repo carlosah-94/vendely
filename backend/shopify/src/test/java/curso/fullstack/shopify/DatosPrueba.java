@@ -112,6 +112,14 @@ public class DatosPrueba {
      * @param estado 0 borrador · 1 activo · 2 archivado
      */
     public long nuevoProducto(long idTienda, String precio, int stock, int estado) {
+        return nuevoProducto(idTienda, precio, null, stock, estado);
+    }
+
+    /**
+     * Igual, pero con el costo por unidad (V21; null = sin costo cargado). El costo se pone al crear el
+     * precio porque la base no deja editarlo después (trigger T3).
+     */
+    public long nuevoProducto(long idTienda, String precio, String costo, int stock, int estado) {
         int n = CONTADOR.incrementAndGet();
         Long idProducto = jdbc.queryForObject("""
                 INSERT INTO productos (id_tienda, nombre, slug, estado)
@@ -119,13 +127,19 @@ public class DatosPrueba {
                 idTienda, "Producto " + n, "producto-" + n, estado);
         Long idVariante = jdbc.queryForObject(
                 "INSERT INTO variantes (id_producto) VALUES (?) RETURNING id_variante", Long.class, idProducto);
-        jdbc.update("INSERT INTO precios (id_variante, monto) VALUES (?, ?)", idVariante, new BigDecimal(precio));
+        jdbc.update("INSERT INTO precios (id_variante, monto, costo) VALUES (?, ?, ?)", idVariante,
+                new BigDecimal(precio), costo == null ? null : new BigDecimal(costo));
         jdbc.update("INSERT INTO inventario (id_variante, cantidad_disponible) VALUES (?, ?)", idVariante, stock);
         return idVariante;
     }
 
     public long nuevoProducto(long idTienda, String precio, int stock) {
         return nuevoProducto(idTienda, precio, stock, 1);
+    }
+
+    /** Un producto activo con su costo por unidad. */
+    public long nuevoProductoConCosto(long idTienda, String precio, String costo, int stock) {
+        return nuevoProducto(idTienda, precio, costo, stock, 1);
     }
 
     public int stock(long idVariante) {

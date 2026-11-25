@@ -301,7 +301,7 @@ class PlanServiceTest extends PruebaIntegracion {
         return mvc.perform(post("/api/panel/tiendas/" + tienda.idTienda() + "/productos")
                 .header("Authorization", token(tienda.idDueno()))
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"nombre\":\"Producto por la API " + System.nanoTime() + "\",\"precio\":25.00,\"stock\":3}"));
+                .content("{\"nombre\":\"Producto por la API " + System.nanoTime() + "\",\"precio\":25.00,\"costo\":10.00,\"stock\":3}"));
     }
 
     /** PUT de la tienda con los datos obligatorios más el campo que se quiere cambiar. */

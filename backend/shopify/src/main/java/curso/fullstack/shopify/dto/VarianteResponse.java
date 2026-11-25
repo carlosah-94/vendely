@@ -13,6 +13,7 @@ public record VarianteResponse(
         String nombre,
         BigDecimal precio,
         BigDecimal precioComparacion,
+        BigDecimal costo,           // null en la tienda pública y para quien no ve las finanzas
         String sku,                 // null en la tienda pública
         long stock
 ) {}
