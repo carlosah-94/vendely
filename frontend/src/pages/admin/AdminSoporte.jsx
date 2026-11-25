@@ -1,4 +1,6 @@
+import { Fragment, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import ConversacionSoporte from '../../components/ConversacionSoporte';
 import { IconoSoporte } from '../../components/Iconos';
 import Mensaje from '../../components/Mensaje';
 import { AvatarTienda } from '../../components/MenuCuenta';
@@ -14,6 +16,7 @@ export default function AdminSoporte() {
   const navigate = useNavigate();
   // Para el superadmin, /api/panel/tiendas devuelve justo estas tiendas.
   const { tiendas, cambiarTienda, recargar, cargando, error } = useTiendaActual();
+  const [abierta, setAbierta] = useState(null);   // la tienda cuya conversación se muestra
 
   function entrar(idTienda) {
     cambiarTienda(idTienda);
@@ -26,7 +29,7 @@ export default function AdminSoporte() {
         <div>
           <h1 className="text-xl font-bold text-[#101010]">Soporte a tiendas</h1>
           <p className="text-[13px] text-[#616161]">
-            Tiendas cuyo dueño te dio acceso para armarla. Lo que cambies queda registrado y el dueño lo ve.
+            Tiendas cuyo dueño te dio acceso para armarla. En «Mensajes» ves lo que pidió y le respondes. Lo que cambies queda registrado y el dueño lo ve.
           </p>
         </div>
         <button onClick={recargar} className={`${BOTON_SECUNDARIO} text-[13px]`}>Actualizar</button>
@@ -60,7 +63,8 @@ export default function AdminSoporte() {
             </thead>
             <tbody>
               {tiendas.map((t) => (
-                <tr key={t.idTienda} className="border-t border-[#ebebeb]">
+                <Fragment key={t.idTienda}>
+                <tr className="border-t border-[#ebebeb]">
                   <td className="px-4 py-3">
                     <span className="flex items-center gap-2.5">
                       <AvatarTienda tienda={t} tamano={30} />
@@ -73,11 +77,27 @@ export default function AdminSoporte() {
                   <td className="px-4 py-3 text-[#303030]">{t.plan ?? 'Gratis'}</td>
                   <td className="px-4 py-3 text-[#303030]">{formatoFecha(t.soporteHasta)}</td>
                   <td className="px-4 py-3 text-right">
-                    <button onClick={() => entrar(t.idTienda)} className={`${BOTON} text-[13px]`}>
-                      Entrar a la tienda
-                    </button>
+                    <span className="inline-flex gap-2">
+                      <button
+                        onClick={() => setAbierta(abierta === t.idTienda ? null : t.idTienda)}
+                        className={`${BOTON_SECUNDARIO} text-[13px]`}
+                      >
+                        {abierta === t.idTienda ? 'Ocultar mensajes' : 'Mensajes'}
+                      </button>
+                      <button onClick={() => entrar(t.idTienda)} className={`${BOTON} text-[13px]`}>
+                        Entrar a la tienda
+                      </button>
+                    </span>
                   </td>
                 </tr>
+                {abierta === t.idTienda && (
+                  <tr className="bg-[#fafafa]">
+                    <td colSpan={4} className="px-4 py-3">
+                      <ConversacionSoporte idTienda={t.idTienda} soyDeSoporte compacto />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>

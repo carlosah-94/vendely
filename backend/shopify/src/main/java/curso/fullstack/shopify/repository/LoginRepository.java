@@ -24,6 +24,9 @@ public interface LoginRepository extends JpaRepository<Login, Long> {
 
     boolean existsByUsuarioAndIdTienda(String usuario, Long idTienda);
 
+    // Cuentas de un rol en cierto estado: los superadmin activos reciben los mensajes a soporte (V17).
+    List<Login> findByIdRolAndEstado(Short idRol, Short estado);
+
     // ---- Issue #9: CRUD de clientes desde el panel del dueño
 
     // Clientes de UNA tienda (rol 3), los más nuevos primero. Filtrar por tienda es el candado multi-tienda.

@@ -155,6 +155,69 @@ class AccesoSoporteTest extends PruebaIntegracion {
                 Integer.class, tienda.idTienda()));
     }
 
+    // ------------------------------------------------------------------ mensajes (V17)
+
+    @Test
+    void elDuenoExplicaLoQueQuiereYSoporteLeResponde() throws Exception {
+        mvc.perform(post(ruta("soporte")).header("Authorization", token(tienda.idDueno()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"dias\":3,\"mensaje\":\"  Súbanme los 20 polos del Excel  \"}"))
+                .andExpect(status().isOk());
+
+        // Soporte lee lo que pidió el dueño y le responde.
+        mvc.perform(get(ruta("soporte/mensajes")).header("Authorization", token(soporte)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].texto").value("Súbanme los 20 polos del Excel"))
+                .andExpect(jsonPath("$[0].deSoporte").value(false));
+        mvc.perform(post(ruta("soporte/mensajes")).header("Authorization", token(soporte))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"mensaje\":\"¿Nos pasas las fotos?\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[1].deSoporte").value(true));
+
+        // El dueño ve la respuesta. Responder no es un cambio de la tienda: el registro no lo anota.
+        mvc.perform(get(ruta("soporte/mensajes")).header("Authorization", token(tienda.idDueno())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[1].texto").value("¿Nos pasas las fotos?"));
+        mvc.perform(get(ruta("soporte")).header("Authorization", token(tienda.idDueno())))
+                .andExpect(jsonPath("$.registro", hasSize(1)))
+                .andExpect(jsonPath("$.registro[0].accion").value("PERMITIDO"));
+    }
+
+    @Test
+    void sinAccesoActivoNoSeEscribe() throws Exception {
+        // El dueño: primero tiene que dar acceso, o nadie leería su mensaje.
+        mvc.perform(post(ruta("soporte/mensajes")).header("Authorization", token(tienda.idDueno()))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"mensaje\":\"Hola\"}"))
+                .andExpect(status().isConflict());
+        // Soporte: ni lee ni escribe.
+        mvc.perform(get(ruta("soporte/mensajes")).header("Authorization", token(soporte)))
+                .andExpect(status().isForbidden());
+        mvc.perform(post(ruta("soporte/mensajes")).header("Authorization", token(soporte))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"mensaje\":\"Hola\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void unEmpleadoNoVeLaConversacion() throws Exception {
+        datos.cambiarPlan(tienda.idTienda(), 2);
+        long empleado = datos.nuevoEmpleado(tienda.idTienda(), true, true, true, true);
+        permitir(1);
+
+        mvc.perform(get(ruta("soporte/mensajes")).header("Authorization", token(empleado)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void unMensajeVacioNoSeGuarda() throws Exception {
+        permitir(1);
+
+        mvc.perform(post(ruta("soporte/mensajes")).header("Authorization", token(tienda.idDueno()))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"mensaje\":\"   \"}"))
+                .andExpect(status().isBadRequest());
+    }
+
     // ------------------------------------------------------------------ apoyo
 
     private void permitir(int dias) throws Exception {
