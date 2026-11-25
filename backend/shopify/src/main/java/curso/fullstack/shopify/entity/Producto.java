@@ -39,6 +39,11 @@ public class Producto {
     @Column(name = "descripcion", columnDefinition = "text")
     private String descripcion;
 
+    /** Pregunta al cliente al comprar (V19): "¿Qué texto va en la torta?". null = ninguna. */
+    @Setter
+    @Column(name = "pregunta_cliente", length = 120)
+    private String preguntaCliente;
+
     @Setter
     @Column(name = "marca", length = 100)
     private String marca;

@@ -20,6 +20,7 @@ export default function ListaCarrito({ subdominio, alNavegar }) {
           </Link>
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium text-[#303030]">{i.nombre}</p>
+            {i.datoCliente && <p className="truncate text-xs text-[#616161]">{i.datoCliente}</p>}
             <p className="text-sm text-[#616161]">{formatoMoneda(i.precio)}</p>
             <div className="mt-2 flex items-center gap-4">
               <div className="inline-flex items-center rounded-md border border-[#c9c9c9]">

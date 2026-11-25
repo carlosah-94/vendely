@@ -40,7 +40,9 @@ public record TiendaResponse(
         OffsetDateTime temaAplicadoEl,
         Integer maxProductos,       // límite de productos del plan (null = sin límite)
         Boolean soporte,            // true: quien la mira es soporte de Vendely, con permiso del dueño
-        OffsetDateTime soporteHasta // hasta cuándo soporte de Vendely puede entrar (null = sin permiso)
+        OffsetDateTime soporteHasta, // hasta cuándo soporte de Vendely puede entrar (null = sin permiso)
+        String whatsapp,            // +51987654321 o null (V17)
+        String rubro                // moda, tecnologia, comida, belleza, hogar, deporte, mascotas, otro o null
 ) {
     private static final List<String> TODOS = Arrays.stream(PermisoTienda.values()).map(Enum::name).toList();
 
@@ -67,6 +69,6 @@ public record TiendaResponse(
                 esDueno, lista, DisenoTienda.de(t),
                 t.getTema(), t.getTemaAplicadoEl(),
                 plan == null ? null : plan.getMaxProductos() == null ? null : plan.getMaxProductos().intValue(),
-                soporte, t.soporteActivo() ? t.getSoporteHasta() : null);
+                soporte, t.soporteActivo() ? t.getSoporteHasta() : null, t.getWhatsapp(), t.getRubro());
     }
 }

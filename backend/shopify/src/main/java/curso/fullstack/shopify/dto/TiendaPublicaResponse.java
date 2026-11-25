@@ -27,7 +27,9 @@ public record TiendaPublicaResponse(
         // Con qué puede pagar el cliente: ["PAYPAL", "MERCADO_PAGO"]. El primero es el de por defecto.
         // Vacío = la tienda no tiene pago en línea (ninguna pasarela configurada en el servidor).
         List<MetodoPago> metodosPago,
-        DisenoTienda diseno     // letra, botones, acento, fondo, portada, anuncio y secciones (lo que su plan incluye)
+        DisenoTienda diseno,    // letra, botones, acento, fondo, portada, anuncio y secciones (lo que su plan incluye)
+        String whatsapp,        // +51987654321 o null (sin botón de WhatsApp). Todos los planes
+        String rubro            // qué vende: moda, comida... (V17) o null
 ) {
     public static TiendaPublicaResponse desde(Tienda t, DireccionRepository.PaisInfo p) {
         return desde(t, p, null, List.of());
@@ -47,6 +49,6 @@ public record TiendaPublicaResponse(
                 p.getImpuesto(), p.getNivelFinal(), t.getNombre(), t.getSubdominio(), t.getDescripcion(),
                 t.getCorreoContacto(), personaliza ? t.getLogoUrl() : null, personaliza ? t.getColorPrincipal() : null,
                 t.getPermiteInvitados(), plantillas ? t.getPlantilla() : "clasica", !personaliza, metodosPago,
-                DisenoTienda.de(t, personaliza, plantillas));
+                DisenoTienda.de(t, personaliza, plantillas), t.getWhatsapp(), t.getRubro());
     }
 }

@@ -13,6 +13,7 @@ import { BOTONES, DISENO_INICIAL, FONDOS, FUENTES, disenoDe, enlaceSeguro } from
 import { listarCategorias } from '../services/categorias';
 import { temaActual } from '../utils/temas';
 import { BOTON, TARJETA, inputPanel } from '../utils/panel';
+import { PATRON_WHATSAPP, normalizarWhatsapp } from '../utils/whatsapp';
 
 const COLORES = ['#303030', '#1D4ED8', '#0F766E', '#B91C1C', '#7C3AED', '#C2410C', '#DB2777', '#F59E0B'];
 const MAX_DESCRIPCION = 2000;
@@ -74,6 +75,7 @@ function desdeTienda(t) {
     nombre: t.nombre ?? '',
     descripcion: t.descripcion ?? '',
     correoContacto: t.correoContacto ?? '',
+    whatsapp: t.whatsapp ?? '',
     logoUrl: t.logoUrl ?? '',
     colorPrincipal: t.colorPrincipal ?? '#303030',
     permiteInvitados: t.permiteInvitados ?? true,
@@ -172,6 +174,8 @@ function Editor({ tienda, tiendas, idTienda, onCambiarTienda }) {
     if (!v.nombre.trim()) er.nombre = 'El nombre es obligatorio';
     if (v.descripcion.length > MAX_DESCRIPCION) er.descripcion = `Hasta ${MAX_DESCRIPCION} caracteres`;
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.correoContacto.trim())) er.correoContacto = 'El correo no es válido';
+    const whatsapp = normalizarWhatsapp(v.whatsapp, tienda.idPais);
+    if (whatsapp && !PATRON_WHATSAPP.test(whatsapp)) er.whatsapp = 'Escribe tu número de celular, por ejemplo 987654321';
     if (personaliza) {
       if (v.logoUrl.trim() && !ES_URL.test(v.logoUrl.trim())) er.logoUrl = 'Pega un enlace que empiece con http:// o https://';
       if (v.imagenPortadaUrl.trim() && !ES_URL.test(v.imagenPortadaUrl.trim())) er.imagenPortadaUrl = 'Pega un enlace que empiece con http:// o https://';
@@ -203,6 +207,7 @@ function Editor({ tienda, tiendas, idTienda, onCambiarTienda }) {
         nombre: v.nombre.trim(),
         descripcion: v.descripcion.trim() || null,
         correoContacto: v.correoContacto.trim(),
+        whatsapp,
         logoUrl: personaliza ? v.logoUrl.trim() || null : tienda.logoUrl ?? null,
         colorPrincipal: personaliza ? v.colorPrincipal.toUpperCase() : tienda.colorPrincipal ?? null,
         permiteInvitados: v.permiteInvitados,
@@ -299,6 +304,19 @@ function Editor({ tienda, tiendas, idTienda, onCambiarTienda }) {
             </CampoPanel>
             <CampoPanel etiqueta="Correo de contacto" error={errores.correoContacto} ayuda="Se muestra en el pie de la tienda">
               <input value={v.correoContacto} onChange={(e) => cambiar('correoContacto', e.target.value)} className={inputPanel(errores.correoContacto)} />
+            </CampoPanel>
+            <CampoPanel
+              etiqueta="WhatsApp de la tienda"
+              error={errores.whatsapp}
+              ayuda="Opcional. Tus clientes verán un botón para escribirte y preguntar por un producto. Si no pones código de país, usamos el de tu tienda."
+            >
+              <input
+                value={v.whatsapp}
+                onChange={(e) => cambiar('whatsapp', e.target.value)}
+                inputMode="tel"
+                placeholder={tienda.idPais === 'CL' ? '+56 9 1234 5678' : '+51 987 654 321'}
+                className={inputPanel(errores.whatsapp)}
+              />
             </CampoPanel>
             <p className="rounded-lg bg-[#f7f7f7] px-3 py-2 text-[12px] text-[#616161]">
               La dirección de la tienda (<b>{tienda.subdominio}</b>.vendely.pe) no se cambia: tus clientes ya la conocen.

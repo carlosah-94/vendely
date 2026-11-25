@@ -98,7 +98,7 @@ public class PedidoService {
                 .filter(l -> l.getRol() == RolUsuario.CLIENTE && idTienda.equals(l.getIdTienda()))
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El cliente no existe en esta tienda"));
 
-        return crearPedido(idTienda, cliente, r.idDireccionEnvio(), r.lineas(), null);
+        return crearPedido(idTienda, cliente, r.idDireccionEnvio(), r.lineas(), null, TipoEntrega.ENVIO, false);
     }
 
     /**
@@ -116,7 +116,8 @@ public class PedidoService {
                 .filter(l -> l.getRol() == RolUsuario.CLIENTE && yo.idTienda().equals(l.getIdTienda()))
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El cliente no existe en esta tienda"));
 
-        return crearPedido(yo.idTienda(), cliente, r.idDireccionEnvio(), r.lineas(), r.codigoCupon());
+        return crearPedido(yo.idTienda(), cliente, r.idDireccionEnvio(), r.lineas(), r.codigoCupon(),
+                TipoEntrega.de(r.tipoEntrega()), true);
     }
 
     /**
@@ -124,25 +125,42 @@ public class PedidoService {
      * toma el precio vigente y guarda pedido + líneas. Debe llamarse dentro de una transacción.
      */
     private VentaResponse crearPedido(Long idTienda, Login cliente, Long idDireccion, List<LineaVentaRequest> lineasPedidas,
-                                      String codigoCupon) {
+                                      String codigoCupon, TipoEntrega tipoEntrega, boolean exigirRespuestas) {
         // 1. La dirección es suya y está activa
         if (!direccionRepository.existsByIdDireccionAndIdLoginAndEstado(idDireccion, cliente.getIdLogin(), (short) 1)) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "La dirección de envío no es de este cliente");
         }
         // 1b. Una dirección en otro país solo si el plan incluye envíos internacionales. Las tarifas
         //     guardadas de un plan anterior no se usan (el trigger de la base las cobraría igual).
-        envioRepository.cotizar(idTienda, cliente.getIdLogin(), idDireccion)
-                .filter(c -> Boolean.TRUE.equals(c.getInternacional()))
-                .filter(c -> !planService.permite(idTienda, FuncionPlan.ENVIO_INTERNACIONAL))
-                .ifPresent(c -> {
-                    throw new ApiException(HttpStatus.CONFLICT, "Esta tienda no envía a " + c.getPais()
-                            + " por ahora. Elige una dirección en el país de la tienda.");
-                });
+        Optional<EnvioRepository.Cotizacion> cotizacion = envioRepository.cotizar(idTienda, cliente.getIdLogin(), idDireccion);
+        boolean internacional = cotizacion.map(c -> Boolean.TRUE.equals(c.getInternacional())).orElse(false);
+        if (internacional && !planService.permite(idTienda, FuncionPlan.ENVIO_INTERNACIONAL)) {
+            throw new ApiException(HttpStatus.CONFLICT, "Esta tienda no envía a " + cotizacion.get().getPais()
+                    + " por ahora. Elige una dirección en el país de la tienda.");
+        }
+        // 1c. Delivery y recojo (V18): con un mensaje claro aquí; la base (T2) también lo exige.
+        if (tipoEntrega != TipoEntrega.ENVIO && internacional) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "El delivery y el recojo en tienda son solo dentro del país de la tienda");
+        }
+        if (tipoEntrega == TipoEntrega.DELIVERY
+                && envioRepository.deliveryPara(idTienda, cliente.getIdLogin(), idDireccion).isEmpty()) {
+            throw new ApiException(HttpStatus.CONFLICT, "La tienda no hace delivery a ese distrito. Elige otra forma de entrega.");
+        }
+        if (tipoEntrega == TipoEntrega.RECOJO && !tiendaRepository.findById(idTienda)
+                .map(t -> Boolean.TRUE.equals(t.getRecojoActivo())).orElse(false)) {
+            throw new ApiException(HttpStatus.CONFLICT, "Esta tienda no ofrece recojo en tienda");
+        }
 
         // 2. Juntar líneas repetidas (la llave de detalle_pedido no permite la misma variante dos veces)
+        //    Si la misma variante viene dos veces con respuestas distintas (dos tortas con textos
+        //    distintos), las respuestas se guardan juntas: "Feliz día, Ana | Felicidades, Luis".
         Map<Long, Integer> cantidades = new LinkedHashMap<>();
+        Map<Long, String> respuestas = new HashMap<>();
         for (LineaVentaRequest l : lineasPedidas) {
             cantidades.merge(l.idVariante(), l.cantidad(), Integer::sum);
+            if (l.datoCliente() != null && !l.datoCliente().isBlank()) {
+                respuestas.merge(l.idVariante(), l.datoCliente().trim(), (a, b) -> a.equals(b) ? a : a + " | " + b);
+            }
         }
 
         // 3. Por cada producto: validar, descontar stock, tomar el precio vigente y la mejor oferta vigente
@@ -162,6 +180,17 @@ public class PedidoService {
             if (info.getEstadoProducto() == null || info.getEstadoProducto() != 1) {
                 throw new ApiException(HttpStatus.CONFLICT, info.getNombreProducto() + " no está a la venta");
             }
+            // V19: el producto pide un dato para prepararlo (el texto de la torta). Desde la tienda
+            // es obligatorio; en una venta que registra el dueño, no (ya lo sabe él).
+            String respuesta = respuestas.get(idVariante);
+            if (exigirRespuestas && info.getPreguntaCliente() != null && respuesta == null) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "Falta tu respuesta para " + info.getNombreProducto()
+                        + ": " + info.getPreguntaCliente());
+            }
+            if (respuesta != null && respuesta.length() > 300) {
+                respuesta = respuesta.substring(0, 300);
+            }
+            final String dato = respuesta;
 
             Precio precio = precioRepository.vigente(idVariante)
                     .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT,
@@ -188,6 +217,7 @@ public class PedidoService {
             d.setNombreProducto(info.getNombreProducto());
             d.setNombreVariante(info.getNombreVariante());
             d.setCantidad(cantidad);
+            d.setDatoCliente(dato);
             oferta.ifPresent(o -> {
                 d.setIdOferta(o.getIdOferta());
                 d.setDescuentoUnitario(descuento);
@@ -196,7 +226,7 @@ public class PedidoService {
 
             lineas.add(new LineaVentaResponse(idVariante, info.getNombreProducto(), info.getNombreVariante(),
                     cantidad, precio.getMonto(), importe, descuento,
-                    oferta.map(OfertaRepository.Vigente::getNombre).orElse(null)));
+                    oferta.map(OfertaRepository.Vigente::getNombre).orElse(null), dato));
         }
 
         // 4. Código de descuento (opcional): se revisa con el subtotal real y rebaja el pedido completo.
@@ -209,6 +239,7 @@ public class PedidoService {
         p.setIdTienda(idTienda);
         p.setIdLogin(cliente.getIdLogin());
         p.setIdDireccionEnvio(idDireccion);
+        p.setTipoEntrega(tipoEntrega.codigo());
         p.setCorreoContacto(cliente.getCorreo());
         p.setSubtotal(subtotal);
         if (cupon != null) {
@@ -302,8 +333,17 @@ public class PedidoService {
             throw new ApiException(HttpStatus.CONFLICT,
                     "El pedido #" + p.getNumeroPedido() + " todavía no tiene un pago aprobado");
         }
-        p.setEmpresaEnvio(r.empresaEnvio().trim());
-        p.setNumeroSeguimiento(r.numeroSeguimiento().trim());
+        // Por courier hacen falta empresa y número para rastrearlo. En delivery propio (V18) el
+        // "empresa" puede ser el nombre de quien lo lleva; en recojo, el pedido solo queda listo.
+        String empresa = r.empresaEnvio() == null || r.empresaEnvio().isBlank() ? null : r.empresaEnvio().trim();
+        String numero = r.numeroSeguimiento() == null || r.numeroSeguimiento().isBlank() ? null : r.numeroSeguimiento().trim();
+        TipoEntrega tipo = TipoEntrega.de(p.getTipoEntrega());
+        if (tipo == TipoEntrega.ENVIO && (empresa == null || numero == null)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, empresa == null
+                    ? "La empresa de envío es obligatoria" : "El número de seguimiento es obligatorio");
+        }
+        p.setEmpresaEnvio(tipo == TipoEntrega.RECOJO ? null : empresa);
+        p.setNumeroSeguimiento(tipo == TipoEntrega.RECOJO ? null : numero);
         p.setFechaEnvio(OffsetDateTime.now());
         return cambiarEstado(p, (short) 1);
     }
@@ -439,7 +479,7 @@ public class PedidoService {
             BigDecimal descuento = d.getDescuentoUnitario() == null ? BigDecimal.ZERO : d.getDescuentoUnitario();
             return new LineaVentaResponse(d.getIdVariante(), d.getNombreProducto(), d.getNombreVariante(),
                     d.getCantidad(), precio, precio.subtract(descuento).multiply(BigDecimal.valueOf(d.getCantidad())),
-                    descuento, nombresOferta.get(d.getIdOferta()));
+                    descuento, nombresOferta.get(d.getIdOferta()), d.getDatoCliente());
         }).toList();
         Short estadoPago = estadosDePago(List.of(p.getIdPedido())).get(p.getIdPedido());
         String codigo = p.getIdCupon() == null ? null

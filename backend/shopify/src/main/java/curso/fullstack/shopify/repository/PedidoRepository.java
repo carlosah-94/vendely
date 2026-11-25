@@ -49,4 +49,13 @@ public interface PedidoRepository extends JpaRepository<Pedido, Long> {
     @Modifying
     @Query(value = "DELETE FROM pagos WHERE id_pedido = :idPedido AND estado <> 1", nativeQuery = true)
     int borrarPagosNoAprobados(@Param("idPedido") Long idPedido);
+
+    /**
+     * Toma el pedido para esta transacción (SELECT ... FOR UPDATE). Lo usa PagoService al aprobar
+     * un pago: si el regreso del navegador y el aviso de la pasarela llegan a la vez, el segundo
+     * espera aquí a que el primero termine, y entonces ve el pago ya aprobado.
+     */
+    @Query(
+            value = "SELECT id_pedido FROM pedidos WHERE id_pedido = :idPedido FOR UPDATE", nativeQuery = true)
+    Long bloquear(@Param("idPedido") Long idPedido);
 }

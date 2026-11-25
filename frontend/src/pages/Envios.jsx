@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import CampoPanel from '../components/CampoPanel';
 import ConfirmarAccion from '../components/ConfirmarAccion';
 import { IconoCerrar, IconoEnvio, IconoMas } from '../components/Iconos';
+import EntregaLocal from '../components/EntregaLocal';
 import Mensaje from '../components/Mensaje';
 import SelectorTienda from '../components/SelectorTienda';
 import { useToast } from '../context/ToastContext';
@@ -97,6 +98,15 @@ export default function Envios() {
 
       {!cargando && envios && (
         <>
+          {/* Delivery propio y recojo en tienda (V18) */}
+          <EntregaLocal
+            key={idTienda}
+            envios={envios}
+            idTienda={idTienda}
+            idPais={envios.idPais}
+            onActualizado={(nuevos) => setDatos({ idTienda, envios: nuevos, error: '' })}
+          />
+
           {/* Nacionales */}
           <div className={TARJETA}>
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#ebebeb] px-4 py-3">

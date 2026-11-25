@@ -1,12 +1,15 @@
 package curso.fullstack.shopify.service;
 
 import curso.fullstack.shopify.dto.CotizacionEnvioResponse;
+import curso.fullstack.shopify.dto.CotizacionEnvioResponse.OpcionEntrega;
 import curso.fullstack.shopify.dto.EnviosResponse;
 import curso.fullstack.shopify.dto.EnviosResponse.TarifaResponse;
 import curso.fullstack.shopify.dto.PaisEnvioResponse;
 import curso.fullstack.shopify.dto.PaisResponse;
+import curso.fullstack.shopify.dto.RecojoRequest;
 import curso.fullstack.shopify.dto.TarifaRequest;
 import curso.fullstack.shopify.entity.Tienda;
+import curso.fullstack.shopify.entity.TipoEntrega;
 import curso.fullstack.shopify.exception.ApiException;
 import curso.fullstack.shopify.repository.DireccionRepository;
 import curso.fullstack.shopify.repository.EnvioRepository;
@@ -14,6 +17,7 @@ import curso.fullstack.shopify.repository.TiendaRepository;
 import curso.fullstack.shopify.security.UsuarioAutenticado;
 import curso.fullstack.shopify.security.VerificadorTienda;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import lombok.extern.slf4j.Slf4j;
@@ -123,21 +127,26 @@ public class EnvioService {
         if (internacional && !planService.permite(yo.idTienda(), FuncionPlan.ENVIO_INTERNACIONAL)) {
             return new CotizacionEnvioResponse(false, true, c.getIdPais(), c.getPais(), null, null, null, null,
                     "Esta tienda no envía a " + c.getPais() + " por ahora. Elige una dirección en "
-                            + paisDeLaTienda(yo.idTienda()) + ".");
+                            + paisDeLaTienda(yo.idTienda()) + ".", List.of());
         }
 
+        // Delivery de la tienda y recojo en el local (V18): solo dentro del país de la tienda.
+        List<OpcionEntrega> locales = internacional ? List.of()
+                : opcionesLocales(yo.idTienda(), yo.idLogin(), idDireccion, subtotal);
+
         if (c.getCosto() == null) {
+            if (!locales.isEmpty()) {
+                return new CotizacionEnvioResponse(true, false, c.getIdPais(), c.getPais(), null, null, null, null,
+                        "Esta tienda no envía por courier a esa zona, pero puedes elegir otra forma de entrega.", locales);
+            }
             String mensaje = internacional
                     ? "Esta tienda todavía no envía a " + c.getPais() + ". Elige otra dirección o escribe a la tienda."
                     : "Esta tienda todavía no envía a esa zona. Elige otra dirección.";
             return new CotizacionEnvioResponse(false, internacional, c.getIdPais(), c.getPais(),
-                    null, null, null, null, mensaje);
+                    null, null, null, null, mensaje, List.of());
         }
 
-        BigDecimal costo = c.getCosto();
-        if (c.getEnvioGratisDesde() != null && subtotal != null && subtotal.compareTo(c.getEnvioGratisDesde()) >= 0) {
-            costo = BigDecimal.ZERO;
-        }
+        BigDecimal costo = conGratis(c.getCosto(), c.getEnvioGratisDesde(), subtotal);
         String mensaje = null;
         if (internacional) {
             // El impuesto del país de la tienda (IGV en Perú, IVA en Chile) no se cobra en una exportación.
@@ -148,8 +157,81 @@ public class EnvioService {
             mensaje = "Envío internacional a " + c.getPais() + ". El precio no incluye " + impuesto
                     + ": los impuestos de importación de tu país los pagas al recibir el pedido.";
         }
+        List<OpcionEntrega> opciones = new ArrayList<>();
+        opciones.add(new OpcionEntrega(TipoEntrega.ENVIO.name(),
+                internacional ? "Envío internacional" : TipoEntrega.ENVIO.nombre(), costo,
+                plazo(c.getDiasEntregaMin(), c.getDiasEntregaMax())));
+        opciones.addAll(locales);
         return new CotizacionEnvioResponse(true, internacional, c.getIdPais(), c.getPais(), costo,
-                c.getEnvioGratisDesde(), c.getDiasEntregaMin(), c.getDiasEntregaMax(), mensaje);
+                c.getEnvioGratisDesde(), c.getDiasEntregaMin(), c.getDiasEntregaMax(), mensaje, opciones);
+    }
+
+    /** Delivery al distrito de esa dirección (si la tienda lo atiende) y recojo en el local (si lo ofrece). */
+    private List<OpcionEntrega> opcionesLocales(Long idTienda, Long idLogin, Long idDireccion, BigDecimal subtotal) {
+        List<OpcionEntrega> opciones = new ArrayList<>();
+        envioRepository.deliveryPara(idTienda, idLogin, idDireccion).ifPresent(z -> opciones.add(
+                new OpcionEntrega(TipoEntrega.DELIVERY.name(), TipoEntrega.DELIVERY.nombre(),
+                        conGratis(z.getCosto(), z.getEnvioGratisDesde(), subtotal),
+                        "La tienda lo lleva a " + z.getDistrito())));
+        tiendaRepository.findById(idTienda)
+                .filter(t -> Boolean.TRUE.equals(t.getRecojoActivo()))
+                .ifPresent(t -> opciones.add(new OpcionEntrega(TipoEntrega.RECOJO.name(), TipoEntrega.RECOJO.nombre(),
+                        BigDecimal.ZERO, t.getRecojoDireccion()
+                                + (t.getRecojoHorario() == null ? "" : " · " + t.getRecojoHorario()))));
+        return opciones;
+    }
+
+    private static BigDecimal conGratis(BigDecimal costo, BigDecimal gratisDesde, BigDecimal subtotal) {
+        return gratisDesde != null && subtotal != null && subtotal.compareTo(gratisDesde) >= 0 ? BigDecimal.ZERO : costo;
+    }
+
+    private static String plazo(Short min, Short max) {
+        if (min == null && max == null) return null;
+        if (min == null || min.equals(max)) return "Llega en " + (max == null ? min : max) + " día(s)";
+        if (max == null) return "Llega desde " + min + " día(s)";
+        return "Llega de " + min + " a " + max + " días";
+    }
+
+    // ------------------------------------------------------------ delivery y recojo (V18)
+
+    /** Crea o cambia el costo del delivery a un distrito. Todos los planes: es la venta del barrio. */
+    @Transactional
+    public EnviosResponse guardarDelivery(UsuarioAutenticado yo, Long idTienda, Long idDivision, TarifaRequest r) {
+        Tienda t = verificadorTienda.delDueno(yo, idTienda);
+        if (!envioRepository.esDistritoDeLaTienda(idTienda, idDivision)) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "Elige un distrito del país de la tienda");
+        }
+        envioRepository.guardarZona(idTienda, idDivision, r.costo(), r.envioGratisDesde(), estado(r));
+        log.info("Zona de delivery guardada: tienda={}, distrito={}, activa={}", idTienda, idDivision, estado(r) == ACTIVA);
+        return armar(t);
+    }
+
+    /** Deja de llevar pedidos a ese distrito. Los pedidos ya hechos guardan su costo. */
+    @Transactional
+    public EnviosResponse borrarDelivery(UsuarioAutenticado yo, Long idTienda, Long idDivision) {
+        Tienda t = verificadorTienda.delDueno(yo, idTienda);
+        if (envioRepository.borrarZona(idTienda, idDivision) == 0) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "La tienda no hace delivery a ese distrito");
+        }
+        log.info("Zona de delivery borrada: tienda={}, distrito={}", idTienda, idDivision);
+        return armar(t);
+    }
+
+    /** Recojo en el local: gratis para el cliente. Para activarlo hace falta la dirección. */
+    @Transactional
+    public EnviosResponse guardarRecojo(UsuarioAutenticado yo, Long idTienda, RecojoRequest r) {
+        Tienda t = verificadorTienda.delDueno(yo, idTienda);
+        String direccion = r.direccion() == null || r.direccion().isBlank() ? null : r.direccion().trim();
+        String horario = r.horario() == null || r.horario().isBlank() ? null : r.horario().trim();
+        if (r.activo() && direccion == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Escribe la dirección donde tus clientes recogen sus pedidos");
+        }
+        t.setRecojoActivo(r.activo());
+        t.setRecojoDireccion(direccion);
+        t.setRecojoHorario(horario);
+        tiendaRepository.saveAndFlush(t);
+        log.info("Recojo en tienda: tienda={}, activo={}", idTienda, r.activo());
+        return armar(t);
     }
 
     /** Países a los que vende una tienda (para mostrarlo en la tienda pública). */
@@ -179,7 +261,13 @@ public class EnvioService {
         return new EnviosResponse(t.getIdPais(), pais.getNombre(), pais.getIdMoneda(),
                 envioRepository.nacionales(t.getIdTienda()).stream().map(TarifaResponse::desde).toList(),
                 envioRepository.internacionales(t.getIdTienda()).stream().map(TarifaResponse::desde).toList(),
-                planService.permite(t.getIdTienda(), FuncionPlan.ENVIO_INTERNACIONAL));
+                planService.permite(t.getIdTienda(), FuncionPlan.ENVIO_INTERNACIONAL),
+                envioRepository.zonasDelivery(t.getIdTienda()).stream()
+                        .map(z -> new EnviosResponse.ZonaDelivery(z.getIdDivision(), z.getDistrito(), z.getProvincia(),
+                                z.getCosto(), z.getEnvioGratisDesde(), z.getEstado() == ACTIVA ? "ACTIVA" : "PAUSADA"))
+                        .toList(),
+                new EnviosResponse.Recojo(Boolean.TRUE.equals(t.getRecojoActivo()), t.getRecojoDireccion(),
+                        t.getRecojoHorario()));
     }
 
     /** "Perú": el nombre del país de la tienda, para los mensajes. */

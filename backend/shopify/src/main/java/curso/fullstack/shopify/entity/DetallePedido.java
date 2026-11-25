@@ -47,4 +47,9 @@ public class DetallePedido {
     @Setter
     @Column(name = "descuento_unitario", nullable = false, precision = 12, scale = 2)
     private BigDecimal descuentoUnitario = BigDecimal.ZERO;
+
+    /** Lo que respondió el cliente a la pregunta del producto (V19), o null. */
+    @Setter
+    @Column(name = "dato_cliente", length = 300)
+    private String datoCliente;
 }

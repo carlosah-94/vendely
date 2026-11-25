@@ -9,6 +9,7 @@ import { NOMBRE_MONEDA, usePaisesHabilitados } from '../hooks/usePaisesHabilitad
 import { useTiendaActual } from '../hooks/useTiendaActual';
 import { api, mensajeDeError } from '../services/api';
 import { BOTON, BOTON_SECUNDARIO, inputPanel } from '../utils/panel';
+import SelectorRubro from '../components/SelectorRubro';
 
 /** Convierte un nombre en un subdominio válido: "Moda Santiago" → "moda-santiago". */
 function aSubdominio(texto) {
@@ -159,7 +160,7 @@ export default function MisTiendas() {
 function FormularioTienda({ onCerrar, onCreada }) {
   const { usuario } = useAuth();
   const paises = usePaisesHabilitados();
-  const [d, setD] = useState({ nombre: '', subdominio: '', correoContacto: usuario?.correo ?? '', idPais: 'PE' });
+  const [d, setD] = useState({ nombre: '', subdominio: '', correoContacto: usuario?.correo ?? '', idPais: 'PE', rubro: '' });
   const [subdominioEditado, setSubdominioEditado] = useState(false);
   const [errores, setErrores] = useState({});
   const [error, setError] = useState('');
@@ -200,6 +201,7 @@ function FormularioTienda({ onCerrar, onCreada }) {
         correoContacto: d.correoContacto.trim(),
         permiteInvitados: true,
         idPais: d.idPais,
+        rubro: d.rubro || null,
       });
       onCreada(data);
     } catch (ex) {
@@ -224,6 +226,7 @@ function FormularioTienda({ onCerrar, onCreada }) {
           <CampoPanel etiqueta="Nombre de la tienda" error={errores.nombre}>
             <input value={d.nombre} onChange={cambiar('nombre')} placeholder="Moda Santiago" className={inputPanel(errores.nombre)} />
           </CampoPanel>
+          <SelectorRubro valor={d.rubro} onCambiar={(rubro) => setD((v) => ({ ...v, rubro }))} />
           <CampoPanel etiqueta="Dirección web" error={errores.subdominio} ayuda="No se puede cambiar después.">
             <div className="flex">
               <input value={d.subdominio} onChange={cambiar('subdominio')} placeholder="moda-santiago" className={`${inputPanel(errores.subdominio)} rounded-r-none`} />

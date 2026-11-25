@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation, useOutletContext, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import ImagenProducto from '../../components/ImagenProducto';
 import Mensaje from '../../components/Mensaje';
 import FiltrosCatalogo from '../../components/tienda/FiltrosCatalogo';
@@ -30,6 +30,7 @@ import { disenoDe, etiquetaOferta } from '../../utils/diseno';
  */
 export default function Vitrina() {
   const { tienda, subdominio, paises } = useOutletContext();
+  const navigate = useNavigate();
   const { agregar, abrir } = useCarrito();
   const [parametros, setParametros] = useSearchParams();
 
@@ -151,6 +152,11 @@ export default function Vitrina() {
     },
     elegirCategoria: (slug) => cambiarFiltro({ categoria: slug }),
     agregarAlCarrito: (p) => {
+      // Un producto que pide un dato (el texto de la torta) se agrega desde su página.
+      if (p.preguntaCliente) {
+        navigate(`/tienda/${subdominio}/producto/${p.idProducto}`);
+        return;
+      }
       agregar(p, 1);
       abrir();
     },

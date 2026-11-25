@@ -35,3 +35,18 @@ export async function paisesDeEnvio(subdominio) {
 export async function cotizarEnvio(idDireccion, subtotal) {
   return (await api.get(`/cliente/direcciones/${idDireccion}/envio`, { params: { subtotal } })).data;
 }
+
+// ---- Delivery de la tienda y recojo en el local (V18)
+/** zona = { costo, envioGratisDesde, activa } */
+export async function guardarZonaDelivery(idTienda, idDivision, zona) {
+  return (await api.put(`${base(idTienda)}/delivery/${idDivision}`, zona)).data;
+}
+
+export async function quitarZonaDelivery(idTienda, idDivision) {
+  return (await api.delete(`${base(idTienda)}/delivery/${idDivision}`)).data;
+}
+
+/** recojo = { activo, direccion, horario } */
+export async function guardarRecojo(idTienda, recojo) {
+  return (await api.put(`${base(idTienda)}/recojo`, recojo)).data;
+}

@@ -5,11 +5,13 @@ import curso.fullstack.shopify.dto.TiendaActualizarRequest;
 import curso.fullstack.shopify.dto.TiendaCrearRequest;
 import curso.fullstack.shopify.dto.TiendaPublicaResponse;
 import curso.fullstack.shopify.dto.TiendaResponse;
+import curso.fullstack.shopify.entity.Categoria;
 import curso.fullstack.shopify.entity.EmpleadoTienda;
 import curso.fullstack.shopify.entity.Propietario;
 import curso.fullstack.shopify.entity.RolUsuario;
 import curso.fullstack.shopify.entity.Tienda;
 import curso.fullstack.shopify.exception.ApiException;
+import curso.fullstack.shopify.repository.CategoriaRepository;
 import curso.fullstack.shopify.repository.DireccionRepository;
 import curso.fullstack.shopify.repository.EmpleadoTiendaRepository;
 import curso.fullstack.shopify.repository.TiendaRepository;
@@ -40,10 +42,13 @@ public class TiendaService {
     private final PlanService planService;
     private final MetodoPagoService metodoPagoService;
     private final EmpleadoTiendaRepository empleadoRepository;
+    private final CategoriaRepository categoriaRepository;
 
     public TiendaService(TiendaRepository tiendaRepository, DireccionRepository direccionRepository,
             VerificadorTienda verificadorTienda, EntityManager entityManager, PlanService planService,
-            MetodoPagoService metodoPagoService, EmpleadoTiendaRepository empleadoRepository) {
+            MetodoPagoService metodoPagoService, EmpleadoTiendaRepository empleadoRepository,
+            CategoriaRepository categoriaRepository) {
+        this.categoriaRepository = categoriaRepository;
         this.metodoPagoService = metodoPagoService;
         this.empleadoRepository = empleadoRepository;
         this.planService = planService;
@@ -82,13 +87,25 @@ public class TiendaService {
         t.setSubdominio(subdominio);
         copiarDatos(t, r.nombre(), r.descripcion(), r.correoContacto(), r.logoUrl(), r.colorPrincipal(),
                 r.permiteInvitados());
+        // Kit de su rubro: descripción y anuncio de inicio (si no escribió los suyos).
+        KitRubro kit = KitRubro.de(r.rubro());
+        t.setRubro(r.rubro());
+        if (t.getDescripcion() == null) t.setDescripcion(kit.descripcion());
+        t.setTextoAnuncio(kit.anuncio());
         tiendaRepository.saveAndFlush(t);
         entityManager.refresh(t); // trae los valores que pone la base (fecha de creación)
+        for (String nombre : kit.categorias()) {
+            Categoria c = new Categoria();
+            c.setIdTienda(t.getIdTienda());
+            c.setNombre(nombre);
+            c.setSlug(KitRubro.slug(nombre));
+            categoriaRepository.save(c);
+        }
         // Sin tarifa de envío la base rechaza cualquier venta: se crea una por defecto
         // para cada región.
         tiendaRepository.crearTarifasPorDefecto(t.getIdTienda());
-        log.info("Tienda creada: idTienda={}, subdominio={}, pais={}, idPropietario={}",
-                t.getIdTienda(), t.getSubdominio(), idPais, t.getIdPropietario());
+        log.info("Tienda creada: idTienda={}, subdominio={}, pais={}, rubro={}, idPropietario={}",
+                t.getIdTienda(), t.getSubdominio(), idPais, t.getRubro(), t.getIdPropietario());
         return TiendaResponse.desde(t, pais, planService.planDe(t.getIdTienda()));
     }
 
@@ -141,6 +158,8 @@ public class TiendaService {
             t.setPlantilla(r.plantilla());
         }
         personalizar(t, r);
+        if (r.whatsapp() != null) t.setWhatsapp(vacioANull(r.whatsapp()));
+        if (r.rubro() != null) t.setRubro(r.rubro());
         if (r.tema() != null && (cambia(t.getTema(), r.tema()) || t.getTemaAplicadoEl() == null)) {
             t.setTema(r.tema());
             t.setTemaAplicadoEl(java.time.OffsetDateTime.now());

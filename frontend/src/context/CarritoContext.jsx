@@ -41,15 +41,22 @@ export function CarritoProvider({ subdominio, children }) {
     return () => window.removeEventListener('pageshow', alMostrar);
   }, [clave]);
 
-  /** Agrega un producto sin pasar del stock disponible. */
-  function agregar(producto, cantidad = 1) {
+  /**
+   * Agrega un producto sin pasar del stock disponible. datoCliente: la respuesta a la pregunta
+   * del producto (V19), por ejemplo el texto de la torta. Si ya estaba con otra respuesta, se
+   * guardan las dos ("Feliz día, Ana | Felicidades, Luis"), igual que hace el backend.
+   */
+  function agregar(producto, cantidad = 1, datoCliente = null) {
+    const dato = datoCliente?.trim() || null;
     setItems((actual) => {
       const existente = actual.find((i) => i.idVariante === producto.idVariante);
       const tope = Math.max(producto.stock ?? 1, 1);
       if (existente) {
+        const juntos = !dato || existente.datoCliente === dato ? existente.datoCliente ?? dato
+          : existente.datoCliente ? `${existente.datoCliente} | ${dato}` : dato;
         return actual.map((i) =>
           i.idVariante === producto.idVariante
-            ? { ...i, stock: tope, precio: producto.precio, cantidad: Math.min(i.cantidad + cantidad, tope) }
+            ? { ...i, stock: tope, precio: producto.precio, cantidad: Math.min(i.cantidad + cantidad, tope), datoCliente: juntos }
             : i,
         );
       }
@@ -63,6 +70,7 @@ export function CarritoProvider({ subdominio, children }) {
           stock: tope,
           imagenUrl: producto.imagenUrl ?? null,
           cantidad: Math.min(cantidad, tope),
+          datoCliente: dato,
         },
       ];
     });
