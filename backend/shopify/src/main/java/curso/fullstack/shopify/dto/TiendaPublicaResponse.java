@@ -36,7 +36,8 @@ public record TiendaPublicaResponse(
         String tema,
         String recojoDireccion, // dirección del local si tiene recojo activo (V18), o null
         String recojoHorario,
-        List<String> distritosDelivery // distritos con delivery propio activo (V19), para la plantilla
+        List<String> distritosDelivery, // distritos con delivery propio activo (V19), para la plantilla
+        Boolean puedeVender            // false: todavía no recibe pedidos (falta el RUC del dueño, V24)
 ) {
     public static TiendaPublicaResponse desde(Tienda t, DireccionRepository.PaisInfo p) {
         return desde(t, p, null, List.of(), List.of());
@@ -66,6 +67,7 @@ public record TiendaPublicaResponse(
                 t.getPermiteInvitados(), plantillas ? t.getPlantilla() : "clasica", !personaliza, metodosPago,
                 DisenoTienda.de(t, colores, plantillas), t.getWhatsapp(), t.getRubro(), tema,
                 recojo ? t.getRecojoDireccion() : null, recojo ? t.getRecojoHorario() : null,
-                distritosDelivery == null ? List.of() : distritosDelivery);
+                distritosDelivery == null ? List.of() : distritosDelivery,
+                !Boolean.FALSE.equals(t.getPuedeVender()));
     }
 }

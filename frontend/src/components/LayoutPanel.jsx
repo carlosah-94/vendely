@@ -226,6 +226,18 @@ export default function LayoutPanel() {
                     onSalir={() => navigate('/admin/soporte')}
                   />
                 )}
+                {/* V24: en Perú, una tienda sin RUC del dueño no recibe pedidos. */}
+                {esPanelTienda && tienda && tienda.puedeVender === false && !enSoporte && (
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#f1d28a] bg-[#fff4d6] px-4 py-3 text-[13px] text-[#5c4200]">
+                    <p>
+                      <b>Tu tienda todavía no puede vender.</b> En Perú necesitas RUC para entregar boleta o factura.
+                      {esDuenoDe(tienda) ? ' Regístralo con tu razón social en Mi perfil.' : ' Pídele al dueño que registre su RUC.'}
+                    </p>
+                    {esDuenoDe(tienda) && (
+                      <Link to="/cuenta/perfil" className="rounded-lg bg-[#303030] px-3 py-1.5 font-semibold text-white hover:bg-black">Registrar mi RUC</Link>
+                    )}
+                  </div>
+                )}
                 <Outlet />
               </div>
             </div>

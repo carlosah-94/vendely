@@ -203,6 +203,19 @@ export default function Checkout() {
     );
   }
 
+  // La tienda todavía no vende (sin RUC del dueño, V24). El servidor también rechazaría el pedido.
+  if (tienda.puedeVender === false) {
+    return (
+      <div className="mx-auto max-w-md space-y-4 px-4 py-20 text-center">
+        <h1 className="text-2xl font-semibold">Esta tienda abrirá pronto</h1>
+        <p className="text-[#616161]">Todavía no está recibiendo pedidos. Vuelve en unos días.</p>
+        <Link to={`/tienda/${subdominio}`} className="inline-block rounded-md bg-[var(--tienda)] px-6 py-3 font-medium text-[var(--tienda-texto)]">
+          Volver a la tienda
+        </Link>
+      </div>
+    );
+  }
+
   if (items.length === 0) {
     return (
       <div className="mx-auto max-w-md space-y-4 px-4 py-20 text-center">

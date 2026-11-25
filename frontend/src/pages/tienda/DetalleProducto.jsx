@@ -228,6 +228,11 @@ export default function DetalleProducto() {
                 )}
               </label>
             )}
+            {tienda.puedeVender === false ? (
+              <p className="tarjeta-tienda bg-[var(--fondo-suave)] px-4 py-3 text-sm text-[#616161]">
+                Esta tienda abrirá pronto: todavía no recibe pedidos.
+              </p>
+            ) : (
             <div className="space-y-3">
               <button
                 type="button"
@@ -252,6 +257,7 @@ export default function DetalleProducto() {
                 Comprar ahora
               </button>
             </div>
+            )}
           </>
         ) : (
           <button type="button" disabled className="w-full cursor-not-allowed rounded-md bg-[#e3e3e3] py-3 font-medium text-[#8a8a8a]">

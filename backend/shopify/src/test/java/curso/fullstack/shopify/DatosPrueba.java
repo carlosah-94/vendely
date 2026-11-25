@@ -40,11 +40,12 @@ public class DatosPrueba {
         String sufijo = n + "-" + Long.toString(System.nanoTime() % 1_000_000_000L, 36);
 
         long idDueno = nuevaCuenta(2, null, "dueno" + sufijo);
-        // RUC (tipo 2): 11 dígitos que empiezan con 20. El contador lo hace único.
-        String ruc = "20" + String.format("%09d", (System.nanoTime() + n) % 1_000_000_000L);
+        // RUC (tipo 2) de empresa, con su dígito verificador (V24): así la tienda ya puede vender.
+        String ruc = nuevoRuc("20");
         Long idPropietario = jdbc.queryForObject("""
-                INSERT INTO propietarios (id_login, id_rol, tipo_documento, numero_documento)
-                VALUES (?, 2, 2, ?) RETURNING id_propietario""", Long.class, idDueno, ruc);
+                INSERT INTO propietarios (id_login, id_rol, tipo_documento, numero_documento, ruc, razon_social)
+                VALUES (?, 2, 2, ?, ?, ?) RETURNING id_propietario""", Long.class, idDueno, ruc, ruc,
+                "Empresa de prueba " + sufijo + " S.A.C.");
 
         String subdominio = "prueba-" + sufijo;
         Long idTienda = jdbc.queryForObject("""
@@ -61,6 +62,12 @@ public class DatosPrueba {
         long idDireccion = nuevaDireccion(idCliente);
         return new Tienda(idTienda, subdominio, idDueno, idCliente, idDireccion,
                 correoDe(idDueno), correoDe(idCliente));
+    }
+
+    /** Un RUC válido y único: el prefijo (10 o 20), 8 dígitos y su dígito verificador. */
+    public static String nuevoRuc(String prefijo) {
+        String diez = prefijo + String.format("%08d", (System.nanoTime() / 1000 + CONTADOR.incrementAndGet()) % 100_000_000L);
+        return diez + curso.fullstack.shopify.service.DocumentoTributario.digitoRuc(diez);
     }
 
     /** Un cliente más de la tienda, con su dirección; devuelve su id_login. */
