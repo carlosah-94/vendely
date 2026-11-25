@@ -18,18 +18,19 @@ public interface VarianteRepository extends JpaRepository<Variante, Long> {
         String getNombreProducto();
         String getNombreVariante();
         Short getEstadoProducto();
+        String getPreguntaCliente();   // V19: si no es null, el cliente debe responderla
     }
 
     /** Tienda, nombre del producto y nombre de la variante ("42 / Negro"; "Única" si no tiene opciones). */
     @Query(value = """
             SELECT p.id_tienda AS "idTienda", p.id_producto AS "idProducto", p.nombre AS "nombreProducto",
-                   p.estado AS "estadoProducto",
+                   p.estado AS "estadoProducto", p.pregunta_cliente AS "preguntaCliente",
                    COALESCE(string_agg(vv.valor, ' / ' ORDER BY vv.posicion), 'Única') AS "nombreVariante"
               FROM variantes v
               JOIN productos p ON p.id_producto = v.id_producto
               LEFT JOIN variante_valores vv ON vv.id_variante = v.id_variante
              WHERE v.id_variante = :idVariante
-             GROUP BY p.id_tienda, p.id_producto, p.nombre, p.estado
+             GROUP BY p.id_tienda, p.id_producto, p.nombre, p.estado, p.pregunta_cliente
             """, nativeQuery = true)
     Optional<Info> buscarInfo(@Param("idVariante") Long idVariante);
 

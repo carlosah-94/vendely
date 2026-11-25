@@ -35,6 +35,8 @@ public interface ProductoRepository extends JpaRepository<Producto, Long> {
         String getImagenes();
         /** Ids de sus categorías separados por espacios ("3 7"). */
         String getCategorias();
+        /** Pregunta al cliente (V19), o null. */
+        String getPreguntaCliente();
     }
 
     /** El FROM del producto con su precio vigente y su stock. Se reutiliza en el conteo del catálogo. */
@@ -50,6 +52,7 @@ public interface ProductoRepository extends JpaRepository<Producto, Long> {
     String SELECT_FILA = """
             SELECT p.id_producto AS "idProducto", p.nombre AS "nombre", p.slug AS "slug",
                    p.descripcion AS "descripcion", p.marca AS "marca", p.estado AS "estado",
+                   p.pregunta_cliente AS "preguntaCliente",
                    min(v.id_variante) AS "idVariante", count(v.id_variante) AS "variantes",
                    min(pr.monto) AS "precio", min(pr.monto_comparacion) AS "precioComparacion",
                    min(v.sku) AS "sku", coalesce(sum(i.cantidad_disponible), 0) AS "stock",

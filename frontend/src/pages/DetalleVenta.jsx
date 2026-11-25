@@ -415,6 +415,9 @@ export default function DetalleVenta() {
                 <td className="px-4 py-3">
                   <p className="text-slate-800">{l.nombreProducto}</p>
                   {l.nombreVariante && <p className="text-xs text-slate-500">{l.nombreVariante}</p>}
+                  {l.datoCliente && (
+                    <p className="mt-0.5 inline-block rounded bg-amber-50 px-1.5 py-0.5 text-xs text-amber-900">Dato del cliente: {l.datoCliente}</p>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-right">{l.cantidad}</td>
                 <td className="px-4 py-3 text-right">

@@ -515,6 +515,7 @@ public class ProductoService {
         p.setSlug(slug);
         p.setDescripcion(vacioANull(r.descripcion()));
         p.setMarca(vacioANull(r.marca()));
+        p.setPreguntaCliente(vacioANull(r.preguntaCliente()));
         // null o true = activo. Se crean activos para que aparezcan en el catálogo y se puedan vender
         // (la base, por defecto, los crearía como borrador).
         p.setEstado(Boolean.FALSE.equals(r.activo()) ? BORRADOR : ACTIVO);

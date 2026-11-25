@@ -312,10 +312,13 @@ public class NotificacionService {
         for (DetallePedido d : detallePedidoRepository.findByIdPedido(p.getIdPedido())) {
             filas.append("""
                     <tr>
-                      <td style="padding:6px 0;border-bottom:1px solid #f3f4f6">%s <span style="color:#6b7280">%s</span></td>
+                      <td style="padding:6px 0;border-bottom:1px solid #f3f4f6">%s <span style="color:#6b7280">%s</span>%s</td>
                       <td style="padding:6px 0;border-bottom:1px solid #f3f4f6;text-align:right">x%d</td>
                     </tr>
-                    """.formatted(escapar(d.getNombreProducto()), escapar(d.getNombreVariante()), d.getCantidad()));
+                    """.formatted(escapar(d.getNombreProducto()), escapar(d.getNombreVariante()),
+                    d.getDatoCliente() == null ? ""
+                            : "<br><span style=\"color:#6b7280;font-size:13px\">Dato del cliente: " + escapar(d.getDatoCliente()) + "</span>",
+                    d.getCantidad()));
         }
         return """
                 <table style="width:100%%;border-collapse:collapse;font-size:14px;margin:12px 0">

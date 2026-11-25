@@ -165,7 +165,7 @@ export default function Checkout() {
       if (!pedido) {
         pedido = await crearPedido({
           idDireccionEnvio: idDireccion,
-          lineas: items.map((i) => ({ idVariante: i.idVariante, cantidad: i.cantidad })),
+          lineas: items.map((i) => ({ idVariante: i.idVariante, cantidad: i.cantidad, datoCliente: i.datoCliente ?? null })),
           codigoCupon: cupon?.codigo ?? null,
           tipoEntrega: opcion?.tipo ?? 'ENVIO',
         });
@@ -231,7 +231,10 @@ export default function Checkout() {
                 {i.cantidad}
               </span>
             </div>
-            <p className="flex-1 text-sm">{i.nombre}</p>
+            <p className="flex-1 text-sm">
+              {i.nombre}
+              {i.datoCliente && <span className="block text-xs text-[#616161]">{i.datoCliente}</span>}
+            </p>
             <p className="text-sm">{formatoMoneda(i.precio * i.cantidad)}</p>
           </li>
         ))}

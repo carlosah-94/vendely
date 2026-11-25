@@ -75,5 +75,10 @@ public record ProductoRequest(
 
         // Obligatorio si hay opciones: las combinaciones que se venden.
         @Size(max = 100, message = "Un producto puede tener hasta 100 variantes")
-        List<@Valid VarianteRequest> variantes
+        List<@Valid VarianteRequest> variantes,
+
+        // Opcional (V19). Lo que el cliente debe responder al comprar: "¿Qué texto va en la torta?".
+        // null o "" = no se le pregunta nada.
+        @Size(max = 120, message = "La pregunta puede tener hasta 120 caracteres")
+        String preguntaCliente
 ) {}

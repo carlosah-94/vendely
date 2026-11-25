@@ -28,7 +28,8 @@ public record ProductoPublicoResponse(
         List<Long> categorias,         // ids de sus categorías (la tienda filtra por ellas)
         List<OpcionResponse> opciones, // vacía en un producto simple
         List<VarianteResponse> variantes,  // cada combinación con su precio y stock (sin SKU)
-        OfertaPublica oferta               // oferta automática vigente, o null
+        OfertaPublica oferta,              // oferta automática vigente, o null
+        String preguntaCliente             // la tienda pide un dato al comprar (V19), o null
 ) {
     /**
      * Oferta automática vigente del producto. Con oferta, "precio" ya viene rebajado y
@@ -53,7 +54,7 @@ public record ProductoPublicoResponse(
         return new ProductoPublicoResponse(idProducto, nombre, slug, descripcion, marca, idVariante,
                 precio == null ? null : rebajar(o, precio, decimales), stock, disponible, imagenUrl,
                 precio == null ? precioComparacion : tachado(precio, precioComparacion),
-                imagenes, categorias, opciones, rebajadas, datos);
+                imagenes, categorias, opciones, rebajadas, datos, preguntaCliente);
     }
 
     private static BigDecimal rebajar(OfertaRepository.Vigente o, BigDecimal precio, int decimales) {
@@ -70,6 +71,6 @@ public record ProductoPublicoResponse(
         return new ProductoPublicoResponse(f.getIdProducto(), f.getNombre(), f.getSlug(), f.getDescripcion(),
                 f.getMarca(), f.getIdVariante(), f.getPrecio(), stock, stock > 0, f.getImagenUrl(),
                 f.getPrecioComparacion(), ProductoResponse.separarImagenes(f.getImagenes()),
-                ProductoResponse.separarIds(f.getCategorias()), opciones, variantes, null);
+                ProductoResponse.separarIds(f.getCategorias()), opciones, variantes, null, f.getPreguntaCliente());
     }
 }

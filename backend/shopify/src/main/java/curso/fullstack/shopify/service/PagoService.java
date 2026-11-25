@@ -207,7 +207,8 @@ public class PagoService {
         Long idPedido = p.getIdPedido();
 
         // Ya aprobado antes (por ejemplo, el cliente recargó la página): no se cobra ni se cambia nada.
-        if (pagoRepository.existsByIdPedidoAndEstado(idPedido, Pago.APROBADO)) {
+        // Con el pedido tomado, para que dos entradas a la vez no lo aprueben (ni avisen) dos veces.
+        if (yaPagado(idPedido)) {
             return resultado(p, Pago.APROBADO);
         }
 
@@ -555,6 +556,12 @@ public class PagoService {
      * Solo se aprueba si PayPal confirma el cobro como COMPLETED.
      */
     private ResultadoPagoResponse confirmarPayPal(Pedido p, Pago pago) {
+        // El regreso del navegador y el aviso de PayPal suelen llegar casi juntos: el primero toma
+        // el pedido y lo cobra; el segundo espera, ve el pago aprobado y no hace nada más. Antes los
+        // dos lo aprobaban y el cliente recibía dos correos de "pago confirmado".
+        if (yaPagado(p.getIdPedido())) {
+            return resultado(p, Pago.APROBADO);
+        }
         String idOrden = pago.getReferenciaTransaccion();
         Map<String, Object> orden = consultarOrdenPayPal(idOrden);
 
@@ -604,6 +611,15 @@ public class PagoService {
         }
         log.info("Pago pendiente en PayPal: pedido #{}, estado del cobro {}", p.getNumeroPedido(), estadoCobro);
         return resultado(p, Pago.PENDIENTE);
+    }
+
+    /**
+     * ¿El pedido ya tiene un pago aprobado? Antes de mirar, toma el pedido (FOR UPDATE): si otra
+     * transacción lo está aprobando en este momento, espera a que termine y ve su resultado.
+     */
+    private boolean yaPagado(Long idPedido) {
+        pedidoRepository.bloquear(idPedido);
+        return pagoRepository.existsByIdPedidoAndEstado(idPedido, Pago.APROBADO);
     }
 
     private ResultadoPagoResponse aprobarPayPal(Pedido p, Pago pago) {

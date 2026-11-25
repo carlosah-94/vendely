@@ -38,6 +38,8 @@ export default function DetalleProducto() {
   // Tiempo real (issue #4): si cambia el stock de alguna variante de ESTE producto, se recarga.
   // Asi el limite de cantidad y el "Agotado" estan al dia aunque otro cliente compre mientras tanto.
   const [version, setVersion] = useState(0);
+  // Respuesta a la pregunta del producto (V19): "Feliz cumpleaños, Ana".
+  const [respuesta, setRespuesta] = useState({ clave: null, texto: '', error: '' });
   useTiempoReal(tienda?.idTienda ? canales.stockDeTienda(tienda.idTienda) : null, (aviso) => {
     const p = estado.producto;
     if (p && (p.idVariante === aviso.idVariante || (p.variantes ?? []).some((v) => v.idVariante === aviso.idVariante))) {
@@ -91,6 +93,15 @@ export default function DetalleProducto() {
     }
     : { ...p, disponible: false, stock: 0 };
   const tope = Math.max(elegido.stock, 1);
+
+  const textoRespuesta = respuesta.clave === clave ? respuesta.texto.trim() : '';
+
+  /** Si el producto pregunta algo, la respuesta es obligatoria antes de agregarlo. */
+  function respondio() {
+    if (!p.preguntaCliente || textoRespuesta) return true;
+    setRespuesta({ clave, texto: '', error: 'Responde esta pregunta para preparar tu pedido' });
+    return false;
+  }
 
   function elegir(indice, valor) {
     const nuevos = valores.map((v, i) => (i === indice ? valor : v));
@@ -200,11 +211,29 @@ export default function DetalleProducto() {
                 </button>
               </div>
             </div>
+            {p.preguntaCliente && (
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium">{p.preguntaCliente}</span>
+                <input
+                  value={respuesta.clave === clave ? respuesta.texto : ''}
+                  onChange={(e) => setRespuesta({ clave, texto: e.target.value, error: '' })}
+                  maxLength={200}
+                  aria-invalid={Boolean(respuesta.clave === clave && respuesta.error)}
+                  className={`w-full rounded-md border px-3 py-2.5 text-sm ${
+                    respuesta.clave === clave && respuesta.error ? 'border-[#c0392b]' : 'border-[#c9c9c9]'
+                  }`}
+                />
+                {respuesta.clave === clave && respuesta.error && (
+                  <span className="mt-1 block text-xs text-[#c0392b]">{respuesta.error}</span>
+                )}
+              </label>
+            )}
             <div className="space-y-3">
               <button
                 type="button"
                 onClick={() => {
-                  agregar(elegido, cantidad);
+                  if (!respondio()) return;
+                  agregar(elegido, cantidad, textoRespuesta);
                   abrir();
                 }}
                 className="boton-tienda w-full border-2 border-[#303030] py-3.5 font-semibold transition hover:bg-[#f3f3f3]"
@@ -214,7 +243,8 @@ export default function DetalleProducto() {
               <button
                 type="button"
                 onClick={() => {
-                  agregar(elegido, cantidad);
+                  if (!respondio()) return;
+                  agregar(elegido, cantidad, textoRespuesta);
                   navigate(`/tienda/${subdominio}/checkout`);
                 }}
                 className="boton-tienda w-full bg-[var(--tienda)] py-3.5 font-semibold text-[var(--tienda-texto)] shadow-[0_12px_30px_-12px_var(--tienda)] transition hover:brightness-95"

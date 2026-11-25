@@ -143,6 +143,7 @@ export default function MisPedidos() {
                             <li key={l.idVariante} className="flex justify-between gap-4 py-2">
                               <span>
                                 {l.nombreProducto} <span className="text-[#616161]">× {l.cantidad}</span>
+                                {l.datoCliente && <span className="block text-xs text-[#616161]">{l.datoCliente}</span>}
                               </span>
                               <span>{formatoMoneda(l.importe, d.moneda)}</span>
                             </li>

@@ -68,6 +68,7 @@ function validar(datos) {
   if (nombre.length < 3 || nombre.length > 200) e.nombre = 'El nombre debe tener entre 3 y 200 caracteres';
   if (datos.descripcion.length > MAX_DESCRIPCION) e.descripcion = `La descripción puede tener hasta ${MAX_DESCRIPCION} caracteres`;
   if (datos.marca.trim().length > 100) e.marca = 'Máximo 100 caracteres';
+  if (datos.preguntaCliente.trim().length > 120) e.preguntaCliente = 'Máximo 120 caracteres';
 
   // Precio: número mayor que 0 con los decimales de la moneda de la tienda
   // (soles: hasta 2, pesos chilenos: ninguno), como exige la base (T16).
@@ -103,6 +104,7 @@ export default function FormularioProducto({ idTienda, impuesto = 'IGV', product
     nombre: producto?.nombre ?? '',
     descripcion: producto?.descripcion ?? '',
     marca: producto?.marca ?? '',
+    preguntaCliente: producto?.preguntaCliente ?? '',
     precio: producto?.precio != null ? String(producto.precio) : '',
     precioComparacion: producto?.precioComparacion != null ? String(producto.precioComparacion) : '',
     sku: producto?.sku ?? '',
@@ -235,6 +237,7 @@ export default function FormularioProducto({ idTienda, impuesto = 'IGV', product
       nombre: datos.nombre.trim(),
       descripcion: datos.descripcion.trim() || null,
       marca: datos.marca.trim() || null,
+      preguntaCliente: datos.preguntaCliente.trim() || null,
       precio: aNumero(datos.precio),
       // Con variantes, cada una lleva su precio "antes" (columna Antes): no se hereda del producto.
       precioComparacion: !conVariantes && datos.precioComparacion.trim() ? aNumero(datos.precioComparacion) : null,
@@ -338,6 +341,19 @@ export default function FormularioProducto({ idTienda, impuesto = 'IGV', product
                 ayuda={`${datos.descripcion.length} / ${MAX_DESCRIPCION} caracteres`}
               >
                 <textarea rows={4} value={datos.descripcion} onChange={cambiar('descripcion')} className={estiloInput(errores.descripcion)} />
+              </Campo>
+              <Campo
+                etiqueta="Pregunta al cliente (opcional)"
+                error={errores.preguntaCliente}
+                ayuda="Si necesitas un dato para preparar el pedido. El cliente debe responderla antes de comprar."
+              >
+                <input
+                  value={datos.preguntaCliente}
+                  onChange={cambiar('preguntaCliente')}
+                  maxLength={120}
+                  placeholder="¿Qué texto va en la torta? · ¿Qué nombre grabamos?"
+                  className={estiloInput(errores.preguntaCliente)}
+                />
               </Campo>
             </Tarjeta>
 

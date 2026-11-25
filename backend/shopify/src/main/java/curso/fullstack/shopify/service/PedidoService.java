@@ -98,7 +98,7 @@ public class PedidoService {
                 .filter(l -> l.getRol() == RolUsuario.CLIENTE && idTienda.equals(l.getIdTienda()))
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El cliente no existe en esta tienda"));
 
-        return crearPedido(idTienda, cliente, r.idDireccionEnvio(), r.lineas(), null, TipoEntrega.ENVIO);
+        return crearPedido(idTienda, cliente, r.idDireccionEnvio(), r.lineas(), null, TipoEntrega.ENVIO, false);
     }
 
     /**
@@ -117,7 +117,7 @@ public class PedidoService {
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El cliente no existe en esta tienda"));
 
         return crearPedido(yo.idTienda(), cliente, r.idDireccionEnvio(), r.lineas(), r.codigoCupon(),
-                TipoEntrega.de(r.tipoEntrega()));
+                TipoEntrega.de(r.tipoEntrega()), true);
     }
 
     /**
@@ -125,7 +125,7 @@ public class PedidoService {
      * toma el precio vigente y guarda pedido + líneas. Debe llamarse dentro de una transacción.
      */
     private VentaResponse crearPedido(Long idTienda, Login cliente, Long idDireccion, List<LineaVentaRequest> lineasPedidas,
-                                      String codigoCupon, TipoEntrega tipoEntrega) {
+                                      String codigoCupon, TipoEntrega tipoEntrega, boolean exigirRespuestas) {
         // 1. La dirección es suya y está activa
         if (!direccionRepository.existsByIdDireccionAndIdLoginAndEstado(idDireccion, cliente.getIdLogin(), (short) 1)) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "La dirección de envío no es de este cliente");
@@ -152,9 +152,15 @@ public class PedidoService {
         }
 
         // 2. Juntar líneas repetidas (la llave de detalle_pedido no permite la misma variante dos veces)
+        //    Si la misma variante viene dos veces con respuestas distintas (dos tortas con textos
+        //    distintos), las respuestas se guardan juntas: "Feliz día, Ana | Felicidades, Luis".
         Map<Long, Integer> cantidades = new LinkedHashMap<>();
+        Map<Long, String> respuestas = new HashMap<>();
         for (LineaVentaRequest l : lineasPedidas) {
             cantidades.merge(l.idVariante(), l.cantidad(), Integer::sum);
+            if (l.datoCliente() != null && !l.datoCliente().isBlank()) {
+                respuestas.merge(l.idVariante(), l.datoCliente().trim(), (a, b) -> a.equals(b) ? a : a + " | " + b);
+            }
         }
 
         // 3. Por cada producto: validar, descontar stock, tomar el precio vigente y la mejor oferta vigente
@@ -174,6 +180,17 @@ public class PedidoService {
             if (info.getEstadoProducto() == null || info.getEstadoProducto() != 1) {
                 throw new ApiException(HttpStatus.CONFLICT, info.getNombreProducto() + " no está a la venta");
             }
+            // V19: el producto pide un dato para prepararlo (el texto de la torta). Desde la tienda
+            // es obligatorio; en una venta que registra el dueño, no (ya lo sabe él).
+            String respuesta = respuestas.get(idVariante);
+            if (exigirRespuestas && info.getPreguntaCliente() != null && respuesta == null) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "Falta tu respuesta para " + info.getNombreProducto()
+                        + ": " + info.getPreguntaCliente());
+            }
+            if (respuesta != null && respuesta.length() > 300) {
+                respuesta = respuesta.substring(0, 300);
+            }
+            final String dato = respuesta;
 
             Precio precio = precioRepository.vigente(idVariante)
                     .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT,
@@ -200,6 +217,7 @@ public class PedidoService {
             d.setNombreProducto(info.getNombreProducto());
             d.setNombreVariante(info.getNombreVariante());
             d.setCantidad(cantidad);
+            d.setDatoCliente(dato);
             oferta.ifPresent(o -> {
                 d.setIdOferta(o.getIdOferta());
                 d.setDescuentoUnitario(descuento);
@@ -208,7 +226,7 @@ public class PedidoService {
 
             lineas.add(new LineaVentaResponse(idVariante, info.getNombreProducto(), info.getNombreVariante(),
                     cantidad, precio.getMonto(), importe, descuento,
-                    oferta.map(OfertaRepository.Vigente::getNombre).orElse(null)));
+                    oferta.map(OfertaRepository.Vigente::getNombre).orElse(null), dato));
         }
 
         // 4. Código de descuento (opcional): se revisa con el subtotal real y rebaja el pedido completo.
@@ -461,7 +479,7 @@ public class PedidoService {
             BigDecimal descuento = d.getDescuentoUnitario() == null ? BigDecimal.ZERO : d.getDescuentoUnitario();
             return new LineaVentaResponse(d.getIdVariante(), d.getNombreProducto(), d.getNombreVariante(),
                     d.getCantidad(), precio, precio.subtract(descuento).multiply(BigDecimal.valueOf(d.getCantidad())),
-                    descuento, nombresOferta.get(d.getIdOferta()));
+                    descuento, nombresOferta.get(d.getIdOferta()), d.getDatoCliente());
         }).toList();
         Short estadoPago = estadosDePago(List.of(p.getIdPedido())).get(p.getIdPedido());
         String codigo = p.getIdCupon() == null ? null
