@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { formatoMoneda } from '../../../utils/formato';
-import { BotonWhatsappRubro, FotoO, Icono, TEXTOS, fotosDe } from './comun';
+import { BotonWhatsappRubro, FotoO, Icono, fotosDe, textosDe } from './comun';
 
 /**
  * Portada de cada plantilla por rubro. Cada una tiene su propia composición, no solo otro color:
@@ -38,7 +38,8 @@ function SelloCircular({ texto, className = '' }) {
       <svg viewBox="0 0 120 120" className="h-full w-full" aria-hidden="true">
         <defs><path id="circulo-sello" d="M60 60m-44 0a44 44 0 1 1 88 0a44 44 0 1 1-88 0" /></defs>
         <text fontSize="12" fontWeight="700" letterSpacing="2.6" fill="currentColor">
-          <textPath href="#circulo-sello">{texto}</textPath>
+          {/* textLength: el texto ocupa justo la vuelta, sea corto o largo. */}
+          <textPath href="#circulo-sello" textLength="268" lengthAdjust="spacingAndGlyphs">{texto}</textPath>
         </text>
         <path d="M60 46l4 9 10 1-7.5 6.5 2.3 9.8L60 67l-8.8 5.3 2.3-9.8L46 56l10-1z" fill="currentColor" />
       </svg>
@@ -47,6 +48,7 @@ function SelloCircular({ texto, className = '' }) {
 }
 
 function PortadaHorno({ tienda, todos, categorias, subdominio }) {
+  const t = textosDe(tienda);
   const [principal, segunda] = fotosDe(todos, 2);
   return (
     <section className="relative isolate overflow-hidden bg-[#FFF4E6] text-[#2B1609]">
@@ -57,7 +59,7 @@ function PortadaHorno({ tienda, todos, categorias, subdominio }) {
           <Logo tienda={tienda} />
           <p className="inline-flex items-center gap-2 rounded-full border border-[#E9C9A5] bg-white/70 px-4 py-1.5 text-sm font-semibold text-[var(--tienda)]">
             <span className="relative flex h-2.5 w-2.5"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--acento)] opacity-75" /><span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[var(--acento)]" /></span>
-            {TEXTOS.horno.etiqueta}
+            {t.etiqueta}
           </p>
           <h1 className="relative break-words text-[clamp(3.2rem,8.5vw,6.8rem)] font-bold leading-[0.9] tracking-tight">
             {tienda.nombre}
@@ -68,7 +70,7 @@ function PortadaHorno({ tienda, todos, categorias, subdominio }) {
           {tienda.descripcion && <p className="max-w-lg text-lg leading-relaxed text-[#6B4A35]">{tienda.descripcion}</p>}
           <div className="flex flex-wrap gap-3">
             <a href="#catalogo" className="boton-tienda bg-[var(--tienda)] px-8 py-3.5 font-semibold text-[var(--tienda-texto)] shadow-[0_14px_30px_-12px_var(--tienda)] transition hover:-translate-y-0.5">
-              {TEXTOS.horno.boton}
+              {t.boton}
             </a>
             <BotonWhatsappRubro tienda={tienda} />
           </div>
@@ -85,7 +87,7 @@ function PortadaHorno({ tienda, todos, categorias, subdominio }) {
           <div className="flotar absolute inset-[14%] overflow-hidden rounded-full border-[10px] border-white bg-[#FFF7EC] shadow-[0_40px_80px_-30px_rgba(80,30,0,0.6)]">
             <FotoO foto={principal}><div className="p-8"><IlustracionTorta /></div></FotoO>
           </div>
-          <SelloCircular texto="HECHO HOY • CON CARIÑO • " className="absolute -right-1 top-2 h-28 w-28 sm:h-32 sm:w-32" />
+          <SelloCircular texto={t.sello.length <= 13 ? `${t.sello} • ${t.sello} • `.toUpperCase() : `${t.sello} • `.toUpperCase()} className="absolute -right-1 top-2 h-28 w-28 sm:h-32 sm:w-32" />
           {segunda ? (
             <Link to={`/tienda/${subdominio}/producto/${segunda.idProducto}`} className="absolute -left-2 bottom-6 flex items-center gap-3 rounded-2xl bg-white p-2.5 pr-5 shadow-xl transition hover:-translate-y-1 sm:left-0">
               <img src={segunda.imagenUrl} alt="" className="h-14 w-14 rounded-xl object-cover" />
@@ -93,7 +95,7 @@ function PortadaHorno({ tienda, todos, categorias, subdominio }) {
             </Link>
           ) : (
             <span className="absolute -left-2 bottom-8 flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold shadow-xl sm:left-0">
-              <Icono nombre="reloj" tamano={20} className="text-[var(--tienda)]" /> Pide con anticipación
+              <Icono nombre="reloj" tamano={20} className="text-[var(--tienda)]" /> Pide con {t.anticipacion} de anticipación
             </span>
           )}
         </div>
@@ -108,6 +110,7 @@ function PortadaHorno({ tienda, todos, categorias, subdominio }) {
 // ------------------------------------------------------------------- Circuito (tecnología)
 
 function PortadaCircuito({ tienda, todos, categorias, subdominio }) {
+  const t = textosDe(tienda);
   const [principal] = fotosDe(todos, 1);
   const estrella = principal ?? todos[0];
   const cinta = categorias.length > 0 ? categorias.map((c) => c.nombre) : ['Originales', 'Garantía', 'Boleta o factura', 'Envío seguro'];
@@ -121,7 +124,7 @@ function PortadaCircuito({ tienda, todos, categorias, subdominio }) {
           <Logo tienda={tienda} />
           <p className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-[13px] font-medium text-white/80 backdrop-blur">
             <span className="rounded-full bg-[var(--acento)] px-2 py-0.5 text-[11px] font-bold text-[var(--acento-texto)]">NUEVO</span>
-            {TEXTOS.circuito.etiqueta}
+            {t.etiqueta}
           </p>
           <h1 className="break-words bg-gradient-to-br from-white via-white to-[var(--acento)] bg-clip-text text-[clamp(3rem,7.5vw,6rem)] font-bold leading-[0.95] tracking-tight text-transparent">
             {tienda.nombre}
@@ -129,12 +132,12 @@ function PortadaCircuito({ tienda, todos, categorias, subdominio }) {
           {tienda.descripcion && <p className="max-w-lg text-lg leading-relaxed text-white/65">{tienda.descripcion}</p>}
           <div className="flex flex-wrap gap-3">
             <a href="#catalogo" className="boton-tienda bg-[var(--acento)] px-7 py-3.5 font-semibold text-[var(--acento-texto)] shadow-[0_0_40px_-6px_var(--acento)] transition hover:-translate-y-0.5">
-              {TEXTOS.circuito.boton} →
+              {t.boton} →
             </a>
             <BotonWhatsappRubro tienda={tienda} texto="Consultar stock" mensaje={`Hola ${tienda.nombre}, quiero consultar el stock de un equipo.`} />
           </div>
           <div className="flex flex-wrap gap-2.5 pt-1">
-            {[['escudo', 'Garantía'], ['check', 'Originales'], ['camion', 'Envío seguro']].map(([icono, texto]) => (
+            {[['escudo', `Garantía ${t.garantia}`], ['check', 'Originales'], ['camion', 'Envío seguro']].map(([icono, texto]) => (
               <span key={texto} className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[12px] uppercase tracking-wider text-white/75">
                 <Icono nombre={icono} tamano={15} className="text-[var(--acento)]" /> {texto}
               </span>
@@ -187,8 +190,9 @@ function PortadaCircuito({ tienda, todos, categorias, subdominio }) {
 // ------------------------------------------------------------------- Impulso (deporte)
 
 function PortadaImpulso({ tienda, todos }) {
+  const t = textosDe(tienda);
   const [principal, segunda] = fotosDe(todos, 2);
-  const lema = ['ENTRENA', 'SUPÉRATE', 'NO PARES', tienda.nombre.toUpperCase()];
+  const lema = [...t.palabras, tienda.nombre.toUpperCase()];
   return (
     <section className="relative isolate overflow-hidden bg-[#0A0A0A] text-white">
       <span className="absolute -right-20 top-0 -z-10 h-full w-2/3 -skew-x-12 bg-[#151515]" />
@@ -198,7 +202,7 @@ function PortadaImpulso({ tienda, todos }) {
         <div className="space-y-6">
           <Logo tienda={tienda} />
           <p className="inline-block -skew-x-12 bg-[var(--acento)] px-4 py-1.5 text-sm font-extrabold uppercase tracking-widest text-[var(--acento-texto)]">
-            <span className="inline-block skew-x-12">{TEXTOS.impulso.etiqueta}</span>
+            <span className="inline-block skew-x-12">{t.etiqueta}</span>
           </p>
           <h1 className="relative break-words text-[clamp(3.4rem,10vw,8.5rem)] font-extrabold uppercase italic leading-[0.85] tracking-tight">
             <span aria-hidden="true" className="absolute left-1.5 top-1.5 -z-10 text-transparent [-webkit-text-stroke:2px_var(--acento)]">{tienda.nombre}</span>
@@ -207,7 +211,7 @@ function PortadaImpulso({ tienda, todos }) {
           {tienda.descripcion && <p className="max-w-md text-lg text-white/70">{tienda.descripcion}</p>}
           <div className="flex flex-wrap gap-3">
             <a href="#catalogo" className="boton-tienda group inline-flex items-center gap-3 bg-[var(--acento)] px-8 py-4 text-sm font-extrabold uppercase tracking-widest text-[var(--acento-texto)] transition hover:gap-5">
-              {TEXTOS.impulso.boton} <span aria-hidden="true">→</span>
+              {t.boton} <span aria-hidden="true">→</span>
             </a>
             <BotonWhatsappRubro tienda={tienda} texto="Asesoría gratis" mensaje={`Hola ${tienda.nombre}, quiero asesoría para elegir.`} />
           </div>
@@ -246,6 +250,7 @@ function PortadaImpulso({ tienda, todos }) {
 // ------------------------------------------------------------------- Pasarela (moda)
 
 function PortadaPasarela({ tienda, todos }) {
+  const t = textosDe(tienda);
   const fotos = fotosDe(todos, 3);
   const anio = new Date().getFullYear();
   const bloque = (i, clase) => (
@@ -261,7 +266,7 @@ function PortadaPasarela({ tienda, todos }) {
     <section className="relative isolate overflow-hidden bg-[#F5F1EA] text-[#1C1917]">
       <div className="mx-auto max-w-7xl px-6 pb-16 pt-10">
         <div className="flex items-center justify-between border-b border-[#1C1917]/15 pb-4 text-[11px] uppercase tracking-[0.35em]">
-          <span>{TEXTOS.pasarela.etiqueta}</span>
+          <span>{t.etiqueta}</span>
           <span className="hidden sm:inline">Temporada {anio}</span>
           <span>Vol. 01</span>
         </div>
@@ -276,7 +281,7 @@ function PortadaPasarela({ tienda, todos }) {
         <div className="mt-10 flex flex-col items-center gap-5 text-center">
           {tienda.descripcion && <p className="max-w-xl text-lg italic text-[#57534E]">{tienda.descripcion}</p>}
           <a href="#catalogo" className="group inline-flex items-center gap-3 border-b-2 border-[var(--tienda)] pb-1 text-sm font-semibold uppercase tracking-[0.3em]">
-            {TEXTOS.pasarela.boton}<span aria-hidden="true" className="transition group-hover:translate-x-1.5">→</span>
+            {t.boton}<span aria-hidden="true" className="transition group-hover:translate-x-1.5">→</span>
           </a>
         </div>
       </div>
@@ -293,6 +298,7 @@ function Destello({ className }) {
 }
 
 function PortadaGlow({ tienda, todos }) {
+  const t = textosDe(tienda);
   const fotos = fotosDe(todos, 3);
   const arco = (i, clase, fondo) => (
     <div className={`overflow-hidden rounded-t-full border-[6px] border-white shadow-[0_30px_60px_-25px_rgba(190,24,93,0.45)] ${clase}`}>
@@ -314,13 +320,13 @@ function PortadaGlow({ tienda, todos }) {
         <div className="relative space-y-7">
           <Logo tienda={tienda} />
           <p className="inline-flex items-center gap-2 rounded-full bg-white/70 px-4 py-1.5 text-sm font-medium text-[var(--tienda)] shadow-sm backdrop-blur">
-            <Icono nombre="chispa" tamano={16} /> {TEXTOS.glow.etiqueta}
+            <Icono nombre="chispa" tamano={16} /> {t.etiqueta}
           </p>
           <h1 className="break-words text-[clamp(3.2rem,8vw,6.5rem)] font-medium italic leading-[0.95]">{tienda.nombre}</h1>
           {tienda.descripcion && <p className="max-w-md text-lg leading-relaxed text-[#7A3B57]">{tienda.descripcion}</p>}
           <div className="flex flex-wrap gap-3">
             <a href="#catalogo" className="boton-tienda bg-[var(--tienda)] px-8 py-3.5 font-medium text-[var(--tienda-texto)] shadow-[0_16px_34px_-14px_var(--tienda)] transition hover:-translate-y-0.5">
-              {TEXTOS.glow.boton}
+              {t.boton}
             </a>
             <BotonWhatsappRubro tienda={tienda} texto="Te recomendamos" mensaje={`Hola ${tienda.nombre}, ¿qué me recomiendas para mi tipo de piel?`} />
           </div>
@@ -331,7 +337,7 @@ function PortadaGlow({ tienda, todos }) {
           {arco(1, 'flotar h-[88%] w-[36%]', 'bg-gradient-to-b from-[#FBCFE8] to-[var(--tienda)]')}
           {arco(2, 'h-[72%] w-[30%]', 'bg-gradient-to-b from-[#E9D5FF] to-[#C084FC]')}
           <span className="giro-lento absolute -left-2 bottom-10 flex h-24 w-24 items-center justify-center rounded-full bg-white text-center text-[11px] font-semibold uppercase leading-tight tracking-wider text-[var(--tienda)] shadow-xl">
-            Original<br />garantizado
+            {t.sello}
           </span>
         </div>
       </div>
@@ -353,6 +359,7 @@ function IlustracionPlanta() {
 }
 
 function PortadaNido({ tienda, todos, categorias }) {
+  const t = textosDe(tienda);
   const fotos = fotosDe(todos, 2);
   return (
     <section className="relative isolate overflow-hidden bg-[#EEF2EA] text-[#1F2A1F]">
@@ -360,11 +367,11 @@ function PortadaNido({ tienda, todos, categorias }) {
       <div className="mx-auto grid max-w-7xl items-center gap-14 px-6 py-20 md:grid-cols-[1.1fr_1fr] md:py-24">
         <div className="space-y-7">
           <Logo tienda={tienda} />
-          <p className="text-sm font-semibold uppercase tracking-[0.25em] text-[var(--tienda)]">{TEXTOS.nido.etiqueta}</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.25em] text-[var(--tienda)]">{t.etiqueta}</p>
           <h1 className="break-words text-[clamp(3rem,8vw,6.2rem)] font-bold leading-[0.92] tracking-tight">{tienda.nombre}</h1>
           {tienda.descripcion && <p className="max-w-lg text-lg leading-relaxed text-[#4B5A4B]">{tienda.descripcion}</p>}
           <div className="flex flex-wrap gap-3">
-            <a href="#catalogo" className="boton-tienda bg-[var(--tienda)] px-8 py-3.5 font-semibold text-[var(--tienda-texto)] transition hover:-translate-y-0.5">{TEXTOS.nido.boton}</a>
+            <a href="#catalogo" className="boton-tienda bg-[var(--tienda)] px-8 py-3.5 font-semibold text-[var(--tienda-texto)] transition hover:-translate-y-0.5">{t.boton}</a>
             <BotonWhatsappRubro tienda={tienda} texto="Escríbenos" />
           </div>
           {categorias.length > 0 && (
@@ -410,6 +417,7 @@ function Huella({ className }) {
 }
 
 function PortadaHuellitas({ tienda, todos }) {
+  const t = textosDe(tienda);
   const [principal] = fotosDe(todos, 1);
   return (
     <section className="relative isolate overflow-hidden bg-[#FFF6D6] text-[#2A1B4A]">
@@ -421,13 +429,13 @@ function PortadaHuellitas({ tienda, todos }) {
         <div className="space-y-7">
           <Logo tienda={tienda} />
           <p className="inline-flex -rotate-2 items-center gap-2 rounded-full bg-[var(--acento)] px-4 py-1.5 text-sm font-bold text-[var(--acento-texto)] shadow">
-            <Icono nombre="corazon" tamano={16} /> {TEXTOS.huellitas.etiqueta}
+            <Icono nombre="corazon" tamano={16} /> {t.etiqueta}
           </p>
           <h1 className="break-words text-[clamp(3.2rem,8.5vw,6.6rem)] font-extrabold leading-[0.9] tracking-tight text-[var(--tienda)]">{tienda.nombre}</h1>
           {tienda.descripcion && <p className="max-w-lg text-lg leading-relaxed text-[#5B4B7A]">{tienda.descripcion}</p>}
           <div className="flex flex-wrap gap-3">
             <a href="#catalogo" className="boton-tienda bg-[var(--tienda)] px-8 py-3.5 font-bold text-[var(--tienda-texto)] shadow-[0_8px_0_0_#2A1B4A] transition hover:translate-y-0.5 hover:shadow-[0_4px_0_0_#2A1B4A]">
-              {TEXTOS.huellitas.boton}
+              {t.boton}
             </a>
             <BotonWhatsappRubro tienda={tienda} texto="Pedir por WhatsApp" />
           </div>
@@ -448,8 +456,8 @@ function PortadaHuellitas({ tienda, todos }) {
               </div>
             </FotoO>
           </div>
-          <span className="absolute -right-2 top-6 rotate-6 rounded-2xl rounded-bl-none bg-white px-4 py-2.5 text-lg font-extrabold text-[var(--tienda)] shadow-xl">¡Guau!</span>
-          <span className="absolute bottom-6 left-0 -rotate-6 rounded-2xl rounded-tr-none bg-white px-4 py-2.5 text-lg font-extrabold text-[var(--acento)] shadow-xl">¡Miau!</span>
+          <span className="absolute -right-2 top-6 rotate-6 rounded-2xl rounded-bl-none bg-white px-4 py-2.5 text-lg font-extrabold text-[var(--tienda)] shadow-xl">{t.globo1}</span>
+          <span className="absolute bottom-6 left-0 -rotate-6 rounded-2xl rounded-tr-none bg-white px-4 py-2.5 text-lg font-extrabold text-[var(--acento)] shadow-xl">{t.globo2}</span>
         </div>
       </div>
       <svg viewBox="0 0 1440 60" preserveAspectRatio="none" className="absolute bottom-0 left-0 h-10 w-full text-[var(--fondo)]" aria-hidden="true">

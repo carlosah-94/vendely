@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BotonWhatsappRubro, Icono, datosReales } from './comun';
+import { BotonWhatsappRubro, Icono, datosReales, textosDe, whatsappDe } from './comun';
 
 /**
  * Franja de beneficios y sección propia de cada plantilla por rubro. Lo que se promete (envío,
@@ -10,18 +10,22 @@ import { BotonWhatsappRubro, Icono, datosReales } from './comun';
 
 function beneficiosDe(tema, tienda, paises) {
   const d = datosReales(tienda, paises);
+  const t = textosDe(tienda);
+  const delivery = d.distritos.length > 0 && {
+    icono: 'moto', titulo: 'Delivery propio', texto: `En ${d.distritos.length === 1 ? d.distritos[0] : `${d.distritos.length} distritos`}.`,
+  };
   const pago = d.pago && { icono: 'tarjeta', titulo: d.pago, texto: 'En una página segura.' };
   const envio = { icono: 'camion', titulo: d.envio, texto: 'Ves el costo antes de pagar.' };
   const recojo = d.recojo && { icono: 'tienda', titulo: 'Recojo gratis', texto: d.recojo.horario || d.recojo.direccion };
   const porTema = {
     horno: [
-      { icono: 'reloj', titulo: 'Pide con anticipación', texto: 'Elige el día que lo necesitas.' },
-      recojo ?? { icono: 'moto', titulo: 'Delivery', texto: 'Te lo llevamos con cuidado.' },
+      { icono: 'reloj', titulo: `Pide con ${t.anticipacion}`, texto: 'de anticipación. Elige el día que lo necesitas.' },
+      delivery || recojo || envio,
       { icono: 'corazon', titulo: 'Hecho en casa', texto: 'Con insumos frescos.' },
       pago,
     ],
     circuito: [
-      { icono: 'escudo', titulo: 'Garantía', texto: 'Equipos originales con boleta.' },
+      { icono: 'escudo', titulo: `Garantía de ${t.garantia}`, texto: 'Equipos originales con boleta.' },
       envio, pago,
       { icono: 'chat', titulo: 'Soporte', texto: 'Te ayudamos antes y después.' },
     ],
@@ -38,7 +42,7 @@ function beneficiosDe(tema, tienda, paises) {
     nido: [envio, { icono: 'caja', titulo: 'Bien embalado', texto: 'Llega como lo elegiste.' }, pago, recojo],
     huellitas: [
       { icono: 'corazon', titulo: 'Con amor', texto: 'Elegido para tu engreído.' },
-      recojo ?? envio, pago,
+      delivery || recojo || envio, pago,
     ],
   };
   return (porTema[tema] ?? []).filter(Boolean).slice(0, 4);
@@ -80,11 +84,15 @@ export function BeneficiosRubro({ tema, tienda, paises }) {
 
 function preguntasDe(tienda, paises, extra = []) {
   const d = datosReales(tienda, paises);
+  // Primero las que escribió el dueño (V23), luego las de la plantilla y las que salen de sus datos.
+  const propias = textosDe(tienda).preguntas.map((q) => ({ p: q.pregunta, r: q.respuesta }));
   return [
+    ...propias,
     ...extra,
     d.pago && { p: '¿Cómo puedo pagar?', r: `${d.pago}. El pago se hace en una página segura y te llega la confirmación por correo.` },
     { p: '¿A dónde envían?', r: `${d.envio}. El costo del envío lo ves en el checkout antes de pagar.` },
     d.recojo && { p: '¿Puedo recoger mi pedido?', r: `Sí, gratis en ${d.recojo.direccion}${d.recojo.horario ? ` (${d.recojo.horario})` : ''}.` },
+    d.distritos.length > 0 && { p: '¿Hacen delivery?', r: `Sí, con nuestro propio delivery en ${d.distritos.join(', ')}.` },
     { p: '¿Cómo sigo mi pedido?', r: 'Con tu cuenta, en "Mis pedidos", ves el estado de cada compra. También te avisamos por correo.' },
   ].filter(Boolean);
 }
@@ -111,54 +119,82 @@ function Preguntas({ lista, claseItem, clasePregunta }) {
 
 function SeccionHorno({ tienda, paises }) {
   const d = datosReales(tienda, paises);
-  const pasos = [
-    ['Elige', 'Mira la carta y elige lo que se te antoja.'],
-    ['Personaliza', 'Escribe el mensaje o los detalles de tu pedido.'],
-    [d.recojo ? 'Recibe o recoge' : 'Recibe', d.recojo ? 'Te lo llevamos o pasas por él, gratis.' : 'Te lo llevamos con todo el cuidado.'],
-  ];
+  const t = textosDe(tienda);
+  const pasos = t.mostrarPasos !== false ? t.pasos : [];
+  const fechaEspecial = t.mostrarFechaEspecial !== false && whatsappDe(tienda);
+  // Se arma con lo que la tienda de verdad hace: delivery por distritos, recojo o solo envíos.
+  const tarjetas = (
+    <div className={`grid gap-6 ${pasos.length > 0 ? '' : 'sm:grid-cols-2 lg:grid-cols-3'}`}>
+      {d.distritos.length > 0 && (
+        <div className="rounded-[2rem] bg-[#FFF4E6] p-7">
+          <Icono nombre="moto" tamano={28} className="text-[var(--tienda)]" />
+          <b className="mt-3 block text-lg text-[#2B1609]">Repartimos en</b>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {d.distritos.map((x) => <span key={x} className="rounded-full bg-white px-3 py-1 text-sm font-medium text-[#6B4A35] shadow-sm">{x}</span>)}
+          </div>
+        </div>
+      )}
+      {d.recojo && (
+        <div className="rounded-[2rem] border-2 border-dashed border-[var(--tienda)]/40 p-7">
+          <Icono nombre="tienda" tamano={28} className="text-[var(--tienda)]" />
+          <b className="mt-3 block text-lg text-[#2B1609]">Recoge gratis en nuestro local</b>
+          <p className="text-sm text-[#6B4A35]">{d.recojo.direccion}</p>
+          {d.recojo.horario && <p className="mt-1 text-sm font-semibold text-[var(--tienda)]">{d.recojo.horario}</p>}
+        </div>
+      )}
+      {d.distritos.length === 0 && !d.recojo && (
+        <div className="rounded-[2rem] bg-[#FFF4E6] p-7">
+          <Icono nombre="camion" tamano={28} className="text-[var(--tienda)]" />
+          <b className="mt-3 block text-lg text-[#2B1609]">{d.envio}</b>
+          <p className="text-sm text-[#6B4A35]">Ves el costo del envío antes de pagar.</p>
+        </div>
+      )}
+      {fechaEspecial ? (
+        <div className="flex flex-col justify-between gap-5 rounded-[2rem] bg-[var(--tienda)] p-7 text-[var(--tienda-texto)]">
+          <div>
+            <Icono nombre="reloj" tamano={28} />
+            <b className="mt-3 block text-2xl">¿Lo necesitas para una fecha especial?</b>
+            <p className="mt-1 text-sm opacity-85">Pide con {t.anticipacion} de anticipación y lo preparamos para ese día.</p>
+          </div>
+          <BotonWhatsappRubro tienda={tienda} texto="Escríbenos" className="self-start" mensaje={`Hola ${tienda.nombre}, quiero un pedido para una fecha especial.`} />
+        </div>
+      ) : (
+        <div className="rounded-[2rem] bg-[var(--tienda)] p-7 text-[var(--tienda-texto)]">
+          <Icono nombre="reloj" tamano={28} />
+          <b className="mt-3 block text-2xl">Pide con {t.anticipacion} de anticipación</b>
+          <p className="mt-1 text-sm opacity-85">Así lo preparamos fresco para ti.</p>
+        </div>
+      )}
+    </div>
+  );
+  if (pasos.length === 0) return <section className="mx-auto max-w-6xl px-5 py-16">{tarjetas}</section>;
   return (
     <section className="mx-auto max-w-6xl px-5 py-16">
       <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <div className="rounded-[2rem] bg-[#FFF4E6] p-8 sm:p-10">
           <p className="text-sm font-semibold uppercase tracking-widest text-[var(--tienda)]">Así de fácil</p>
           <h2 className="mt-2 text-4xl font-bold tracking-tight text-[#2B1609]">¿Cómo hago mi pedido?</h2>
-          <ol className="mt-8 grid gap-5 sm:grid-cols-3">
-            {pasos.map(([titulo, texto], i) => (
-              <li key={titulo}>
+          <ol className={`mt-8 grid gap-5 ${pasos.length === 4 ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
+            {pasos.map((p, i) => (
+              <li key={`${i}-${p.titulo}`}>
                 <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--tienda)] text-xl font-bold text-[var(--tienda-texto)]">{i + 1}</span>
-                <b className="mt-3 block text-lg text-[#2B1609]">{titulo}</b>
-                <span className="text-sm text-[#6B4A35]">{texto}</span>
+                <b className="mt-3 block text-lg text-[#2B1609]">{p.titulo}</b>
+                {p.texto && <span className="text-sm text-[#6B4A35]">{p.texto}</span>}
               </li>
             ))}
           </ol>
         </div>
-        <div className="flex flex-col gap-6">
-          {d.recojo && (
-            <div className="rounded-[2rem] border-2 border-dashed border-[var(--tienda)]/40 p-7">
-              <Icono nombre="tienda" tamano={28} className="text-[var(--tienda)]" />
-              <b className="mt-3 block text-lg text-[#2B1609]">Recoge en nuestro local</b>
-              <p className="text-sm text-[#6B4A35]">{d.recojo.direccion}</p>
-              {d.recojo.horario && <p className="mt-1 text-sm font-semibold text-[var(--tienda)]">{d.recojo.horario}</p>}
-            </div>
-          )}
-          <div className="flex flex-1 flex-col justify-between gap-5 rounded-[2rem] bg-[var(--tienda)] p-7 text-[var(--tienda-texto)]">
-            <div>
-              <Icono nombre="reloj" tamano={28} />
-              <b className="mt-3 block text-2xl">¿Lo necesitas para una fecha especial?</b>
-              <p className="mt-1 text-sm opacity-85">Cuéntanos qué buscas y lo preparamos para ese día.</p>
-            </div>
-            <BotonWhatsappRubro tienda={tienda} texto="Escríbenos" className="self-start" mensaje={`Hola ${tienda.nombre}, quiero un pedido para una fecha especial.`} />
-          </div>
-        </div>
+        {tarjetas}
       </div>
     </section>
   );
 }
 
 function SeccionCircuito({ tienda, todos }) {
-  const marcas = [...new Set((todos ?? []).map((p) => p.marca).filter(Boolean))].slice(0, 8);
+  const t = textosDe(tienda);
+  const marcas = t.mostrarMarcas === false ? [] : [...new Set((todos ?? []).map((p) => p.marca).filter(Boolean))].slice(0, 8);
   const sellos = [
-    ['escudo', 'Garantía', 'Cada equipo con su garantía y boleta o factura.'],
+    ['escudo', `Garantía de ${t.garantia}`, 'Cada equipo con su garantía y boleta o factura.'],
     ['check', '100% originales', 'Productos sellados, de marcas oficiales.'],
     ['chat', 'Soporte real', 'Te ayudamos a configurar tu equipo.'],
     ['caja', 'Empaque seguro', 'Protegido para que llegue intacto.'],
@@ -221,22 +257,43 @@ function SeccionImpulso({ categorias, elegirCategoria }) {
   );
 }
 
-function SeccionPasarela() {
-  const tallas = [['XS', '80-84', '62-66', '86-90'], ['S', '85-89', '67-71', '91-95'], ['M', '90-95', '72-77', '96-101'],
-    ['L', '96-101', '78-83', '102-107'], ['XL', '102-108', '84-90', '108-114']];
+const GUIAS_TALLAS = {
+  ropa: {
+    texto: 'Mide tu contorno con una cinta métrica y compáralo con la tabla. Si estás entre dos tallas, elige la mayor.',
+    columnas: ['Talla', 'Pecho (cm)', 'Cintura (cm)', 'Cadera (cm)'],
+    filas: [['XS', '80-84', '62-66', '86-90'], ['S', '85-89', '67-71', '91-95'], ['M', '90-95', '72-77', '96-101'],
+      ['L', '96-101', '78-83', '102-107'], ['XL', '102-108', '84-90', '108-114']],
+  },
+  calzado: {
+    texto: 'Mide tu pie de talón a punta, de pie y al final del día. Si estás entre dos tallas, elige la mayor.',
+    columnas: ['Talla', 'US', 'Largo del pie (cm)'],
+    filas: [['36', '5.5', '22.5'], ['37', '6.5', '23.5'], ['38', '7.5', '24'], ['39', '8', '24.5'],
+      ['40', '8.5', '25.5'], ['41', '9', '26'], ['42', '10', '27']],
+  },
+  ninos: {
+    texto: 'Guíate por la estatura antes que por la edad: cada niño crece a su ritmo.',
+    columnas: ['Talla', 'Edad', 'Estatura (cm)', 'Pecho (cm)'],
+    filas: [['2', '2 años', '86-92', '52-54'], ['4', '3-4 años', '98-104', '55-57'], ['6', '5-6 años', '110-116', '58-61'],
+      ['8', '7-8 años', '122-128', '62-65'], ['10', '9-10 años', '134-140', '66-70'], ['12', '11-12 años', '146-152', '71-75']],
+  },
+};
+
+function SeccionPasarela({ tienda }) {
+  const guia = GUIAS_TALLAS[textosDe(tienda).tallas];
+  if (!guia) return null; // "ninguna": vende accesorios, bolsos... sin tallas
   return (
     <section className="bg-[#F5F1EA] py-16 text-[#1C1917]">
       <div className="mx-auto grid max-w-6xl items-center gap-10 px-5 lg:grid-cols-[1fr_1.5fr]">
         <div>
           <p className="text-[11px] uppercase tracking-[0.4em] text-[var(--acento)]">Encuentra tu talla</p>
           <h2 className="letra-serifa mt-3 text-5xl">Guía de tallas</h2>
-          <p className="mt-4 text-[#57534E]">Mide tu contorno con una cinta métrica y compáralo con la tabla. Si estás entre dos tallas, elige la mayor.</p>
+          <p className="mt-4 text-[#57534E]">{guia.texto}</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead><tr className="border-b-2 border-[#1C1917] text-[11px] uppercase tracking-[0.25em]"><th className="py-3">Talla</th><th>Pecho (cm)</th><th>Cintura (cm)</th><th>Cadera (cm)</th></tr></thead>
+            <thead><tr className="border-b-2 border-[#1C1917] text-[11px] uppercase tracking-[0.25em]">{guia.columnas.map((c) => <th key={c} className="py-3 pr-3">{c}</th>)}</tr></thead>
             <tbody>
-              {tallas.map(([t, ...medidas]) => (
+              {guia.filas.map(([t, ...medidas]) => (
                 <tr key={t} className="border-b border-[#1C1917]/10">
                   <td className="letra-serifa py-3.5 text-xl">{t}</td>
                   {medidas.map((m, i) => <td key={i} className="text-[#57534E]">{m}</td>)}
@@ -251,23 +308,26 @@ function SeccionPasarela() {
 }
 
 function SeccionGlow({ tienda, paises }) {
-  const pasos = [['Limpia', 'Prepara tu piel quitando impurezas.'], ['Trata', 'Usa el producto según tu necesidad.'], ['Protege', 'Sella e hidrata para lucir radiante.']];
+  const t = textosDe(tienda);
+  const pasos = t.mostrarPasos !== false ? t.pasos.map((p) => [p.titulo, p.texto]) : [];
   return (
     <section className="bg-gradient-to-b from-[var(--fondo)] to-[#FFF1F5] py-16 text-[#3B0A22]">
       <div className="mx-auto max-w-6xl px-5">
+        {pasos.length > 0 && (<>
         <div className="text-center">
           <p className="text-sm font-medium uppercase tracking-[0.3em] text-[var(--tienda)]">Tu ritual</p>
-          <h2 className="mt-2 text-5xl font-medium italic">Tu rutina en 3 pasos</h2>
+          <h2 className="mt-2 text-5xl font-medium italic">Tu rutina en {pasos.length} pasos</h2>
         </div>
-        <div className="mt-10 grid gap-6 sm:grid-cols-3">
-          {pasos.map(([t, x], i) => (
-            <div key={t} className="rounded-t-full bg-white px-6 pb-8 pt-14 text-center shadow-[0_20px_50px_-30px_rgba(190,24,93,0.5)]">
+        <div className={`mt-10 grid gap-6 ${pasos.length === 4 ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3'}`}>
+          {pasos.map(([titulo, x], i) => (
+            <div key={`${i}-${titulo}`} className="rounded-t-full bg-white px-6 pb-8 pt-14 text-center shadow-[0_20px_50px_-30px_rgba(190,24,93,0.5)]">
               <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-[var(--acento)] to-[var(--tienda)] text-xl font-semibold text-white">{i + 1}</span>
-              <b className="mt-4 block text-2xl italic">{t}</b>
+              <b className="mt-4 block text-2xl italic">{titulo}</b>
               <span className="text-sm text-[#7A3B57]">{x}</span>
             </div>
           ))}
         </div>
+        </>)}
         <div className="mx-auto mt-14 max-w-3xl">
           <h3 className="mb-5 text-center text-3xl italic">Preguntas frecuentes</h3>
           <Preguntas lista={preguntasDe(tienda, paises, [{ p: '¿Los productos son originales?', r: 'Sí. Vendemos productos originales; si tienes dudas sobre alguno, escríbenos antes de comprar.' }])}
@@ -342,7 +402,24 @@ const SECCIONES = {
   huellitas: SeccionHuellitas,
 };
 
+/** Las preguntas frecuentes del dueño, para las plantillas que no traen su propio bloque. */
+function PreguntasPropias({ tienda, paises }) {
+  if (textosDe(tienda).preguntas.length === 0) return null;
+  return (
+    <section className="mx-auto max-w-3xl px-5 py-14">
+      <h2 className="mb-6 text-center text-3xl font-bold tracking-tight">Preguntas frecuentes</h2>
+      <Preguntas lista={preguntasDe(tienda, paises)} claseItem="tarjeta-tienda border border-[var(--fondo-borde)] bg-[var(--fondo)] px-6 py-4" clasePregunta="" />
+    </section>
+  );
+}
+
 export function SeccionRubro({ tema, ...vista }) {
   const Seccion = SECCIONES[tema];
-  return Seccion ? <Seccion {...vista} /> : null;
+  if (!Seccion) return null;
+  return (
+    <>
+      <Seccion {...vista} />
+      {tema !== 'glow' && tema !== 'huellitas' && <PreguntasPropias {...vista} />}
+    </>
+  );
 }

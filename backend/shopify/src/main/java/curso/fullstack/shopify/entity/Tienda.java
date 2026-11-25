@@ -6,6 +6,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import curso.fullstack.shopify.dto.ContenidoRubro;
 import curso.fullstack.shopify.dto.DisenoPro;
 import java.time.OffsetDateTime;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -155,6 +156,12 @@ public class Tienda {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "diseno_pro", columnDefinition = "jsonb")
     private DisenoPro disenoPro;
+
+    /** Textos y secciones de la plantilla por rubro que el dueño adapta (V23). null = los de la plantilla. */
+    @Setter
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "contenido_rubro", columnDefinition = "jsonb")
+    private ContenidoRubro contenidoRubro;
 
     /** WhatsApp de la tienda con código de país (+51987654321), V17. null = sin botón de WhatsApp. Todos los planes. */
     @Setter

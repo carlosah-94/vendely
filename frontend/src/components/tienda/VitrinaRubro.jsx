@@ -12,7 +12,7 @@ import { enOferta } from '../../utils/formato';
 import { etiquetaOferta } from '../../utils/diseno';
 import { PORTADAS } from './rubros/Portadas';
 import { BeneficiosRubro, SeccionRubro } from './rubros/Secciones';
-import { BotonWhatsappRubro, TEXTOS } from './rubros/comun';
+import { BotonWhatsappRubro, textosDe } from './rubros/comun';
 
 /**
  * Vitrina de las plantillas por rubro (V22): Horno, Circuito, Impulso, Pasarela, Glow, Nido y
@@ -35,7 +35,7 @@ const ESTILO_CATALOGO = {
 
 /** Lo que ve el cliente cuando la tienda todavía no tiene productos: "Próximamente", con WhatsApp. */
 function Proximamente({ tema, tienda }) {
-  const t = TEXTOS[tema];
+  const t = textosDe(tienda);
   const oscuro = tema === 'circuito' || tema === 'impulso';
   return (
     <div className={`relative overflow-hidden px-6 py-16 text-center ${oscuro ? 'bg-[#0B0F19] text-white' : 'bg-[var(--fondo-suave)]'} tarjeta-tienda`}>
@@ -55,7 +55,7 @@ function Catalogo({ tema, tienda, diseno, subdominio, productos, categorias, ele
   total, paginas, cambiarFiltro, irAPagina, elegirCategoria, agregarAlCarrito }) {
   const e = ESTILO_CATALOGO[tema];
   const base = `/tienda/${subdominio}`;
-  const t = TEXTOS[tema];
+  const t = textosDe(tienda);
   return (
     <section id="catalogo" className="mx-auto max-w-6xl scroll-mt-20 px-5 pb-6 pt-16">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">

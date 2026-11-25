@@ -80,8 +80,9 @@ class PlantillaRubroTest extends PruebaIntegracion {
     }
 
     @Test
-    void laPlantillaDeOtroRubroPidePlanPro() throws Exception {
-        actualizar(CIRCUITO).andExpect(status().isForbidden());
+    void laPlantillaDeOtroRubroNoSePermiteNiConPlanPro() throws Exception {
+        datos.cambiarPlan(tienda.idTienda(), 3);
+        actualizar(CIRCUITO).andExpect(status().isBadRequest());
         assertThat(jdbc.queryForObject("SELECT tema FROM tiendas WHERE id_tienda = ?", String.class, tienda.idTienda()))
                 .isNotEqualTo("circuito");
     }
@@ -115,6 +116,60 @@ class PlantillaRubroTest extends PruebaIntegracion {
         actualizar("\"tema\":\"neon\"").andExpect(status().isBadRequest());
         org.junit.jupiter.api.Assertions.assertThrows(Exception.class, () -> jdbc.update(
                 "UPDATE tiendas SET tema = 'neon' WHERE id_tienda = ?", tienda.idTienda()));
+    }
+
+    // ------------------------------------------------------------ V23: contenido y rubro
+
+    @Test
+    void elContenidoDeLaPlantillaSeEditaEnCualquierPlanYSeVeEnLaVitrina() throws Exception {
+        actualizar(HORNO + ",\"contenidoRubro\":{\"anticipacion\":\" 2 días \",\"sello\":\"Sin gluten\","
+                + "\"mostrarFechaEspecial\":false,\"pasos\":[{\"titulo\":\"Elige tu torta\",\"texto\":\"Mira la carta\"}],"
+                + "\"preguntas\":[{\"pregunta\":\"¿Hacen tortas sin azúcar?\",\"respuesta\":\"Sí, por encargo.\"}]}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.diseno.contenidoRubro.anticipacion").value("2 días"))
+                .andExpect(jsonPath("$.diseno.contenidoRubro.pasos.length()").value(1));
+        vitrina().andExpect(jsonPath("$.diseno.contenidoRubro.sello").value("Sin gluten"))
+                .andExpect(jsonPath("$.diseno.contenidoRubro.pasos[0].titulo").value("Elige tu torta"))
+                .andExpect(jsonPath("$.diseno.contenidoRubro.mostrarFechaEspecial").value(false))
+                .andExpect(jsonPath("$.diseno.contenidoRubro.preguntas[0].respuesta").value("Sí, por encargo."));
+    }
+
+    @Test
+    void elContenidoSeValidaEnElServidor() throws Exception {
+        // Nada de código: los signos < y > se rechazan.
+        actualizar("\"contenidoRubro\":{\"etiqueta\":\"<script>alert(1)</script>\"}").andExpect(status().isBadRequest());
+        // Largo máximo y cantidad máxima de preguntas.
+        actualizar("\"contenidoRubro\":{\"sello\":\"" + "x".repeat(31) + "\"}").andExpect(status().isBadRequest());
+        String pregunta = "{\"pregunta\":\"¿Algo?\",\"respuesta\":\"Sí\"}";
+        actualizar("\"contenidoRubro\":{\"preguntas\":[" + String.join(",", java.util.Collections.nCopies(7, pregunta)) + "]}")
+                .andExpect(status().isBadRequest());
+        // Un paso sin título se rechaza (el formulario ya quita los pasos vacíos antes de enviar).
+        actualizar("\"contenidoRubro\":{\"pasos\":[{\"titulo\":\"  \",\"texto\":\"Sin título\"}]}")
+                .andExpect(status().isBadRequest());
+        // Solo guías de tallas conocidas.
+        actualizar("\"contenidoRubro\":{\"tallas\":\"gigante\"}").andExpect(status().isBadRequest());
+        // Y la base también exige que sea un objeto JSON.
+        org.junit.jupiter.api.Assertions.assertThrows(Exception.class, () -> jdbc.update(
+                "UPDATE tiendas SET contenido_rubro = '[1,2]'::jsonb WHERE id_tienda = ?", tienda.idTienda()));
+    }
+
+    @Test
+    void siCambiaElRubroLaPlantillaLoSigue() throws Exception {
+        actualizar(HORNO).andExpect(status().isOk());
+        actualizar("\"colorPrincipal\":\"#C2410C\",\"rubro\":\"tecnologia\"").andExpect(status().isOk())
+                .andExpect(jsonPath("$.tema").value("circuito"))
+                .andExpect(jsonPath("$.colorPrincipal").value("#4F46E5"));
+        // "Otro" no tiene plantilla de rubro: vuelve a Esencial.
+        actualizar("\"colorPrincipal\":\"#4F46E5\",\"rubro\":\"otro\"").andExpect(status().isOk())
+                .andExpect(jsonPath("$.tema").value("esencial"));
+    }
+
+    @Test
+    void laVitrinaMuestraLosDistritosConDelivery() throws Exception {
+        long miraflores = jdbc.queryForObject(
+                "SELECT id_division FROM divisiones WHERE id_pais = 'PE' AND codigo = '150122'", Long.class);
+        jdbc.update("INSERT INTO zonas_delivery (id_tienda, id_division, costo) VALUES (?, ?, 7)", tienda.idTienda(), miraflores);
+        vitrina().andExpect(jsonPath("$.distritosDelivery[0]").value("Miraflores"));
     }
 
     // ------------------------------------------------------------------ apoyo

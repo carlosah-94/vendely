@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import CampoPanel from '../components/CampoPanel';
+import ContenidoPlantilla, { contenidoParaEnviar, formularioContenido, validarContenido } from '../components/ContenidoPlantilla';
 import { IconoEnlaceExterno } from '../components/Iconos';
 import Mensaje from '../components/Mensaje';
 import SelectorTienda from '../components/SelectorTienda';
@@ -91,6 +92,7 @@ function desdeTienda(t) {
     mostrarDestacado: d.mostrarDestacado,
     mostrarCategorias: d.mostrarCategorias,
     mostrarSeccionRubro: d.mostrarSeccionRubro !== false,
+    contenido: formularioContenido(d.contenidoRubro, t.tema),
     pro: formularioPro(d.pro),
   };
 }
@@ -198,6 +200,9 @@ function Editor({ tienda, tiendas, idTienda, onCambiarTienda }) {
         er['pro.promo.titulo'] = 'Escribe un título o un texto para la promoción';
       }
     }
+    // Contenido de la plantilla por rubro (V23): cualquier plan.
+    const conRubro = esTemaRubro(tienda.tema);
+    if (conRubro) Object.assign(er, validarContenido(v.contenido));
     setErrores(er);
     if (Object.keys(er).length) return;
 
@@ -228,6 +233,7 @@ function Editor({ tienda, tiendas, idTienda, onCambiarTienda }) {
         mostrarDestacado: v.mostrarDestacado,
         mostrarCategorias: v.mostrarCategorias,
         mostrarSeccionRubro: v.mostrarSeccionRubro,
+        ...(conRubro && { contenidoRubro: contenidoParaEnviar(v.contenido) }),
       });
       setV(desdeTienda(data));
       avisar('Tienda actualizada');
@@ -268,6 +274,7 @@ function Editor({ tienda, tiendas, idTienda, onCambiarTienda }) {
       mostrarDestacado: v.mostrarDestacado,
       mostrarCategorias: v.mostrarCategorias,
       mostrarSeccionRubro: v.mostrarSeccionRubro,
+      contenidoRubro: contenidoParaEnviar(v.contenido),
       ...(conPlantillas && { pro: proParaEnviar(v.pro, true) }),
     },
   }), [v, personaliza, conPlantillas, rubroFijo, tienda]);
@@ -441,6 +448,14 @@ function Editor({ tienda, tiendas, idTienda, onCambiarTienda }) {
             hayPortada={Boolean(v.imagenPortadaUrl.trim())}
             onCambiar={cambiarPro}
           />
+
+          {/* ---------------------------------------------------------------- Contenido de la plantilla (todos) */}
+          {esTemaRubro(tienda.tema) && (
+            <Seccion titulo="Contenido de tu plantilla">
+              <ContenidoPlantilla tema={tienda.tema} valor={v.contenido} errores={errores}
+                onCambiar={(x) => { setV((a) => ({ ...a, contenido: x })); setErrores((e) => Object.fromEntries(Object.entries(e).filter(([k]) => !k.startsWith('contenidoRubro')))); }} />
+            </Seccion>
+          )}
 
           {/* ---------------------------------------------------------------- Secciones (todos) */}
           <Seccion titulo="Secciones de la portada">
