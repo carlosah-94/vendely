@@ -2,6 +2,7 @@ package curso.fullstack.shopify.service;
 
 import curso.fullstack.shopify.repository.EnvioRepository;
 import curso.fullstack.shopify.entity.PermisoTienda;
+import curso.fullstack.shopify.dto.DatosComprobante;
 import curso.fullstack.shopify.dto.EnvioPedidoRequest;
 import curso.fullstack.shopify.dto.LineaVentaRequest;
 import curso.fullstack.shopify.dto.LineaVentaResponse;
@@ -98,7 +99,7 @@ public class PedidoService {
                 .filter(l -> l.getRol() == RolUsuario.CLIENTE && idTienda.equals(l.getIdTienda()))
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El cliente no existe en esta tienda"));
 
-        return crearPedido(idTienda, cliente, r.idDireccionEnvio(), r.lineas(), null, TipoEntrega.ENVIO, false);
+        return crearPedido(idTienda, cliente, r.idDireccionEnvio(), r.lineas(), null, TipoEntrega.ENVIO, false, null);
     }
 
     /**
@@ -117,7 +118,7 @@ public class PedidoService {
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El cliente no existe en esta tienda"));
 
         return crearPedido(yo.idTienda(), cliente, r.idDireccionEnvio(), r.lineas(), r.codigoCupon(),
-                TipoEntrega.de(r.tipoEntrega()), true);
+                TipoEntrega.de(r.tipoEntrega()), true, r.comprobante());
     }
 
     /**
@@ -125,7 +126,11 @@ public class PedidoService {
      * toma el precio vigente y guarda pedido + líneas. Debe llamarse dentro de una transacción.
      */
     private VentaResponse crearPedido(Long idTienda, Login cliente, Long idDireccion, List<LineaVentaRequest> lineasPedidas,
-                                      String codigoCupon, TipoEntrega tipoEntrega, boolean exigirRespuestas) {
+                                      String codigoCupon, TipoEntrega tipoEntrega, boolean exigirRespuestas,
+                                      DatosComprobante comprobante) {
+        // 0. Boleta o factura (V25): se revisa antes de tocar el stock, con mensajes claros.
+        boolean enPeru = tiendaRepository.findById(idTienda).map(t -> "PE".equals(t.getIdPais())).orElse(false);
+        Comprobante datosComprobante = enPeru ? Comprobante.revisar(comprobante) : Comprobante.NINGUNO;
         // 1. La dirección es suya y está activa
         if (!direccionRepository.existsByIdDireccionAndIdLoginAndEstado(idDireccion, cliente.getIdLogin(), (short) 1)) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "La dirección de envío no es de este cliente");
@@ -246,7 +251,21 @@ public class PedidoService {
             p.setIdCupon(cupon.cupon().getIdCupon());
             p.setDescuentoCupon(cupon.descuento());
         }
-        pedidoRepository.saveAndFlush(p);
+        p.setTipoComprobante(datosComprobante.tipo());
+        p.setClienteDocTipo(datosComprobante.docTipo());
+        p.setClienteDocNumero(datosComprobante.docNumero());
+        p.setClienteRazonSocial(datosComprobante.razonSocial());
+        try {
+            pedidoRepository.saveAndFlush(p);
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            // La boleta desde S/ 700 debe identificar al cliente (lo revisa la base: el total, con
+            // el envío, lo calcula su trigger). @Transactional devuelve el stock ya descontado.
+            if (String.valueOf(ex.getMostSpecificCause().getMessage()).contains("ck_pedidos_boleta")) {
+                throw new ApiException(HttpStatus.BAD_REQUEST,
+                        "Para una boleta desde S/ 700, la SUNAT pide identificar al comprador: escribe tu DNI o carné de extranjería");
+            }
+            throw ex;
+        }
         em.refresh(p);                       // lee lo que completó el trigger
 
         // 6. Guardar las líneas
@@ -259,6 +278,43 @@ public class PedidoService {
         log.info("Venta registrada: tienda={}, pedido #{} (id={}), {} producto(s), total {} {}",
                 idTienda, p.getNumeroPedido(), p.getIdPedido(), detalles.size(), p.getTotal(), p.getMoneda());
         return VentaResponse.desde(p, lineas, "SIN_PAGO", cupon == null ? null : cupon.cupon().getCodigo());
+    }
+
+    /**
+     * Los datos del comprobante ya revisados (V25), con las mismas reglas que la base:
+     *   FACTURA: RUC con dígito verificador + razón social. BOLETA: DNI (8) o CE (9), opcional.
+     */
+    private record Comprobante(String tipo, String docTipo, String docNumero, String razonSocial) {
+        static final Comprobante NINGUNO = new Comprobante(null, null, null, null);
+
+        static Comprobante revisar(DatosComprobante d) {
+            if (d == null || d.tipo() == null || "BOLETA".equals(d.tipo())) {
+                String tipoDoc = d == null || d.tipoDocumento() == null || d.tipoDocumento().isBlank() ? null : d.tipoDocumento();
+                String numero = d == null || d.numeroDocumento() == null || d.numeroDocumento().isBlank() ? null : d.numeroDocumento().trim();
+                if (numero == null) return new Comprobante("B", null, null, null);
+                if (tipoDoc == null) tipoDoc = "DNI";
+                if ("RUC".equals(tipoDoc)) {
+                    throw new ApiException(HttpStatus.BAD_REQUEST, "Con RUC se emite factura: elige Factura");
+                }
+                if ("DNI".equals(tipoDoc) && !numero.matches("^[0-9]{8}$")) {
+                    throw new ApiException(HttpStatus.BAD_REQUEST, "El DNI tiene 8 dígitos");
+                }
+                if ("CE".equals(tipoDoc) && !numero.matches("^[0-9]{9}$")) {
+                    throw new ApiException(HttpStatus.BAD_REQUEST, "El carné de extranjería tiene 9 dígitos");
+                }
+                return new Comprobante("B", tipoDoc, numero, null);
+            }
+            String ruc = d.numeroDocumento() == null ? "" : d.numeroDocumento().trim();
+            if (!DocumentoTributario.esRucValido(ruc)) {
+                throw new ApiException(HttpStatus.BAD_REQUEST,
+                        "El RUC de la factura no es válido: revisa los números (el último dígito no coincide)");
+            }
+            String razon = d.razonSocial() == null ? "" : d.razonSocial().trim();
+            if (razon.length() < 3) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "Para la factura escribe la razón social de la empresa");
+            }
+            return new Comprobante("F", "RUC", ruc, razon);
+        }
     }
 
     // =====================================================================

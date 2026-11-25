@@ -27,6 +27,8 @@ import curso.fullstack.shopify.repository.LoginRepository;
 import curso.fullstack.shopify.repository.PagoRepository;
 import curso.fullstack.shopify.repository.PedidoRepository;
 import curso.fullstack.shopify.repository.PrecioRepository;
+import curso.fullstack.shopify.repository.PropietarioRepository;
+import org.springframework.jdbc.core.JdbcTemplate;
 import curso.fullstack.shopify.repository.TiendaRepository;
 import curso.fullstack.shopify.security.UsuarioAutenticado;
 import curso.fullstack.shopify.security.VerificadorTienda;
@@ -47,11 +49,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Comprobante de compra en PDF (issue #3).
+ * Comprobante en PDF (issue #3, V25).
  *
- * No es un documento tributario: es el respaldo interno de la compra, para que el cliente y el
- * dueño tengan por escrito qué se compró y por cuánto. Lleva esa advertencia impresa, porque
- * emitir una boleta o factura de verdad exige estar autorizado ante la SUNAT.
+ * En una tienda de Perú es la representación impresa de la BOLETA o FACTURA electrónica, con el
+ * formato de la SUNAT: recuadro con el RUC del vendedor, el tipo de comprobante y su número
+ * (B001-00000001, F001-00000001), datos del cliente (DNI o RUC y razón social), operación
+ * gravada, IGV, total y el importe en letras. El número lo asigna la base al aprobarse el pago;
+ * antes, el PDF dice "pendiente de pago". Lleva la nota de que es de demostración: emitirlo de
+ * verdad exige enviarlo a la SUNAT por un OSE autorizado.
+ *
+ * Pedidos de otros países o anteriores a V25: el comprobante interno de siempre.
  *
  * Los precios se leen por id_precio (el que SE COBRÓ), no el precio actual del producto: un
  * comprobante que cambia cuando el dueño sube un precio no serviría de respaldo.
@@ -62,6 +69,8 @@ public class ComprobanteService {
 
     private static final DateTimeFormatter FECHA = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
     private static final String AVISO = "Comprobante interno, no válido como comprobante SUNAT.";
+    private static final String AVISO_SUNAT = "Documento de demostración: no fue enviado a la SUNAT ni a un OSE "
+            + "(operador de servicios electrónicos). Tiene el formato y la numeración de un comprobante electrónico.";
 
     private final VerificadorTienda verificadorTienda;
     private final PedidoRepository pedidoRepository;
@@ -71,11 +80,16 @@ public class ComprobanteService {
     private final LoginRepository loginRepository;
     private final DireccionRepository direccionRepository;
     private final PagoRepository pagoRepository;
+    private final PropietarioRepository propietarioRepository;
+    private final JdbcTemplate jdbc;
 
     public ComprobanteService(VerificadorTienda verificadorTienda, PedidoRepository pedidoRepository,
                               DetallePedidoRepository detallePedidoRepository, PrecioRepository precioRepository,
                               TiendaRepository tiendaRepository, LoginRepository loginRepository,
-                              DireccionRepository direccionRepository, PagoRepository pagoRepository) {
+                              DireccionRepository direccionRepository, PagoRepository pagoRepository,
+                              PropietarioRepository propietarioRepository, JdbcTemplate jdbc) {
+        this.propietarioRepository = propietarioRepository;
+        this.jdbc = jdbc;
         this.verificadorTienda = verificadorTienda;
         this.pedidoRepository = pedidoRepository;
         this.detallePedidoRepository = detallePedidoRepository;
@@ -128,21 +142,43 @@ public class ComprobanteService {
         try {
             PdfWriter.getInstance(doc, salida);
             doc.open();
+            boolean sunat = p.getTipoComprobante() != null;
 
-            // 1. Encabezado: la tienda, con su color
-            doc.add(titulo(tienda.getNombre(), color));
-            doc.add(menudo(correoYSitio(tienda)));
-            doc.add(espacio());
+            if (sunat) {
+                // 1. Encabezado SUNAT: el vendedor a la izquierda; RUC, tipo y número en el recuadro.
+                doc.add(encabezadoSunat(p, tienda, color));
+                doc.add(espacio());
+                doc.add(datos("Fecha de emisión", fecha(p.getComprobanteEmitidoEl() != null
+                        ? p.getComprobanteEmitidoEl() : p.getFechaCreacion())));
+                doc.add(datos("Pedido", "#" + p.getNumeroPedido()));
+                if ("F".equals(p.getTipoComprobante().trim())) {
+                    doc.add(datos("Razón social", p.getClienteRazonSocial()));
+                    doc.add(datos("RUC", p.getClienteDocNumero()));
+                } else {
+                    doc.add(datos("Cliente", nombreCliente(p)));
+                    if (p.getClienteDocNumero() != null) doc.add(datos(p.getClienteDocTipo(), p.getClienteDocNumero()));
+                }
+                doc.add(datos("Correo", p.getCorreoContacto()));
+                doc.add(datos("Entrega", direccionDe(p)));
+                doc.add(datos("Método de pago", metodoDePago(p.getIdPedido())));
+                doc.add(datos("Moneda", "PEN".equals(trim(p.getMoneda())) ? "Soles (PEN)" : p.getMoneda()));
+                doc.add(espacio());
+            } else {
+                // 1. Encabezado: la tienda, con su color
+                doc.add(titulo(tienda.getNombre(), color));
+                doc.add(menudo(correoYSitio(tienda)));
+                doc.add(espacio());
 
-            // 2. El pedido
-            doc.add(subtitulo("Comprobante de compra", color));
-            doc.add(datos("Pedido", "#" + p.getNumeroPedido()));
-            doc.add(datos("Fecha", fecha(p.getFechaCreacion())));
-            doc.add(datos("Cliente", nombreCliente(p)));
-            doc.add(datos("Correo", p.getCorreoContacto()));
-            doc.add(datos("Envío a", direccionDe(p)));
-            doc.add(datos("Método de pago", metodoDePago(p.getIdPedido())));
-            doc.add(espacio());
+                // 2. El pedido
+                doc.add(subtitulo("Comprobante de compra", color));
+                doc.add(datos("Pedido", "#" + p.getNumeroPedido()));
+                doc.add(datos("Fecha", fecha(p.getFechaCreacion())));
+                doc.add(datos("Cliente", nombreCliente(p)));
+                doc.add(datos("Correo", p.getCorreoContacto()));
+                doc.add(datos("Envío a", direccionDe(p)));
+                doc.add(datos("Método de pago", metodoDePago(p.getIdPedido())));
+                doc.add(espacio());
+            }
 
             // 3. Los productos, con el precio que se cobró
             doc.add(tablaDeProductos(p, color));
@@ -150,17 +186,29 @@ public class ComprobanteService {
 
             // 4. Los totales. Los precios ya incluyen el impuesto (ck_pedidos_total), así que el
             //    valor sin impuesto se obtiene restándolo, no sumándolo.
-            doc.add(tablaDeTotales(p));
+            doc.add(sunat ? tablaDeTotalesSunat(p) : tablaDeTotales(p));
             doc.add(espacio());
 
-            // 5. La advertencia: esto no reemplaza a una boleta ni a una factura
-            doc.add(menudo(AVISO));
+            if (sunat) {
+                // 5. El importe en letras y la nota (representación impresa, de demostración)
+                doc.add(datos("SON", MontoEnLetras.de(p.getTotal(), trim(p.getMoneda()))));
+                doc.add(espacio());
+                String tipo = "F".equals(p.getTipoComprobante().trim()) ? "de la factura electrónica" : "de la boleta de venta electrónica";
+                doc.add(menudo(p.numeroComprobante() == null
+                        ? "Pedido pendiente de pago: el número " + tipo + " se asigna al confirmarse el pago."
+                        : "Representación impresa " + tipo + " " + p.numeroComprobante() + "."));
+                doc.add(menudo(AVISO_SUNAT));
+            } else {
+                // 5. La advertencia: esto no reemplaza a una boleta ni a una factura
+                doc.add(menudo(AVISO));
+            }
             doc.close();
         } catch (DocumentException e) {
             log.error("No se pudo generar el comprobante del pedido {}: {}", p.getIdPedido(), e.getMessage());
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "No se pudo generar el comprobante");
         }
-        return new Comprobante("comprobante-" + p.getNumeroPedido() + ".pdf", salida.toByteArray());
+        String nombre = p.numeroComprobante() != null ? p.numeroComprobante() : "comprobante-" + p.getNumeroPedido();
+        return new Comprobante(nombre + ".pdf", salida.toByteArray());
     }
 
     private PdfPTable tablaDeProductos(Pedido p, Color color) {
@@ -211,6 +259,80 @@ public class ComprobanteService {
         fila(t, nombreImpuesto + " incluido", dinero(p.getMoneda(), impuesto), false);
         fila(t, "Total", dinero(p.getMoneda(), p.getTotal()), true);
         return t;
+    }
+
+    // ------------------------------------------------------------------ formato SUNAT
+
+    /** Vendedor a la izquierda; a la derecha el recuadro con RUC, tipo de comprobante y número. */
+    private PdfPTable encabezadoSunat(Pedido p, Tienda tienda, Color color) {
+        String[] emisor = emisorDe(tienda);   // razón social y RUC del dueño (V24)
+        PdfPTable t = new PdfPTable(new float[] {58, 42});
+        t.setWidthPercentage(100);
+
+        PdfPCell izq = new PdfPCell();
+        izq.setBorderWidth(0);
+        izq.addElement(new Paragraph(emisor[0], FontFactory.getFont(FontFactory.HELVETICA_BOLD, 14, color)));
+        if (!emisor[0].equalsIgnoreCase(tienda.getNombre())) {
+            izq.addElement(new Paragraph(tienda.getNombre(), FontFactory.getFont(FontFactory.HELVETICA, 10)));
+        }
+        izq.addElement(menudo(correoYSitio(tienda)));
+        t.addCell(izq);
+
+        boolean factura = "F".equals(p.getTipoComprobante().trim());
+        String numero = p.numeroComprobante();
+        PdfPCell der = new PdfPCell();
+        der.setBorderColor(color);
+        der.setBorderWidth(1.5f);
+        der.setPadding(8);
+        for (Paragraph linea : List.of(
+                centrado("R.U.C. " + (emisor[1] == null ? "-" : emisor[1]), FontFactory.getFont(FontFactory.HELVETICA_BOLD, 11)),
+                centrado(factura ? "FACTURA ELECTRÓNICA" : "BOLETA DE VENTA ELECTRÓNICA",
+                        FontFactory.getFont(FontFactory.HELVETICA_BOLD, 11, color)),
+                centrado(numero != null ? numero : "PENDIENTE DE PAGO", FontFactory.getFont(FontFactory.HELVETICA_BOLD, 12)))) {
+            der.addElement(linea);
+        }
+        t.addCell(der);
+        return t;
+    }
+
+    /** Op. gravada (el valor sin IGV), el IGV con su tasa y el importe total, como en la SUNAT. */
+    private PdfPTable tablaDeTotalesSunat(Pedido p) {
+        BigDecimal igv = p.getMontoImpuestos() == null ? BigDecimal.ZERO : p.getMontoImpuestos();
+        BigDecimal gravada = p.getTotal().subtract(igv).setScale(2, RoundingMode.HALF_UP);
+        String tasa = p.getIdImpuesto() == null ? "" : jdbc.query(
+                "SELECT nombre, tasa FROM impuestos WHERE id_impuesto = ?",
+                rs -> rs.next() ? rs.getString("nombre") + " (" + rs.getBigDecimal("tasa").stripTrailingZeros().toPlainString() + " %)" : "",
+                p.getIdImpuesto());
+
+        PdfPTable t = new PdfPTable(new float[] {70, 30});
+        t.setWidthPercentage(60);
+        t.setHorizontalAlignment(Element.ALIGN_RIGHT);
+        fila(t, "Productos", dinero(p.getMoneda(), p.getSubtotal()), false);
+        if (p.getDescuentoCupon() != null && p.getDescuentoCupon().signum() > 0) {
+            fila(t, "Descuento", "- " + dinero(p.getMoneda(), p.getDescuentoCupon()), false);
+        }
+        fila(t, "Envío", dinero(p.getMoneda(), p.getCostoEnvio()), false);
+        fila(t, "Op. gravada", dinero(p.getMoneda(), gravada), false);
+        fila(t, tasa.isBlank() ? "IGV" : tasa, dinero(p.getMoneda(), igv), false);
+        fila(t, "Importe total", dinero(p.getMoneda(), p.getTotal()), true);
+        return t;
+    }
+
+    /** Razón social y RUC del dueño de la tienda; si aún no los registró, el nombre de la tienda. */
+    private String[] emisorDe(Tienda tienda) {
+        return propietarioRepository.findById(tienda.getIdPropietario())
+                .map(o -> new String[] {o.getRazonSocial() == null ? tienda.getNombre() : o.getRazonSocial(), o.getRuc()})
+                .orElse(new String[] {tienda.getNombre(), null});
+    }
+
+    private static Paragraph centrado(String texto, Font fuente) {
+        Paragraph p = new Paragraph(texto, fuente);
+        p.setAlignment(Element.ALIGN_CENTER);
+        return p;
+    }
+
+    private static String trim(String s) {
+        return s == null ? null : s.trim();
     }
 
     // ------------------------------------------------------------------ apoyo
