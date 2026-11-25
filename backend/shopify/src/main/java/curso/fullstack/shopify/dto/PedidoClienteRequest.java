@@ -18,5 +18,7 @@ public record PedidoClienteRequest(
         @Size(max = 40, message = "El código puede tener hasta 40 caracteres") String codigoCupon,
         // Cómo lo recibe (V18): ENVIO (courier, por defecto), DELIVERY (la tienda lo lleva) o RECOJO.
         @Pattern(regexp = "^(ENVIO|DELIVERY|RECOJO)$", message = "La forma de entrega debe ser ENVIO, DELIVERY o RECOJO")
-        String tipoEntrega) {
+        String tipoEntrega,
+        // Boleta o factura (V25). null = boleta sin documento.
+        @Valid DatosComprobante comprobante) {
 }

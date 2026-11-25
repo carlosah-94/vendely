@@ -83,10 +83,10 @@ export default function MisPedidos() {
     }
   }
 
-  async function descargar(idPedido, numeroPedido) {
+  async function descargar(idPedido, numeroPedido, numeroComprobante) {
     setError('');
     try {
-      await descargarMiComprobante(idPedido, numeroPedido);
+      await descargarMiComprobante(idPedido, numeroPedido, numeroComprobante);
     } catch {
       setError('No se pudo descargar el comprobante');
     }
@@ -117,6 +117,11 @@ export default function MisPedidos() {
                 <div className="flex flex-wrap items-center justify-between gap-3 p-4">
                   <div>
                     <p className="font-medium">Pedido #{p.numeroPedido}</p>
+                    {d?.numeroComprobante && (
+                      <p className="font-mono text-xs text-[#616161]">
+                        {d.tipoComprobante === 'FACTURA' ? 'Factura' : 'Boleta'} {d.numeroComprobante}
+                      </p>
+                    )}
                     <p className="text-sm text-[#616161]">{formatoFecha(p.fechaCreacion)}</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
@@ -179,7 +184,7 @@ export default function MisPedidos() {
                       {!sinPagar && p.estado !== 'CANCELADO' && (
                         <button
                           type="button"
-                          onClick={() => descargar(p.idPedido, p.numeroPedido)}
+                          onClick={() => descargar(p.idPedido, p.numeroPedido, d?.numeroComprobante)}
                           className="rounded-md border border-[#c9c9c9] px-5 py-2 text-sm font-medium text-[#101010] hover:bg-white"
                         >
                           Descargar comprobante

@@ -9,6 +9,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useCarrito } from '../../context/CarritoContext';
 import { mensajeDeError } from '../../services/api';
 import { cotizarEnvio, listarPaises } from '../../services/envios';
+import ElegirComprobante, { COMPROBANTE_INICIAL, comprobanteParaEnviar, problemaComprobante } from '../../components/tienda/ElegirComprobante';
 import { crearDireccion, crearPedido, iniciarPago, listarDirecciones, validarCupon, verMiPedido } from '../../services/tienda';
 import { estiloInput } from '../../utils/estilos';
 import { formatoMoneda } from '../../utils/formato';
@@ -49,6 +50,10 @@ export default function Checkout() {
   const [envio, setEnvio] = useState(null);
   // Forma de entrega elegida (V18): ENVIO, DELIVERY o RECOJO. null = la primera que se ofrece.
   const [tipoEntrega, setTipoEntrega] = useState(null);
+  // Boleta o factura (V25), solo en tiendas de Perú.
+  const [comprobante, setComprobante] = useState(COMPROBANTE_INICIAL);
+  const [revisarComprobante, setRevisarComprobante] = useState(false);
+  const conComprobante = tienda.idPais === 'PE';
   // Método de pago: los que ofrece la tienda; por defecto el primero (el método base).
   const metodos = metodosDeTienda(tienda);
   const [metodo, setMetodo] = useState(null);
@@ -159,6 +164,12 @@ export default function Checkout() {
 
   async function pagar() {
     setError('');
+    // El comprobante se revisa antes de crear el pedido (el servidor y la base lo revisan otra vez).
+    if (conComprobante && !pedidoCreado
+        && problemaComprobante(comprobante, subtotal - (cupon?.descuento ?? 0) + (costoEnvio ?? 0))) {
+      setRevisarComprobante(true);
+      return;
+    }
     setEnviando(true);
     try {
       let pedido = pedidoCreado;
@@ -168,6 +179,7 @@ export default function Checkout() {
           lineas: items.map((i) => ({ idVariante: i.idVariante, cantidad: i.cantidad, datoCliente: i.datoCliente ?? null })),
           codigoCupon: cupon?.codigo ?? null,
           tipoEntrega: opcion?.tipo ?? 'ENVIO',
+          ...(conComprobante && { comprobante: comprobanteParaEnviar(comprobante) }),
         });
         setPedidoCreado(pedido);
       }
@@ -439,6 +451,11 @@ export default function Checkout() {
               />
             )}
           </section>
+
+          {conComprobante && (
+            <ElegirComprobante valor={comprobante} bloqueado={Boolean(pedidoCreado)} mostrarErrores={revisarComprobante}
+              total={subtotal - descuentoCupon + (costoEnvio ?? 0)} onCambiar={setComprobante} />
+          )}
 
           {/* Los métodos los decide el backend (pasarelas configuradas + plan de la tienda).
               Con uno solo se muestra como texto; con varios, el cliente elige. */}
