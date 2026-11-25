@@ -92,6 +92,9 @@ public class TiendaService {
         t.setRubro(r.rubro());
         if (t.getDescripcion() == null) t.setDescripcion(kit.descripcion());
         t.setTextoAnuncio(kit.anuncio());
+        // Y la plantilla de su rubro (V22): nace con el diseño pensado para su negocio, en
+        // cualquier plan. Si mandó su propio color, se respeta ese diseño.
+        if (t.getColorPrincipal() == null) TemaRubro.de(r.rubro()).ifPresent(tema -> tema.aplicarA(t));
         tiendaRepository.saveAndFlush(t);
         entityManager.refresh(t); // trae los valores que pone la base (fecha de creación)
         for (String nombre : kit.categorias()) {
@@ -144,6 +147,7 @@ public class TiendaService {
     @Transactional
     public TiendaResponse actualizar(UsuarioAutenticado yo, Long idTienda, TiendaActualizarRequest r) {
         Tienda t = verificadorTienda.delDueno(yo, idTienda);
+        aplicarTemaRubro(t, r);
         // Logo y color propios solo con plan Basico o Pro. Nombre, descripcion y correo los edita cualquiera.
         if (cambia(t.getLogoUrl(), vacioANull(r.logoUrl()))
                 || cambia(t.getColorPrincipal(), r.colorPrincipal() == null || r.colorPrincipal().isBlank()
@@ -214,6 +218,7 @@ public class TiendaService {
         if (r.mostrarGarantias() != null) t.setMostrarGarantias(r.mostrarGarantias());
         if (r.mostrarDestacado() != null) t.setMostrarDestacado(r.mostrarDestacado());
         if (r.mostrarCategorias() != null) t.setMostrarCategorias(r.mostrarCategorias());
+        if (r.mostrarSeccionRubro() != null) t.setMostrarSeccionRubro(r.mostrarSeccionRubro());
 
         if (r.disenoPro() != null) {
             DisenoPro nuevo = r.disenoPro().limpio();
@@ -222,6 +227,32 @@ public class TiendaService {
                 planService.exigir(id, FuncionPlan.PLANTILLAS);
             }
             t.setDisenoPro(nuevo.usaAlgo() ? nuevo : null);
+        }
+    }
+
+    /**
+     * Plantillas por rubro (V22), antes de revisar el plan:
+     *   - La de SU rubro, tal cual: se pone directo. Así, al revisar después, nada "cambia" y
+     *     cualquier plan (también Gratis) puede aplicarla.
+     *   - La de OTRO rubro: es una plantilla extra, solo con PLANTILLAS (Pro).
+     *   - La de su rubro con otros colores o letra: sigue el camino normal (PERSONALIZAR).
+     */
+    private void aplicarTemaRubro(Tienda t, TiendaActualizarRequest r) {
+        TemaRubro tema = r.tema() == null ? null : TemaRubro.porValor(r.tema()).orElse(null);
+        if (tema == null) return;
+        String rubro = r.rubro() != null ? r.rubro() : t.getRubro();
+        if (!tema.rubro().equals(rubro)) {
+            planService.exigir(t.getIdTienda(), FuncionPlan.PLANTILLAS);
+            return;
+        }
+        String plantilla = r.plantilla() != null ? r.plantilla() : t.getPlantilla();
+        String principal = r.colorPrincipal() != null ? r.colorPrincipal() : t.getColorPrincipal();
+        String acento = r.colorAcento() != null ? r.colorAcento() : t.getColorAcento();
+        String fuente = r.fuente() != null ? r.fuente() : t.getFuente();
+        String botones = r.estiloBotones() != null ? r.estiloBotones() : t.getEstiloBotones();
+        String fondo = r.fondo() != null ? r.fondo() : t.getFondo();
+        if (tema.mismosValores(plantilla, principal, acento, fuente, botones, fondo)) {
+            tema.aplicarA(t);
         }
     }
 

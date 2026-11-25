@@ -8,6 +8,8 @@ import PrecioTienda from '../../components/tienda/PrecioTienda';
 import { BandaPromo, PortadaPro } from '../../components/tienda/BloquesPro';
 import VitrinaBoutique from '../../components/tienda/VitrinaBoutique';
 import VitrinaModerna from '../../components/tienda/VitrinaModerna';
+import VitrinaRubro from '../../components/tienda/VitrinaRubro';
+import { esTemaRubro } from '../../utils/temas';
 import { BotonComprar, tieneVariosPrecios } from '../../components/tienda/comprar';
 import { useCarrito } from '../../context/CarritoContext';
 import { mensajeDeError } from '../../services/api';
@@ -162,6 +164,8 @@ export default function Vitrina() {
     },
   };
 
+  // Plantilla por rubro (V22): Horno, Circuito, Impulso... tienen su propia vitrina.
+  if (esTemaRubro(tienda.tema)) return <VitrinaRubro {...vista} />;
   if (tienda.plantilla === 'moderna') return <VitrinaModerna {...vista} />;
   if (tienda.plantilla === 'boutique') return <VitrinaBoutique {...vista} />;
   return <VitrinaClasica {...vista} />;

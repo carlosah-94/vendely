@@ -10,7 +10,8 @@ import { useTiendaActual } from '../hooks/useTiendaActual';
 import { api, mensajeDeError } from '../services/api';
 import { formatoFecha } from '../utils/formato';
 import { BOTON, BOTON_SECUNDARIO, TARJETA } from '../utils/panel';
-import { TEMAS, borradorTema, cuerpoAplicarTema, planPermiteTema, temaActual } from '../utils/temas';
+import { TEMAS, TEMAS_RUBRO, borradorTema, cuerpoAplicarTema, esTemaRubro, planPermiteTema, temaActual } from '../utils/temas';
+import { nombreRubro } from '../utils/rubros';
 
 /**
  * "Tienda online → Temas", como la de Shopify: arriba el tema que la tienda tiene publicado (la
@@ -42,6 +43,9 @@ function Galeria({ tienda: inicial, tiendas, idTienda, onCambiarTienda }) {
 
   const { tema: actual, personalizado } = temaActual(tienda);
   const url = `${window.location.origin}/tienda/${tienda.subdominio}`;
+  // Plantillas por rubro (V22): primero la de su rubro (incluida en su plan), luego las demás.
+  const suRubro = TEMAS_RUBRO.find((t) => t.rubro === tienda.rubro);
+  const otrosRubros = TEMAS_RUBRO.filter((t) => t !== suRubro);
 
   async function aplicar(tema) {
     setAplicando(tema.valor);
@@ -90,7 +94,8 @@ function Galeria({ tienda: inicial, tiendas, idTienda, onCambiarTienda }) {
                 {actual.nombre}{personalizado && <span className="font-normal text-white/80"> (personalizado)</span>}
               </p>
               <p className="text-[12px] text-white/75">
-                Plantilla {tienda.plantilla === 'moderna' ? 'Moderna' : tienda.plantilla === 'boutique' ? 'Boutique' : 'Clásica'}
+                {esTemaRubro(actual.valor) ? 'Plantilla por rubro'
+                  : `Plantilla ${tienda.plantilla === 'moderna' ? 'Moderna' : tienda.plantilla === 'boutique' ? 'Boutique' : 'Clásica'}`}
                 {tienda.temaAplicadoEl && <> · Aplicado el {formatoFecha(tienda.temaAplicadoEl)}</>}
                 {' · '}Plan {tienda.plan}
               </p>
@@ -104,6 +109,40 @@ function Galeria({ tienda: inicial, tiendas, idTienda, onCambiarTienda }) {
               </Link>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* ---------------------------------------------------------------- Plantillas por rubro */}
+      <div>
+        <div className="mb-3">
+          <h2 className="text-[15px] font-semibold text-[#101010]">Plantillas para tu rubro</h2>
+          <p className="text-[12px] text-[#616161]">
+            Más que colores: cada una cambia la portada, los beneficios y trae una sección pensada para ese negocio.
+            {suRubro && <> La de <b>{nombreRubro(tienda.rubro)}</b> está incluida en todos los planes.</>}
+          </p>
+        </div>
+        {suRubro && (
+          <TarjetaRubroDestacada
+            tema={suRubro}
+            tienda={tienda}
+            esActual={suRubro.valor === actual.valor && !personalizado}
+            aplicando={aplicando === suRubro.valor}
+            onVer={() => setEnGrande(suRubro)}
+            onAplicar={() => aplicar(suRubro)}
+          />
+        )}
+        <div className={`grid gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 ${suRubro ? 'mt-6' : ''}`}>
+          {otrosRubros.map((tema) => (
+            <TarjetaTema
+              key={tema.valor}
+              tema={tema}
+              tienda={tienda}
+              esActual={tema.valor === actual.valor && !personalizado}
+              aplicando={aplicando === tema.valor}
+              onVer={() => setEnGrande(tema)}
+              onAplicar={() => aplicar(tema)}
+            />
+          ))}
         </div>
       </div>
 
@@ -144,9 +183,17 @@ function Galeria({ tienda: inicial, tiendas, idTienda, onCambiarTienda }) {
   );
 }
 
-function EtiquetaPlan({ plan }) {
+/** El plan que pide un tema. Una plantilla por rubro: gratis la de su rubro; la de otro rubro, Pro. */
+function planDe(tema, tienda) {
+  if (tema.plan !== 'Rubro') return tema.plan;
+  return tema.rubro === tienda?.rubro ? 'Gratis' : 'Pro';
+}
+
+function EtiquetaPlan({ tema, tienda }) {
+  const plan = planDe(tema, tienda);
   const tono = plan === 'Pro' ? 'bg-[#efe9ff] text-[#5b21b6]' : plan === 'Básico' ? 'bg-[#e6f0ff] text-[#1e40af]' : 'bg-[#eaf7ee] text-[#166534]';
-  return <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${tono}`}>{plan === 'Gratis' ? 'Todos los planes' : `Plan ${plan}`}</span>;
+  const texto = plan !== 'Gratis' ? `Plan ${plan}` : tema.plan === 'Rubro' ? 'Incluida en tu plan' : 'Todos los planes';
+  return <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${tono}`}>{texto}</span>;
 }
 
 /** El botón principal de un tema: Aplicar, "Tema actual" o "Mejora a ..." si el plan no lo incluye. */
@@ -158,7 +205,7 @@ function BotonTema({ tema, tienda, esActual, aplicando, onAplicar, grande }) {
   if (!planPermiteTema(tema, tienda)) {
     return (
       <Link to="/panel/plan" className={`rounded-lg border border-[#ddd] bg-white font-semibold text-[#303030] hover:bg-[#f7f7f7] ${clase}`}>
-        Mejora a {tema.plan}
+        Mejora a {planDe(tema, tienda)}
       </Link>
     );
   }
@@ -190,13 +237,38 @@ function TarjetaTema({ tema, tienda, esActual, aplicando, onVer, onAplicar }) {
       <div className="mt-2.5 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="flex flex-wrap items-center gap-2 text-[14px] font-semibold text-[#101010]">
-            {tema.nombre} <EtiquetaPlan plan={tema.plan} />
+            {tema.nombre} <EtiquetaPlan tema={tema} tienda={tienda} />
           </p>
           <p className="text-[12px] text-[#616161]">por Vendely</p>
         </div>
         <BotonTema tema={tema} tienda={tienda} esActual={esActual} aplicando={aplicando} onAplicar={onAplicar} />
       </div>
       <p className="mt-1 text-[12px] leading-snug text-[#616161]">{tema.descripcion}</p>
+    </article>
+  );
+}
+
+/** La plantilla del rubro de la tienda, en grande y primero: es la recomendada para su negocio. */
+function TarjetaRubroDestacada({ tema, tienda, esActual, aplicando, onVer, onAplicar }) {
+  const borrador = useMemo(() => borradorTema(tienda, tema), [tienda, tema]);
+  return (
+    <article className={`grid overflow-hidden rounded-xl bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.08)] md:grid-cols-[1.6fr_1fr] ${esActual ? 'ring-2 ring-[#1650d0]' : ''}`}>
+      <button type="button" onClick={onVer} aria-label={`Ver la plantilla ${tema.nombre} en grande`} className="group relative block">
+        <TiendaEnVivo subdominio={tienda.subdominio} borrador={borrador} interactiva={false}
+          titulo={`Plantilla ${tema.nombre}`} className="aspect-[16/10] w-full" />
+        <span className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition group-hover:bg-black/25 group-hover:opacity-100">
+          <span className="rounded-lg bg-white px-3 py-1.5 text-[13px] font-semibold text-[#101010] shadow">Vista previa</span>
+        </span>
+      </button>
+      <div className="flex flex-col justify-center gap-3 p-6">
+        <span className="w-fit rounded-full bg-[#fff4d6] px-2.5 py-0.5 text-[11px] font-semibold text-[#8a5a00]">Recomendada para {nombreRubro(tienda.rubro)}</span>
+        <p className="flex flex-wrap items-center gap-2 text-xl font-bold text-[#101010]">{tema.nombre} <EtiquetaPlan tema={tema} tienda={tienda} /></p>
+        <p className="text-[13px] leading-relaxed text-[#616161]">{tema.descripcion}</p>
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          <BotonTema tema={tema} tienda={tienda} esActual={esActual} aplicando={aplicando} onAplicar={onAplicar} grande />
+          <button type="button" onClick={onVer} className={`${BOTON_SECUNDARIO} text-[13px]`}>Vista previa</button>
+        </div>
+      </div>
     </article>
   );
 }
@@ -227,7 +299,7 @@ function VistaGrande({ tema, tienda, aplicando, onAplicar, onCerrar }) {
         <div className="flex items-center gap-3">
           <button type="button" onClick={onCerrar} className={`${BOTON_SECUNDARIO} text-[13px]`}>← Volver</button>
           <div>
-            <p className="flex items-center gap-2 text-[14px] font-semibold text-[#101010]">{tema.nombre} <EtiquetaPlan plan={tema.plan} /></p>
+            <p className="flex items-center gap-2 text-[14px] font-semibold text-[#101010]">{tema.nombre} <EtiquetaPlan tema={tema} tienda={tienda} /></p>
             <p className="text-[12px] text-[#616161]">Vista previa con tus productos · no se guarda nada</p>
           </div>
         </div>

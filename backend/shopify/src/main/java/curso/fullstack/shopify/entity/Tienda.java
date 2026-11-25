@@ -136,6 +136,11 @@ public class Tienda {
     @Column(name = "mostrar_categorias", nullable = false)
     private Boolean mostrarCategorias = true;
 
+    /** Sección propia del rubro (horario y entrega, marcas, guía de tallas...), V22. */
+    @Setter
+    @Column(name = "mostrar_seccion_rubro", nullable = false)
+    private Boolean mostrarSeccionRubro = true;
+
     /** Tema aplicado en Tienda online → Temas (V13). null = nunca aplicó uno. Catálogo: utils/temas.js. */
     @Setter
     @Column(name = "tema", length = 20)

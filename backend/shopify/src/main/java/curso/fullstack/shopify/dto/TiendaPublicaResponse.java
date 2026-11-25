@@ -1,6 +1,7 @@
 package curso.fullstack.shopify.dto;
 
 import curso.fullstack.shopify.entity.Plan;
+import curso.fullstack.shopify.service.TemaRubro;
 import curso.fullstack.shopify.entity.Tienda;
 import curso.fullstack.shopify.repository.DireccionRepository;
 import curso.fullstack.shopify.service.MetodoPago;
@@ -29,7 +30,12 @@ public record TiendaPublicaResponse(
         List<MetodoPago> metodosPago,
         DisenoTienda diseno,    // letra, botones, acento, fondo, portada, anuncio y secciones (lo que su plan incluye)
         String whatsapp,        // +51987654321 o null (sin botón de WhatsApp). Todos los planes
-        String rubro            // qué vende: moda, comida... (V17) o null
+        String rubro,           // qué vende: moda, comida... (V17) o null
+        // Plantilla por rubro (V22): horno, circuito... o null. Se muestra si es la de su rubro
+        // (cualquier plan) o si el plan incluye plantillas (Pro). Los temas clásicos van tal cual.
+        String tema,
+        String recojoDireccion, // dirección del local si tiene recojo activo (V18), o null
+        String recojoHorario
 ) {
     public static TiendaPublicaResponse desde(Tienda t, DireccionRepository.PaisInfo p) {
         return desde(t, p, null, List.of());
@@ -45,10 +51,19 @@ public record TiendaPublicaResponse(
                                               List<MetodoPago> metodosPago) {
         boolean personaliza = plan == null || Boolean.TRUE.equals(plan.getPermitePersonalizar());
         boolean plantillas = plan == null || Boolean.TRUE.equals(plan.getPermitePlantillas());
+        // La plantilla de SU rubro, sin cambios, se ve con sus colores y su letra en cualquier plan
+        // (también Gratis). El logo y el sello siguen dependiendo del plan.
+        boolean estiloRubro = TemaRubro.intacta(t);
+        boolean colores = personaliza || estiloRubro;
+        String tema = !TemaRubro.esDeRubro(t.getTema()) ? t.getTema()
+                : (plantillas || TemaRubro.de(t.getRubro()).map(x -> x.valor().equals(t.getTema())).orElse(false))
+                        ? t.getTema() : null;
+        boolean recojo = Boolean.TRUE.equals(t.getRecojoActivo());
         return new TiendaPublicaResponse(t.getIdTienda(), t.getIdPais(), p.getNombre(), p.getIdMoneda(), p.getDecimales(),
                 p.getImpuesto(), p.getNivelFinal(), t.getNombre(), t.getSubdominio(), t.getDescripcion(),
-                t.getCorreoContacto(), personaliza ? t.getLogoUrl() : null, personaliza ? t.getColorPrincipal() : null,
+                t.getCorreoContacto(), personaliza ? t.getLogoUrl() : null, colores ? t.getColorPrincipal() : null,
                 t.getPermiteInvitados(), plantillas ? t.getPlantilla() : "clasica", !personaliza, metodosPago,
-                DisenoTienda.de(t, personaliza, plantillas), t.getWhatsapp(), t.getRubro());
+                DisenoTienda.de(t, colores, plantillas), t.getWhatsapp(), t.getRubro(), tema,
+                recojo ? t.getRecojoDireccion() : null, recojo ? t.getRecojoHorario() : null);
     }
 }
