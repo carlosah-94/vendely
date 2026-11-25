@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import ConversacionSoporte from '../components/ConversacionSoporte';
 import { IconoSoporte } from '../components/Iconos';
 import Mensaje from '../components/Mensaje';
 import SelectorTienda from '../components/SelectorTienda';
@@ -59,6 +60,9 @@ export default function Soporte() {
   const { tiendas, tienda, idTienda, cambiarTienda, cargando: cargandoTiendas, error: errorTiendas } = useTiendaActual();
   const [datos, setDatos] = useState({ idTienda: null, respuesta: null, error: '' });
   const [dias, setDias] = useState(3);
+  const [pedido, setPedido] = useState('');
+  // Cambia al dar acceso con mensaje, para que la conversación se vuelva a cargar.
+  const [versionMensajes, setVersionMensajes] = useState(0);
   const [guardando, setGuardando] = useState(false);
   const [confirmarQuitar, setConfirmarQuitar] = useState(false);
   const [aviso, setAviso] = useState('');
@@ -111,8 +115,14 @@ export default function Soporte() {
     }
   }
 
-  const permitir = () => ejecutar(() => permitirSoporte(idTienda, dias),
-    (resp) => `Listo: soporte de Vendely puede entrar a ${tienda?.nombre} hasta el ${formatoFecha(resp.activoHasta)}`);
+  const permitir = () => ejecutar(async () => {
+    const resp = await permitirSoporte(idTienda, dias, pedido.trim());
+    if (pedido.trim()) {
+      setPedido('');
+      setVersionMensajes((v) => v + 1);
+    }
+    return resp;
+  }, (resp) => `Listo: soporte de Vendely puede entrar a ${tienda?.nombre} hasta el ${formatoFecha(resp.activoHasta)}. Te escribiremos por aquí y a tu correo.`);
   const quitar = () => ejecutar(() => quitarSoporte(idTienda), () => 'Soporte de Vendely ya no puede entrar a tu tienda');
 
   return (
@@ -180,6 +190,16 @@ export default function Soporte() {
             </div>
           ) : (
             <div className="flex flex-wrap items-end gap-3">
+              <label className="w-full text-[13px] text-[#303030]">
+                <span className="mb-1 block font-medium">¿Qué necesitas?</span>
+                <textarea
+                  value={pedido}
+                  onChange={(e) => setPedido(e.target.value.slice(0, 2000))}
+                  rows={4}
+                  placeholder="Cuéntanos qué quieres: qué productos subir (nombres, precios, tallas), dónde están las fotos, qué colores o estilo te gusta para la tienda..."
+                  className={`${inputPanel(false)} w-full resize-y`}
+                />
+              </label>
               <label className="text-[13px] text-[#303030]">
                 <span className="mb-1 block font-medium">Durante</span>
                 <select value={dias} onChange={(e) => setDias(Number(e.target.value))} className={`${inputPanel(false)} w-36`}>
@@ -194,6 +214,16 @@ export default function Soporte() {
           )}
         </div>
       </div>
+
+      {idTienda && !cargando && (
+        <ConversacionSoporte
+          key={`${idTienda}-${versionMensajes}`}
+          idTienda={idTienda}
+          titulo="Mensajes con soporte"
+          puedeEscribir={activo}
+          bloqueado="Para escribirle a soporte, primero da acceso arriba (puedes contar lo que necesitas ahí mismo)."
+        />
+      )}
 
       {r && r.registro.length > 0 && (
         <div className={`${TARJETA} overflow-x-auto`}>
