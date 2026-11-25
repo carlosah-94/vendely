@@ -39,6 +39,7 @@ import DetalleProducto from './pages/tienda/DetalleProducto';
 import IngresarCliente from './pages/tienda/IngresarCliente';
 import MisPedidos from './pages/tienda/MisPedidos';
 import RecuperarCliente from './pages/tienda/RecuperarCliente';
+import PedidoInvitado from './pages/tienda/PedidoInvitado';
 import ResultadoPago from './pages/tienda/ResultadoPago';
 import Vitrina from './pages/tienda/Vitrina';
 
@@ -61,9 +62,11 @@ export default function App() {
         <Route path="carrito" element={<Carrito />} />
         <Route path="ingresar" element={<IngresarCliente />} />
         <Route path="recuperar" element={<RecuperarCliente />} />
+        {/* Checkout y resultado del pago: con cuenta o como invitado (si la tienda lo acepta). */}
+        <Route path="checkout" element={<Checkout />} />
+        <Route path="pago/resultado" element={<ResultadoPago />} />
+        <Route path="pedido/:idPedido" element={<PedidoInvitado />} />
         <Route element={<RequiereCliente />}>
-          <Route path="checkout" element={<Checkout />} />
-          <Route path="pago/resultado" element={<ResultadoPago />} />
           <Route path="mis-pedidos" element={<MisPedidos />} />
         </Route>
       </Route>

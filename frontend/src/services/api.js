@@ -85,8 +85,8 @@ export function esErrorDePlan(error) {
  * backend en Content-Disposition; si no llega (por ejemplo, si un proxy lo quita), se usa
  * el que pase la pantalla.
  */
-export async function descargarPdf(url, nombrePorDefecto) {
-  const respuesta = await api.get(url, { responseType: "blob" });
+export async function descargarPdf(url, nombrePorDefecto, cabeceras = undefined) {
+  const respuesta = await api.get(url, { responseType: "blob", headers: cabeceras });
   const enlace = document.createElement("a");
   const direccion = URL.createObjectURL(respuesta.data);
   enlace.href = direccion;

@@ -127,7 +127,8 @@ public interface EnvioRepository extends Repository<Tienda, Long> {
               LEFT JOIN tarifas_internacionales ti
                      ON d.id_pais <> t.id_pais
                     AND ti.id_tienda = t.id_tienda AND ti.id_pais = d.id_pais AND ti.estado = 1
-             WHERE d.id_direccion = :idDireccion AND d.id_login = :idLogin AND d.estado = 1
+             WHERE d.id_direccion = :idDireccion AND d.estado = 1
+               AND d.id_login IS NOT DISTINCT FROM CAST(:idLogin AS BIGINT)   -- NULL = dirección de un invitado
             """, nativeQuery = true)
     Optional<Cotizacion> cotizar(@Param("idTienda") Long idTienda, @Param("idLogin") Long idLogin,
                                  @Param("idDireccion") Long idDireccion);
@@ -187,7 +188,8 @@ public interface EnvioRepository extends Repository<Tienda, Long> {
               JOIN zonas_delivery z ON z.id_division = dir.id_division AND z.id_tienda = :idTienda AND z.estado = 1
               JOIN divisiones d ON d.id_division = z.id_division
               LEFT JOIN divisiones pa ON pa.id_division = d.id_padre
-             WHERE dir.id_direccion = :idDireccion AND dir.id_login = :idLogin AND dir.estado = 1
+             WHERE dir.id_direccion = :idDireccion AND dir.estado = 1
+               AND dir.id_login IS NOT DISTINCT FROM CAST(:idLogin AS BIGINT)   -- NULL = invitado
             """, nativeQuery = true)
     Optional<Zona> deliveryPara(@Param("idTienda") Long idTienda, @Param("idLogin") Long idLogin,
                                 @Param("idDireccion") Long idDireccion);

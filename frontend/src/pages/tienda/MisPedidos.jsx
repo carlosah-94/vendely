@@ -209,7 +209,7 @@ export default function MisPedidos() {
  * pedido cancelado corta la línea: solo se muestran los pasos hasta ahí y el aviso de que se
  * canceló, porque los demás ya no van a ocurrir.
  */
-function LineaDeTiempo({ pedido, pagado }) {
+export function LineaDeTiempo({ pedido, pagado }) {
   const cancelado = pedido.estado === 'CANCELADO';
   const pasos = cancelado
     ? [

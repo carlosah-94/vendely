@@ -74,6 +74,9 @@ public class SecurityConfig {
                 // sesión, así que no pueden exigir token. A cambio, el propio aviso trae su firma
                 // y PagoWebhookService la comprueba antes de tocar un pago (401 si no cuadra).
                 .requestMatchers(HttpMethod.POST, "/api/public/pagos/webhook/*").permitAll()
+                // Compra como invitado: no hay sesión. Cada pedido y dirección se protege con su
+                // clave secreta (CompraInvitadoController + ClaveInvitado): sin ella, 404.
+                .requestMatchers(HttpMethod.POST, "/api/public/tiendas/*/invitado/**").permitAll()
                 .requestMatchers("/error").permitAll()
                 // El WebSocket (issue #4): el navegador no deja mandar cabeceras al abrirlo, asi
                 // que el token viaja dentro, en el CONNECT de STOMP, y lo valida AutorizacionStomp.
@@ -143,7 +146,7 @@ public class SecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(origenesPermitidos);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Clave-Invitado"));
         config.setMaxAge(3600L);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);

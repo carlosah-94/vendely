@@ -58,12 +58,18 @@ public class NotificacionService {
     private final VerificadorTienda verificadorTienda;
     private final ComprobanteService comprobanteService;
     private final CorreoClient correos;
+    private final curso.fullstack.shopify.security.ClaveInvitado claveInvitado;
+    private final String frontendUrl;
 
     public NotificacionService(NotificacionRepository notificacionRepository, PedidoRepository pedidoRepository,
                                DetallePedidoRepository detallePedidoRepository, TiendaRepository tiendaRepository,
                                LoginRepository loginRepository, VarianteRepository varianteRepository,
                                InventarioRepository inventarioRepository, VerificadorTienda verificadorTienda,
-                               ComprobanteService comprobanteService, CorreoClient correos) {
+                               ComprobanteService comprobanteService, CorreoClient correos,
+                               curso.fullstack.shopify.security.ClaveInvitado claveInvitado,
+                               @org.springframework.beans.factory.annotation.Value("${app.frontend-url:http://localhost:5173}") String frontendUrl) {
+        this.claveInvitado = claveInvitado;
+        this.frontendUrl = frontendUrl.endsWith("/") ? frontendUrl.substring(0, frontendUrl.length() - 1) : frontendUrl;
         this.notificacionRepository = notificacionRepository;
         this.pedidoRepository = pedidoRepository;
         this.detallePedidoRepository = detallePedidoRepository;
@@ -97,6 +103,17 @@ public class NotificacionService {
      * Lo dispara PagoAprobadoEvent, que se publica tanto cuando el cliente vuelve de la pasarela
      * como cuando llega el aviso del webhook (issue #8).
      */
+    /** Compra sin cuenta: el enlace secreto para ver el pedido y descargar el comprobante. */
+    private String enlaceInvitado(Tienda t, Pedido p) {
+        if (p.getIdLogin() != null) {
+            return "";
+        }
+        String url = frontendUrl + "/tienda/" + t.getSubdominio() + "/pedido/" + p.getIdPedido()
+                + "?clave=" + claveInvitado.firmar("pedido", t.getIdTienda(), p.getIdPedido());
+        return "<p>Compraste sin cuenta. Puedes ver tu pedido cuando quieras aquí: "
+                + "<a href=\"" + url + "\">ver mi pedido</a>. Guarda este correo: el enlace es solo tuyo.</p>";
+    }
+
     @Async
     public void avisarPagoAprobado(Long idTienda, Long idPedido) {
         Pedido p = pedidoRepository.findById(idPedido).orElse(null);
@@ -110,7 +127,8 @@ public class NotificacionService {
                     <p>Tu pago del pedido <strong>#%d</strong> se confirmó. Ya lo estamos preparando.</p>
                     %s
                     <p>Adjuntamos tu comprobante de compra en PDF.</p>
-                    """.formatted(p.getNumeroPedido(), resumenHtml(p)));
+                    %s
+                    """.formatted(p.getNumeroPedido(), resumenHtml(p), enlaceInvitado(t, p)));
             Comprobante comprobante = comprobanteDe(idPedido);
             enviar(idTienda, idPedido, Notificacion.PAGO_APROBADO, p.getCorreoContacto(),
                     "Tu compra en " + t.getNombre() + " está confirmada · Pedido #" + p.getNumeroPedido(),

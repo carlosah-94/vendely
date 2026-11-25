@@ -242,6 +242,26 @@ public class ClienteService {
         return aRespuesta(d);
     }
 
+    /**
+     * Dirección de un invitado (sin cuenta): id_login NULL, con el nombre y teléfono que escribió.
+     * Las mismas reglas de ubicación que un cliente (distrito de la lista oficial en el país de la
+     * tienda; ciudad y región en otro país). La base lo vuelve a revisar (T12).
+     */
+    @Transactional
+    public DireccionResponse crearDireccionInvitado(Tienda tienda, curso.fullstack.shopify.dto.DireccionInvitadoRequest r) {
+        Direccion d = new Direccion();
+        ubicar(d, r.direccion(), tienda.getIdPais());
+        d.setIdLogin(null);
+        d.setDestinatario(r.destinatario().trim());
+        d.setTelefono(r.telefono().trim());
+        d.setDireccion(r.direccion().direccion().trim());
+        d.setReferencia(vacioANull(r.direccion().referencia()));
+        d.setPredeterminada(false);
+        direccionRepository.saveAndFlush(d);
+        log.info("Dirección de invitado creada: tienda={}, idDireccion={}", tienda.getIdTienda(), d.getIdDireccion());
+        return aRespuesta(d);
+    }
+
     // ------------------------------------------------------------------ apoyo
 
     /** El cliente solo si es de ESA tienda y tiene rol CLIENTE; si no, 404 (no se revela que existe). */

@@ -118,21 +118,30 @@ public class EnvioService {
      */
     @Transactional(readOnly = true)
     public CotizacionEnvioResponse cotizar(UsuarioAutenticado yo, Long idDireccion, BigDecimal subtotal) {
-        EnvioRepository.Cotizacion c = envioRepository.cotizar(yo.idTienda(), yo.idLogin(), idDireccion)
+        return cotizar(yo.idTienda(), yo.idLogin(), idDireccion, subtotal);
+    }
+
+    /**
+     * Lo mismo para cualquier comprador: idLogin del cliente, o null para la dirección de un
+     * invitado (que el controlador ya verificó con su clave).
+     */
+    @Transactional(readOnly = true)
+    public CotizacionEnvioResponse cotizar(Long idTienda, Long idLogin, Long idDireccion, BigDecimal subtotal) {
+        EnvioRepository.Cotizacion c = envioRepository.cotizar(idTienda, idLogin, idDireccion)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "La dirección no existe"));
         boolean internacional = Boolean.TRUE.equals(c.getInternacional());
 
         // Si la tienda bajó a un plan sin envíos internacionales, sus tarifas siguen guardadas
         // (vuelven a usarse si mejora el plan), pero no se vende al extranjero.
-        if (internacional && !planService.permite(yo.idTienda(), FuncionPlan.ENVIO_INTERNACIONAL)) {
+        if (internacional && !planService.permite(idTienda, FuncionPlan.ENVIO_INTERNACIONAL)) {
             return new CotizacionEnvioResponse(false, true, c.getIdPais(), c.getPais(), null, null, null, null,
                     "Esta tienda no envía a " + c.getPais() + " por ahora. Elige una dirección en "
-                            + paisDeLaTienda(yo.idTienda()) + ".", List.of());
+                            + paisDeLaTienda(idTienda) + ".", List.of());
         }
 
         // Delivery de la tienda y recojo en el local (V18): solo dentro del país de la tienda.
         List<OpcionEntrega> locales = internacional ? List.of()
-                : opcionesLocales(yo.idTienda(), yo.idLogin(), idDireccion, subtotal);
+                : opcionesLocales(idTienda, idLogin, idDireccion, subtotal);
 
         if (c.getCosto() == null) {
             if (!locales.isEmpty()) {
@@ -150,7 +159,7 @@ public class EnvioService {
         String mensaje = null;
         if (internacional) {
             // El impuesto del país de la tienda (IGV en Perú, IVA en Chile) no se cobra en una exportación.
-            String impuesto = tiendaRepository.findById(yo.idTienda())
+            String impuesto = tiendaRepository.findById(idTienda)
                     .flatMap(t -> direccionRepository.pais(t.getIdPais()))
                     .map(DireccionRepository.PaisInfo::getImpuesto)
                     .orElse("impuesto");

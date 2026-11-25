@@ -114,6 +114,15 @@ public class ComprobanteService {
         return generar(p);
     }
 
+    /** El comprobante del pedido de un invitado (su clave ya se revisó): solo pedidos sin cuenta. */
+    @Transactional(readOnly = true)
+    public Comprobante comprobanteDeInvitado(Long idTienda, Long idPedido) {
+        Pedido p = pedidoRepository.findByIdPedidoAndIdTienda(idPedido, idTienda)
+                .filter(x -> x.getIdLogin() == null)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El pedido no existe"));
+        return generar(p);
+    }
+
     /** El comprobante de una venta, desde el panel: la tienda tiene que ser del dueño. */
     @Transactional(readOnly = true)
     public Comprobante comprobanteDeLaTienda(UsuarioAutenticado yo, Long idTienda, Long idPedido) {
@@ -345,7 +354,9 @@ public class ComprobanteService {
 
     private String nombreCliente(Pedido p) {
         if (p.getIdLogin() == null) {
-            return "Invitado";
+            // Compra sin cuenta: el nombre que escribió como destinatario del envío.
+            return jdbc.query("SELECT destinatario FROM direcciones WHERE id_direccion = ?",
+                    (rs, i) -> rs.getString(1), p.getIdDireccionEnvio()).stream().findFirst().orElse("Invitado");
         }
         return loginRepository.findById(p.getIdLogin())
                 .map(l -> (l.getNombres() + " " + l.getPrimerApellido()).trim())
