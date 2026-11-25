@@ -163,6 +163,16 @@ public class VerificadorTienda {
         return new Acceso(tienda, false, false, permisosDe(empleado));
     }
 
+    /**
+     * true si esta cuenta puede ver las finanzas de la tienda (costos y ganancias): el dueño, o soporte
+     * de Vendely con el permiso del dueño. Un empleado nunca, aunque tenga permiso de productos o pedidos.
+     * Se llama después de conPermiso/acceso, que ya comprobaron que la cuenta puede entrar a la tienda.
+     */
+    public boolean veFinanzas(UsuarioAutenticado yo, Long idTienda) {
+        Acceso acceso = acceso(yo, idTienda);
+        return acceso.esDueno() || acceso.soporte();
+    }
+
     /** Los permisos marcados de un empleado. */
     public static Set<PermisoTienda> permisosDe(EmpleadoTienda e) {
         return Arrays.stream(PermisoTienda.values()).filter(e::puede)

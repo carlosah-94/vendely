@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { formatoMoneda } from '../utils/formato';
 
 const SERIE = '#2a78d6';
+const GANANCIA = '#0c7a43';
 const ANCHO = 720;
 const ALTO = 240;
 const M = { arriba: 12, derecha: 12, abajo: 28, izquierda: 64 };
@@ -19,9 +20,11 @@ function fechaCorta(iso) {
 }
 
 /**
- * Ventas por día: área con línea de 2px, una sola serie (el título la nombra, sin leyenda).
+ * Ventas por día (área azul) y ganancia por día (línea verde, si los días la traen). Con dos series
+ * hay una leyenda en texto: el color no es lo único que las distingue (la ganancia va con trazo
+ * punteado). Si algún día hubo pérdida, el eje baja de cero.
  * Al pasar el mouse (o con las flechas del teclado), una línea vertical marca el día y un globo
- * muestra las ventas y los pedidos. Debajo, el botón "Ver tabla" da los mismos datos en texto.
+ * muestra las ventas, la ganancia y los pedidos. Debajo, el botón "Ver tabla" da los mismos datos en texto.
  */
 export default function GraficoVentas({ dias, moneda }) {
   const [activo, setActivo] = useState(null);
@@ -30,13 +33,20 @@ export default function GraficoVentas({ dias, moneda }) {
   const ancho = ANCHO - M.izquierda - M.derecha;
   const alto = ALTO - M.arriba - M.abajo;
   const valores = dias.map((d) => Number(d.ventas));
-  const tope = topeRedondo(Math.max(...valores, 0));
+  // La ganancia solo se dibuja si el informe la trae y hubo algún día con ganancia (o pérdida).
+  const ganancias = dias.map((d) => Number(d.ganancia ?? 0));
+  const conGanancia = ganancias.some((g) => g !== 0);
+  const tope = topeRedondo(Math.max(...valores, ...ganancias, 0));
+  const minimo = Math.min(...ganancias, 0);
+  const piso = minimo < 0 ? -topeRedondo(-minimo) : 0;
   const x = (i) => M.izquierda + (dias.length === 1 ? ancho / 2 : (i * ancho) / (dias.length - 1));
-  const y = (v) => M.arriba + alto - (v / tope) * alto;
+  const y = (v) => M.arriba + alto - ((v - piso) / (tope - piso)) * alto;
 
-  const linea = valores.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const trazo = (serie) => serie.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const linea = trazo(valores);
+  const lineaGanancia = trazo(ganancias);
   const area = `${linea} L${x(valores.length - 1).toFixed(1)},${y(0)} L${x(0).toFixed(1)},${y(0)} Z`;
-  const marcas = [0, 0.25, 0.5, 0.75, 1].map((f) => tope * f);
+  const marcas = [0, 0.25, 0.5, 0.75, 1].map((f) => piso + (tope - piso) * f);
   // Unas 6 fechas en el eje X, sin amontonarse.
   const paso = Math.max(1, Math.ceil(dias.length / 6));
 
@@ -62,7 +72,7 @@ export default function GraficoVentas({ dias, moneda }) {
           viewBox={`0 0 ${ANCHO} ${ALTO}`}
           className="h-auto w-full touch-none outline-none"
           role="img"
-          aria-label="Ventas por día"
+          aria-label={conGanancia ? 'Ventas y ganancia por día' : 'Ventas por día'}
           tabIndex={0}
           onPointerMove={alMover}
           onPointerLeave={() => setActivo(null)}
@@ -86,10 +96,14 @@ export default function GraficoVentas({ dias, moneda }) {
           ))}
           <path d={area} fill={SERIE} opacity="0.12" />
           <path d={linea} fill="none" stroke={SERIE} strokeWidth="2" strokeLinejoin="round" />
+          {conGanancia && (
+            <path d={lineaGanancia} fill="none" stroke={GANANCIA} strokeWidth="2" strokeLinejoin="round" strokeDasharray="6 3" />
+          )}
           {dia && (
             <>
-              <line x1={x(activo)} x2={x(activo)} y1={M.arriba} y2={y(0)} stroke="#8a8a8a" strokeDasharray="3 3" />
+              <line x1={x(activo)} x2={x(activo)} y1={M.arriba} y2={M.arriba + alto} stroke="#8a8a8a" strokeDasharray="3 3" />
               <circle cx={x(activo)} cy={y(valores[activo])} r="5" fill={SERIE} stroke="#fff" strokeWidth="2" />
+              {conGanancia && <circle cx={x(activo)} cy={y(ganancias[activo])} r="5" fill={GANANCIA} stroke="#fff" strokeWidth="2" />}
             </>
           )}
         </svg>
@@ -98,12 +112,19 @@ export default function GraficoVentas({ dias, moneda }) {
             className="pointer-events-none absolute top-0 -translate-x-1/2 rounded-lg bg-[#1a1a1a] px-3 py-2 text-xs text-white shadow-lg"
             style={{ left: `${Math.min(88, Math.max(12, izquierdaGlobo))}%` }}
           >
-            <p className="text-sm font-semibold">{formatoMoneda(dia.ventas, moneda)}</p>
+            <p className="text-sm font-semibold">Ventas {formatoMoneda(dia.ventas, moneda)}</p>
+            {conGanancia && <p className="text-sm font-semibold text-[#8be0b2]">Ganancia {formatoMoneda(dia.ganancia, moneda)}</p>}
             <p className="text-[#c3c2b7]">{dia.pedidos} pedido{dia.pedidos === 1 ? '' : 's'} · {fechaCorta(dia.fecha)}</p>
           </div>
         )}
       </div>
 
+      {conGanancia && (
+        <p className="mt-1 flex flex-wrap gap-4 text-xs text-[#303030]">
+          <span><span className="mr-1 inline-block h-0.5 w-5 align-middle" style={{ background: SERIE }} />Ventas</span>
+          <span><span className="mr-1 inline-block h-0 w-5 border-t-2 border-dashed align-middle" style={{ borderColor: GANANCIA }} />Ganancia</span>
+        </p>
+      )}
       <button type="button" onClick={() => setTabla((t) => !t)} className="mt-2 text-xs font-medium text-[#005bd3] hover:underline">
         {tabla ? 'Ocultar tabla' : 'Ver tabla'}
       </button>
@@ -115,6 +136,7 @@ export default function GraficoVentas({ dias, moneda }) {
                 <th className="px-3 py-2 font-medium">Día</th>
                 <th className="px-3 py-2 text-right font-medium">Pedidos</th>
                 <th className="px-3 py-2 text-right font-medium">Ventas</th>
+                {conGanancia && <th className="px-3 py-2 text-right font-medium">Ganancia</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-[#ebebeb]">
@@ -123,6 +145,7 @@ export default function GraficoVentas({ dias, moneda }) {
                   <td className="px-3 py-1.5">{fechaCorta(d.fecha)}</td>
                   <td className="px-3 py-1.5 text-right">{d.pedidos}</td>
                   <td className="px-3 py-1.5 text-right">{formatoMoneda(d.ventas, moneda)}</td>
+                  {conGanancia && <td className="px-3 py-1.5 text-right">{formatoMoneda(d.ganancia, moneda)}</td>}
                 </tr>
               ))}
             </tbody>

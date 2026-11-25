@@ -35,6 +35,11 @@ public class Precio {
     @Column(name = "monto_comparacion", precision = 12, scale = 2)
     private BigDecimal montoComparacion;
 
+    /** Lo que le costó al dueño cada unidad (V21), en la moneda de la tienda. null = todavía no se cargó. */
+    @Setter
+    @Column(name = "costo", precision = 12, scale = 2)
+    private BigDecimal costo;
+
     /**
      * La pone la base (DEFAULT now() = hora de la transacción). No se envía desde Java para que
      * coincida exactamente con el cierre del precio anterior (fecha_fin = now()) y los periodos

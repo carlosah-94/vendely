@@ -52,6 +52,12 @@ public record ProductoRequest(
         @Digits(integer = 10, fraction = 2, message = "El precio de comparación admite hasta 2 decimales")
         BigDecimal precioComparacion,
 
+        // V21: lo que le costó cada unidad al dueño (para calcular su ganancia). Lo exige el service al dueño;
+        // un empleado no lo ve ni lo cambia (su valor se ignora y el costo ya guardado se conserva).
+        @DecimalMin(value = "0.00", message = "El costo no puede ser negativo")
+        @Digits(integer = 10, fraction = 2, message = "El costo admite hasta 2 decimales")
+        BigDecimal costo,
+
         // Opcional. Código interno del vendedor (variantes.sku, VARCHAR(60)).
         @Size(max = 60, message = "El SKU puede tener hasta 60 caracteres")
         String sku,

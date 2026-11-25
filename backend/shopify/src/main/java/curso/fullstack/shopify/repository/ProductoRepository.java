@@ -26,6 +26,8 @@ public interface ProductoRepository extends JpaRepository<Producto, Long> {
         Long getVariantes();
         BigDecimal getPrecio();
         BigDecimal getPrecioComparacion();
+        /** Costo por unidad (V21): el menor de sus variantes, o null. Solo el panel del dueño lo muestra. */
+        BigDecimal getCosto();
         String getSku();
         Long getStock();
         /** Suma del stock minimo de sus variantes: con el se sabe si al producto le queda poco. */
@@ -55,6 +57,7 @@ public interface ProductoRepository extends JpaRepository<Producto, Long> {
                    p.pregunta_cliente AS "preguntaCliente",
                    min(v.id_variante) AS "idVariante", count(v.id_variante) AS "variantes",
                    min(pr.monto) AS "precio", min(pr.monto_comparacion) AS "precioComparacion",
+                   min(pr.costo) AS "costo",
                    min(v.sku) AS "sku", coalesce(sum(i.cantidad_disponible), 0) AS "stock",
                    coalesce(sum(i.stock_minimo), 0) AS "stockMinimo",
                    (SELECT im.url FROM imagenes_producto im

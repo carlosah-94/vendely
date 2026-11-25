@@ -47,11 +47,36 @@ public class InformeService {
     /** Pedidos pagados de la tienda en [:desde, :hasta). Las demás consultas parten de aquí. */
     private static final String VENTAS = """
             WITH ventas AS (
-                SELECT p.id_pedido, p.id_login, p.total, p.costo_envio, p.estado, p.fecha_creacion, p.descuento_cupon
+                SELECT p.id_pedido, p.id_login, p.total, p.costo_envio, p.estado, p.fecha_creacion, p.descuento_cupon,
+                       p.subtotal, p.monto_impuestos
                   FROM pedidos p
                  WHERE p.id_tienda = :idTienda
                    AND p.fecha_creacion >= :desde AND p.fecha_creacion < :hasta
                    AND EXISTS (SELECT 1 FROM pagos pg WHERE pg.id_pedido = p.id_pedido AND pg.estado = 1)
+            )
+            """;
+
+    /**
+     * Va después de VENTAS. "costeados" = los pedidos pagados donde TODAS las líneas tienen costo.
+     * ingreso_neto = (subtotal - código) sin el IGV: el impuesto incluido en el total es una fracción
+     * fija de él, así que lo que no es impuesto es total - monto_impuestos, y a los productos les toca
+     * la parte (subtotal - código) / total de eso. El envío no entra: se le paga al courier.
+     */
+    private static final String COSTEO = """
+            , lineas AS (
+                SELECT d.id_pedido, d.cantidad, pr.costo
+                  FROM detalle_pedido d
+                  JOIN ventas ve ON ve.id_pedido = d.id_pedido
+                  JOIN precios pr ON pr.id_precio = d.id_precio
+            ), costeados AS (
+                SELECT ve.id_pedido, ve.fecha_creacion, ve.subtotal,
+                       sum(l.costo * l.cantidad) AS costo,
+                       (ve.subtotal - ve.descuento_cupon) * (ve.total - ve.monto_impuestos)
+                           / NULLIF(ve.total, 0) AS ingreso_neto
+                  FROM ventas ve
+                  JOIN lineas l ON l.id_pedido = ve.id_pedido
+                 GROUP BY ve.id_pedido, ve.fecha_creacion, ve.subtotal, ve.descuento_cupon, ve.total, ve.monto_impuestos
+                HAVING bool_and(l.costo IS NOT NULL)
             )
             """;
 
@@ -75,7 +100,7 @@ public class InformeService {
         MapSqlParameterSource anterior = parametros(idTienda, inicio.minusDays(dias), inicio.minusDays(1), zonaId);
 
         return new InformeResponse(inicio, fin, resumen(actual), resumen(anterior), porDia(actual, inicio, fin),
-                productos(actual), metodos(actual), clientes(actual), estados(actual));
+                productos(actual), metodos(actual), clientes(actual), estados(actual), inventario(idTienda));
     }
 
     // ------------------------------------------------------------------ consultas
@@ -86,6 +111,7 @@ public class InformeService {
                        COALESCE(sum(total), 0) AS ventas,
                        COALESCE(sum(costo_envio), 0) AS envios,
                        count(DISTINCT id_login) AS clientes,
+                       COALESCE(sum(monto_impuestos), 0) AS impuestos,
                        (SELECT COALESCE(sum(d.cantidad), 0) FROM detalle_pedido d
                          WHERE d.id_pedido IN (SELECT id_pedido FROM ventas)) AS unidades,
                        (SELECT COALESCE(sum(d.descuento_unitario * d.cantidad), 0) FROM detalle_pedido d
@@ -98,7 +124,25 @@ public class InformeService {
         BigDecimal ticket = pedidos == 0 ? BigDecimal.ZERO
                 : ventas.divide(BigDecimal.valueOf(pedidos), 2, RoundingMode.HALF_UP);
         return new InformeResponse.Resumen(ventas, pedidos, ticket, numero(f.get("unidades")),
-                monto(f.get("descuentos")), monto(f.get("envios")), numero(f.get("clientes")));
+                monto(f.get("descuentos")), monto(f.get("envios")), numero(f.get("clientes")),
+                monto(f.get("impuestos")), ganancia(p, pedidos));
+    }
+
+    /** La ganancia del periodo (V21): ver InformeResponse.Ganancia. */
+    private InformeResponse.Ganancia ganancia(MapSqlParameterSource p, long pedidosPagados) {
+        Map<String, Object> f = jdbc.queryForMap(VENTAS + COSTEO + """
+                SELECT count(*) AS pedidos,
+                       COALESCE(sum(ingreso_neto), 0) AS ingresos,
+                       COALESCE(sum(costo), 0) AS costo
+                  FROM costeados
+                """, p);
+        long conCosto = numero(f.get("pedidos"));
+        BigDecimal ingresos = monto(f.get("ingresos")).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal costo = monto(f.get("costo")).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal ganancia = ingresos.subtract(costo);
+        BigDecimal margen = ingresos.signum() == 0 ? BigDecimal.ZERO
+                : ganancia.multiply(BigDecimal.valueOf(100)).divide(ingresos, 1, RoundingMode.HALF_UP);
+        return new InformeResponse.Ganancia(ingresos, costo, ganancia, margen, conCosto, pedidosPagados - conCosto);
     }
 
     /** Ventas de cada día del periodo; los días sin ventas también salen, con 0 (para dibujar la curva). */
@@ -111,30 +155,86 @@ public class InformeService {
                  GROUP BY 1
                 """, p, rs -> {
             LocalDate dia = rs.getObject("dia", LocalDate.class);
-            conVentas.put(dia, new InformeResponse.Dia(dia, rs.getBigDecimal("ventas"), rs.getLong("pedidos")));
+            conVentas.put(dia, new InformeResponse.Dia(dia, rs.getBigDecimal("ventas"), rs.getLong("pedidos"),
+                    BigDecimal.ZERO));
+        });
+        // Ganancia de cada día (solo pedidos con costo completo).
+        Map<LocalDate, BigDecimal> gananciaPorDia = new HashMap<>();
+        jdbc.query(VENTAS + COSTEO + """
+                SELECT (fecha_creacion AT TIME ZONE :zona)::date AS dia,
+                       COALESCE(sum(ingreso_neto - costo), 0) AS ganancia
+                  FROM costeados
+                 GROUP BY 1
+                """, p, rs -> {
+            gananciaPorDia.put(rs.getObject("dia", LocalDate.class),
+                    rs.getBigDecimal("ganancia").setScale(2, RoundingMode.HALF_UP));
         });
         List<InformeResponse.Dia> lista = new ArrayList<>();
         for (LocalDate d = inicio; !d.isAfter(fin); d = d.plusDays(1)) {
-            lista.add(conVentas.getOrDefault(d, new InformeResponse.Dia(d, BigDecimal.ZERO, 0)));
+            InformeResponse.Dia dia = conVentas.getOrDefault(d, new InformeResponse.Dia(d, BigDecimal.ZERO, 0, BigDecimal.ZERO));
+            lista.add(new InformeResponse.Dia(d, dia.ventas(), dia.pedidos(),
+                    gananciaPorDia.getOrDefault(d, BigDecimal.ZERO)));
         }
         return lista;
     }
 
     /** Los 10 productos que más dinero dejaron (lo cobrado: precio de la venta menos la oferta). */
     private List<InformeResponse.ProductoVendido> productos(MapSqlParameterSource p) {
-        return jdbc.query(VENTAS + """
+        // ganancia: lo cobrado por la línea sin IGV ni parte del código (ingreso_neto / subtotal del pedido)
+        // menos su costo; solo en pedidos con costo completo, para que la suma cuadre con la ganancia total.
+        return jdbc.query(VENTAS + COSTEO + """
                 SELECT v.id_producto AS id_producto, max(d.nombre_producto) AS nombre,
                        sum(d.cantidad) AS unidades,
-                       sum((pr.monto - d.descuento_unitario) * d.cantidad) AS ingresos
+                       sum((pr.monto - d.descuento_unitario) * d.cantidad) AS ingresos,
+                       sum(CASE WHEN ce.id_pedido IS NOT NULL
+                                THEN (pr.monto - d.descuento_unitario) * d.cantidad
+                                         * ce.ingreso_neto / NULLIF(ce.subtotal, 0) - pr.costo * d.cantidad
+                           END) AS ganancia
                   FROM detalle_pedido d
                   JOIN ventas ve ON ve.id_pedido = d.id_pedido
                   JOIN variantes v ON v.id_variante = d.id_variante
                   JOIN precios pr ON pr.id_precio = d.id_precio
+                  LEFT JOIN costeados ce ON ce.id_pedido = d.id_pedido
                  GROUP BY v.id_producto
                  ORDER BY ingresos DESC, unidades DESC
                  LIMIT 10
-                """, p, (rs, i) -> new InformeResponse.ProductoVendido(rs.getLong("id_producto"),
-                rs.getString("nombre"), rs.getLong("unidades"), rs.getBigDecimal("ingresos")));
+                """, p, (rs, i) -> {
+            BigDecimal ganancia = rs.getBigDecimal("ganancia");
+            return new InformeResponse.ProductoVendido(rs.getLong("id_producto"), rs.getString("nombre"),
+                    rs.getLong("unidades"), rs.getBigDecimal("ingresos"),
+                    ganancia == null ? null : ganancia.setScale(2, RoundingMode.HALF_UP));
+        });
+    }
+
+    /**
+     * El almacén de hoy: cuánta plata hay metida en mercadería (V21). Cuenta las variantes activas de los
+     * productos que no están archivados, con su precio y costo vigentes. El IGV de la tasa vigente del país
+     * de la tienda se saca del valor de venta, igual que en la ganancia de los pedidos.
+     */
+    private InformeResponse.Inventario inventario(Long idTienda) {
+        Map<String, Object> f = jdbc.queryForMap("""
+                SELECT COALESCE(sum(i.cantidad_disponible), 0) AS unidades,
+                       COALESCE(sum(i.cantidad_disponible * pr.costo) FILTER (WHERE pr.costo IS NOT NULL), 0) AS capital,
+                       COALESCE(sum(i.cantidad_disponible * pr.monto) FILTER (WHERE pr.costo IS NOT NULL), 0) AS valor,
+                       count(DISTINCT p.id_producto) FILTER (WHERE pr.costo IS NULL) AS sin_costo,
+                       COALESCE((SELECT t.tasa FROM impuestos t
+                                  WHERE t.id_pais = (fn_pais_de_tienda(:idTienda)).id_pais
+                                    AND t.vigente_desde <= current_date
+                                    AND (t.vigente_hasta IS NULL OR t.vigente_hasta > current_date)), 0) AS tasa
+                  FROM productos p
+                  JOIN variantes v ON v.id_producto = p.id_producto AND v.estado = 1
+                  JOIN precios pr ON pr.id_variante = v.id_variante
+                                 AND pr.fecha_inicio <= now() AND (pr.fecha_fin IS NULL OR pr.fecha_fin > now())
+                  LEFT JOIN inventario i ON i.id_variante = v.id_variante
+                 WHERE p.id_tienda = :idTienda AND p.estado <> 2
+                """, new MapSqlParameterSource("idTienda", idTienda));
+        BigDecimal capital = monto(f.get("capital")).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal valor = monto(f.get("valor")).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal tasa = monto(f.get("tasa"));
+        BigDecimal valorNeto = valor.multiply(BigDecimal.valueOf(100))
+                .divide(BigDecimal.valueOf(100).add(tasa), 2, RoundingMode.HALF_UP);
+        return new InformeResponse.Inventario(numero(f.get("unidades")), capital, valor,
+                valorNeto.subtract(capital), numero(f.get("sin_costo")));
     }
 
     private List<InformeResponse.MetodoPago> metodos(MapSqlParameterSource p) {

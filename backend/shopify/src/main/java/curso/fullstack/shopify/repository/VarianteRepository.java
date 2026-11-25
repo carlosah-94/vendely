@@ -50,6 +50,7 @@ public interface VarianteRepository extends JpaRepository<Variante, Long> {
         String getSku();
         BigDecimal getPrecio();
         BigDecimal getPrecioComparacion();
+        BigDecimal getCosto();          // V21: lo que costó cada unidad, o null
         Long getStock();
     }
 
@@ -58,6 +59,7 @@ public interface VarianteRepository extends JpaRepository<Variante, Long> {
                    (SELECT string_agg(vv.valor, chr(31) ORDER BY vv.posicion)
                       FROM variante_valores vv WHERE vv.id_variante = v.id_variante) AS "valores",
                    v.sku AS "sku", pr.monto AS "precio", pr.monto_comparacion AS "precioComparacion",
+                   pr.costo AS "costo",
                    CAST(COALESCE(i.cantidad_disponible, 0) AS bigint) AS "stock"
               FROM variantes v
               LEFT JOIN precios pr   ON pr.id_variante = v.id_variante
