@@ -161,6 +161,20 @@ public class Tienda {
     @Column(name = "rubro", length = 20)
     private String rubro;
 
+    /** true = el cliente puede recoger su pedido en el local, gratis (V18). Exige recojoDireccion. */
+    @Setter
+    @Column(name = "recojo_activo", nullable = false)
+    private Boolean recojoActivo = false;
+
+    @Setter
+    @Column(name = "recojo_direccion", length = 200)
+    private String recojoDireccion;
+
+    /** Texto libre: "Lunes a sábado de 10 a. m. a 7 p. m." */
+    @Setter
+    @Column(name = "recojo_horario", length = 120)
+    private String recojoHorario;
+
     /** Hasta cuándo el equipo de Vendely puede entrar a armar la tienda (V16). null = sin permiso. */
     @Setter
     @Column(name = "soporte_hasta")

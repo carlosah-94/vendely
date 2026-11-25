@@ -43,6 +43,11 @@ public class Pedido {
     @Column(name = "estado", nullable = false)
     private Short estado = 0;
 
+    /** Cómo se entrega (V18): 0 courier · 1 delivery de la tienda · 2 recojo en tienda. El costo lo pone el trigger. */
+    @Setter
+    @Column(name = "tipo_entrega", nullable = false)
+    private Short tipoEntrega = TipoEntrega.ENVIO.codigo();
+
     // ---- Seguimiento del envio (issue #3). Las fechas marcan cada paso del pedido.
     @Setter
     @Column(name = "empresa_envio", length = 60)

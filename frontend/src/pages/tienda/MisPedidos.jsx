@@ -8,6 +8,7 @@ import { formatoFecha, formatoMoneda } from '../../utils/formato';
 import { METODOS_PAGO, metodosDeTienda } from '../../utils/metodosPago';
 import { useTiempoReal } from '../../hooks/useTiempoReal';
 import { canales } from '../../services/tiempoReal';
+import { entregaDe } from '../../utils/entrega';
 
 const NOMBRE_ESTADO = {
   SIN_ENVIAR: 'Sin enviar',
@@ -121,7 +122,7 @@ export default function MisPedidos() {
                   <div className="flex flex-wrap items-center gap-3">
                     <EtiquetaPago estado={p.estadoPago} />
                     <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs text-slate-700">
-                      {NOMBRE_ESTADO[p.estado] ?? p.estado}
+                      {p.estado === 'ENVIADO' ? entregaDe(p.tipoEntrega).enviado : NOMBRE_ESTADO[p.estado] ?? p.estado}
                     </span>
                     <span className="font-medium">{formatoMoneda(p.total, p.moneda)}</span>
                     <button type="button" onClick={() => alternar(p.idPedido)} className="text-sm text-violet-700 hover:underline">
@@ -213,12 +214,14 @@ function LineaDeTiempo({ pedido, pagado }) {
         { nombre: 'Pedido creado', fecha: pedido.fechaCreacion, hecho: true },
         { nombre: 'Pago confirmado', fecha: null, hecho: pagado },
         {
-          nombre: 'Enviado',
+          nombre: entregaDe(pedido.tipoEntrega).enviado,
           fecha: pedido.fechaEnvio,
           hecho: pedido.estado === 'ENVIADO' || pedido.estado === 'ENTREGADO',
-          detalle: pedido.empresaEnvio
-            ? `${pedido.empresaEnvio} · seguimiento ${pedido.numeroSeguimiento}`
-            : null,
+          detalle: pedido.tipoEntrega === 'RECOJO'
+            ? 'Recojo en tienda: menciona tu número de pedido al llegar'
+            : pedido.numeroSeguimiento
+              ? `${pedido.empresaEnvio} · seguimiento ${pedido.numeroSeguimiento}`
+              : pedido.empresaEnvio ? `Lo lleva: ${pedido.empresaEnvio}` : null,
         },
         { nombre: 'Entregado', fecha: pedido.fechaEntrega, hecho: pedido.estado === 'ENTREGADO' },
       ];

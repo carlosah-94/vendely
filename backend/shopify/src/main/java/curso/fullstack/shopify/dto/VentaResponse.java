@@ -14,7 +14,9 @@ public record VentaResponse(Long idPedido, Integer numeroPedido, Long idLogin, S
         String empresaEnvio, String numeroSeguimiento,
         OffsetDateTime fechaEnvio, OffsetDateTime fechaEntrega, OffsetDateTime fechaCancelacion,
         // Código de descuento (V14): total = subtotal - descuentoCupon + costoEnvio.
-        BigDecimal descuentoCupon, String codigoCupon) {
+        BigDecimal descuentoCupon, String codigoCupon,
+        // Cómo se entrega (V18): ENVIO, DELIVERY o RECOJO.
+        String tipoEntrega) {
 
     public static VentaResponse desde(Pedido p, List<LineaVentaResponse> lineas, String estadoPago) {
         return desde(p, lineas, estadoPago, null);
@@ -27,6 +29,7 @@ public record VentaResponse(Long idPedido, Integer numeroPedido, Long idLogin, S
                 PedidoResumenResponse.nombreEstado(p.getEstado()),
                 p.getEmpresaEnvio(), p.getNumeroSeguimiento(),
                 p.getFechaEnvio(), p.getFechaEntrega(), p.getFechaCancelacion(),
-                p.getDescuentoCupon() == null ? BigDecimal.ZERO : p.getDescuentoCupon(), codigoCupon);
+                p.getDescuentoCupon() == null ? BigDecimal.ZERO : p.getDescuentoCupon(), codigoCupon,
+                curso.fullstack.shopify.entity.TipoEntrega.de(p.getTipoEntrega()).name());
     }
 }

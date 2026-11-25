@@ -17,6 +17,7 @@ import { useTiempoReal } from '../hooks/useTiempoReal';
 import { canales } from '../services/tiempoReal';
 import IconoChat from '../components/IconoChat';
 import { enlaceWhatsapp, normalizarWhatsapp } from '../utils/whatsapp';
+import { entregaDe } from '../utils/entrega';
 
 const NOMBRE_ESTADO = {
   SIN_ENVIAR: 'Sin enviar',
@@ -163,6 +164,8 @@ export default function DetalleVenta() {
   }
 
   const { venta, cliente } = datos;
+  const tipo = venta?.tipoEntrega ?? 'ENVIO';
+  const entrega = entregaDe(tipo);
   const pagado = venta.estadoPago === 'APROBADO';
   const sinEnviar = venta.estado === 'SIN_ENVIAR';
 
@@ -177,7 +180,7 @@ export default function DetalleVenta() {
           <p className="flex items-center gap-2 text-sm text-slate-600">
             {formatoFecha(venta.fechaCreacion)} <EtiquetaPago estado={venta.estadoPago} />
             <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs text-slate-700">
-              {NOMBRE_ESTADO[venta.estado] ?? venta.estado}
+              {venta.estado === 'ENVIADO' ? entrega.enviado : NOMBRE_ESTADO[venta.estado] ?? venta.estado}
             </span>
           </p>
         </div>
@@ -256,13 +259,21 @@ export default function DetalleVenta() {
       {/* Envío (issue #3). Qué se puede hacer depende del estado del pedido:
           sin enviar y pagado → enviar; sin enviar → cancelar; enviado → entregado. */}
       <div className="space-y-3 rounded-lg bg-white p-5 text-sm shadow-sm">
-        <h2 className="font-semibold text-slate-800">Envío</h2>
+        <h2 className="font-semibold text-slate-800">Entrega · {entrega.nombre}</h2>
 
-        {venta.empresaEnvio && (
+        {venta.fechaEnvio && (
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-slate-700">
-            <dt className="text-slate-500">Empresa</dt><dd>{venta.empresaEnvio}</dd>
-            <dt className="text-slate-500">Seguimiento</dt><dd className="font-medium">{venta.numeroSeguimiento}</dd>
-            <dt className="text-slate-500">Enviado el</dt><dd>{formatoFecha(venta.fechaEnvio)}</dd>
+            {venta.empresaEnvio && (
+              <>
+                <dt className="text-slate-500">{tipo === 'DELIVERY' ? 'Lo lleva' : 'Empresa'}</dt><dd>{venta.empresaEnvio}</dd>
+              </>
+            )}
+            {venta.numeroSeguimiento && (
+              <>
+                <dt className="text-slate-500">Seguimiento</dt><dd className="font-medium">{venta.numeroSeguimiento}</dd>
+              </>
+            )}
+            <dt className="text-slate-500">{entrega.fecha}</dt><dd>{formatoFecha(venta.fechaEnvio)}</dd>
             {venta.fechaEntrega && (
               <>
                 <dt className="text-slate-500">Entregado el</dt><dd>{formatoFecha(venta.fechaEntrega)}</dd>
@@ -278,7 +289,7 @@ export default function DetalleVenta() {
         )}
 
         {sinEnviar && !pagado && (
-          <Mensaje tipo="info" texto="Para marcar el pedido como enviado, primero tiene que estar pagado." />
+          <Mensaje tipo="info" texto={`Para ${entrega.accion.toLowerCase()}, primero el pedido tiene que estar pagado.`} />
         )}
 
         {sinEnviar && pagado && (
@@ -287,9 +298,26 @@ export default function DetalleVenta() {
             onSubmit={(e) => {
               e.preventDefault();
               accion(() => marcarEnviado(idTienda, idPedido, envio),
-                `Pedido #${venta.numeroPedido} marcado como enviado. Se le avisó al cliente.`);
+                `Pedido #${venta.numeroPedido}: ${entrega.enviado.toLowerCase()}. Se le avisó al cliente.`);
             }}
           >
+            {tipo === 'DELIVERY' && (
+              <label className="block">
+                <span className="block text-slate-600">Quién lo lleva (opcional)</span>
+                <input
+                  value={envio.empresaEnvio}
+                  onChange={(e) => setEnvio({ ...envio, empresaEnvio: e.target.value })}
+                  maxLength={60}
+                  placeholder="Juan, moto de la tienda..."
+                  className="mt-1 rounded-md border border-slate-300 px-3 py-2"
+                />
+              </label>
+            )}
+            {tipo === 'RECOJO' && (
+              <p className="w-full text-slate-600">Cuando el pedido esté empacado, márcalo como listo: le avisamos al cliente con la dirección y el horario del local.</p>
+            )}
+            {tipo === 'ENVIO' && (
+            <>
             <label className="block">
               <span className="block text-slate-600">Empresa de envío</span>
               <input
@@ -312,12 +340,14 @@ export default function DetalleVenta() {
                 className="mt-1 rounded-md border border-slate-300 px-3 py-2"
               />
             </label>
+            </>
+            )}
             <button
               type="submit"
               disabled={trabajando}
               className="rounded-md bg-violet-600 px-4 py-2 font-medium text-white hover:bg-violet-700 disabled:opacity-50"
             >
-              Marcar como enviado
+              {entrega.accion}
             </button>
           </form>
         )}

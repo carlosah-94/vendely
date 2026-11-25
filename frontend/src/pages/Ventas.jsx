@@ -9,6 +9,7 @@ import { api, mensajeDeError } from '../services/api';
 import { useTiempoReal } from '../hooks/useTiempoReal';
 import { canales } from '../services/tiempoReal';
 import { formatoFecha, formatoMoneda } from '../utils/formato';
+import { entregaDe } from '../utils/entrega';
 
 const NOMBRE_ESTADO = {
   SIN_ENVIAR: 'Sin enviar',
@@ -191,7 +192,12 @@ export default function Ventas() {
                   <td className="px-4 py-3 text-slate-600">{formatoFecha(v.fechaCreacion)}</td>
                   <td className="px-4 py-3 text-slate-800">{v.cliente}</td>
                   <td className="px-4 py-3"><EtiquetaPago estado={v.estadoPago} /></td>
-                  <td className="px-4 py-3 text-slate-600">{NOMBRE_ESTADO[v.estado] ?? v.estado}</td>
+                  <td className="px-4 py-3 text-slate-600">
+                    {v.estado === 'ENVIADO' ? entregaDe(v.tipoEntrega).enviado : NOMBRE_ESTADO[v.estado] ?? v.estado}
+                    {v.tipoEntrega && v.tipoEntrega !== 'ENVIO' && (
+                      <span className="block text-[11px] text-slate-500">{entregaDe(v.tipoEntrega).nombre}</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-right font-medium text-slate-800">
                     {formatoMoneda(v.total, v.moneda)}
                   </td>

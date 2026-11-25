@@ -1,6 +1,7 @@
 package curso.fullstack.shopify.controller;
 
 import curso.fullstack.shopify.dto.EnviosResponse;
+import curso.fullstack.shopify.dto.RecojoRequest;
 import curso.fullstack.shopify.dto.TarifaRequest;
 import curso.fullstack.shopify.security.UsuarioAutenticado;
 import curso.fullstack.shopify.service.EnvioService;
@@ -49,5 +50,25 @@ public class EnvioController {
     public EnviosResponse borrarInternacional(@AuthenticationPrincipal UsuarioAutenticado yo, @PathVariable Long idTienda,
                                               @PathVariable String idPais) {
         return envioService.borrarInternacional(yo, idTienda, idPais);
+    }
+
+    /** Delivery de la tienda a un distrito (V18): costo y, opcional, desde cuánto es gratis. */
+    @PutMapping("/delivery/{idDivision}")
+    public EnviosResponse guardarDelivery(@AuthenticationPrincipal UsuarioAutenticado yo, @PathVariable Long idTienda,
+                                          @PathVariable Long idDivision, @Valid @RequestBody TarifaRequest r) {
+        return envioService.guardarDelivery(yo, idTienda, idDivision, r);
+    }
+
+    @DeleteMapping("/delivery/{idDivision}")
+    public EnviosResponse borrarDelivery(@AuthenticationPrincipal UsuarioAutenticado yo, @PathVariable Long idTienda,
+                                         @PathVariable Long idDivision) {
+        return envioService.borrarDelivery(yo, idTienda, idDivision);
+    }
+
+    /** Recojo en el local (V18): activo, dirección y horario. */
+    @PutMapping("/recojo")
+    public EnviosResponse guardarRecojo(@AuthenticationPrincipal UsuarioAutenticado yo, @PathVariable Long idTienda,
+                                        @Valid @RequestBody RecojoRequest r) {
+        return envioService.guardarRecojo(yo, idTienda, r);
     }
 }

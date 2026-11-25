@@ -47,6 +47,8 @@ export default function Checkout() {
   const [aplicando, setAplicando] = useState(false);
   // Envío a la dirección elegida: { idDireccion, subtotal, datos } (datos null = calculando).
   const [envio, setEnvio] = useState(null);
+  // Forma de entrega elegida (V18): ENVIO, DELIVERY o RECOJO. null = la primera que se ofrece.
+  const [tipoEntrega, setTipoEntrega] = useState(null);
   // Método de pago: los que ofrece la tienda; por defecto el primero (el método base).
   const metodos = metodosDeTienda(tienda);
   const [metodo, setMetodo] = useState(null);
@@ -66,7 +68,10 @@ export default function Checkout() {
 
   // Solo vale la cotización de la dirección y el subtotal actuales.
   const cotizacion = envio && envio.idDireccion === idDireccion && envio.subtotal === subtotal && !nueva ? envio : null;
-  const costoEnvio = cotizacion?.datos?.disponible ? Number(cotizacion.datos.costo) : null;
+  // Formas de entrega para esa dirección: courier, delivery de la tienda y recojo en el local.
+  const opciones = cotizacion?.datos?.disponible ? cotizacion.datos.opciones ?? [] : [];
+  const opcion = opciones.find((o) => o.tipo === tipoEntrega) ?? opciones[0] ?? null;
+  const costoEnvio = opcion ? Number(opcion.costo) : null;
   const noEnvia = cotizacion?.datos && !cotizacion.datos.disponible;
 
   useEffect(() => {
@@ -162,6 +167,7 @@ export default function Checkout() {
           idDireccionEnvio: idDireccion,
           lineas: items.map((i) => ({ idVariante: i.idVariante, cantidad: i.cantidad })),
           codigoCupon: cupon?.codigo ?? null,
+          tipoEntrega: opcion?.tipo ?? 'ENVIO',
         });
         setPedidoCreado(pedido);
       }
@@ -361,23 +367,44 @@ export default function Checkout() {
               </button>
             )}
 
-            {/* Costo y plazo del envío a la dirección elegida */}
-            {cotizacion?.datos?.disponible && (
-              <div className="rounded-md border border-[#d9d9d9] bg-[#f5f5f5] px-3 py-2.5 text-sm">
-                <p className="flex justify-between font-medium">
-                  <span>{cotizacion.datos.internacional ? `Envío internacional a ${cotizacion.datos.pais}` : 'Envío estándar'}</span>
-                  <span>{costoEnvio === 0 ? 'Gratis' : formatoMoneda(costoEnvio)}</span>
-                </p>
-                {cotizacion.datos.diasEntregaMax != null && (
-                  <p className="text-[#616161]">
-                    Llega en {cotizacion.datos.diasEntregaMin ?? 1} a {cotizacion.datos.diasEntregaMax} días hábiles
-                  </p>
-                )}
-                {cotizacion.datos.envioGratisDesde != null && costoEnvio > 0 && (
-                  <p className="text-[#616161]">Gratis en compras desde {formatoMoneda(cotizacion.datos.envioGratisDesde)}</p>
-                )}
-                {cotizacion.datos.mensaje && <p className="mt-1 text-xs text-[#616161]">{cotizacion.datos.mensaje}</p>}
-              </div>
+            {/* Cómo recibe su pedido: courier, delivery de la tienda o recojo (V18) */}
+            {opciones.length > 0 && (
+              <fieldset className="space-y-2">
+                <legend className="mb-1 text-sm font-semibold">{opciones.length > 1 ? 'Elige cómo recibirlo' : 'Entrega'}</legend>
+                {opciones.map((o) => {
+                  const activa = o.tipo === opcion?.tipo;
+                  const costo = Number(o.costo);
+                  return (
+                    <label
+                      key={o.tipo}
+                      className={`flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2.5 text-sm ${
+                        activa ? 'border-[#303030] bg-[#f5f5f5]' : 'border-[#d9d9d9] bg-white'
+                      } ${pedidoCreado ? 'cursor-default opacity-80' : ''}`}
+                    >
+                      <input
+                        type="radio"
+                        name="tipoEntrega"
+                        value={o.tipo}
+                        checked={activa}
+                        disabled={Boolean(pedidoCreado)}
+                        onChange={() => setTipoEntrega(o.tipo)}
+                        className="mt-1 accent-[#303030]"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex justify-between gap-2 font-medium">
+                          <span>{o.nombre}</span>
+                          <span>{costo === 0 ? 'Gratis' : formatoMoneda(costo)}</span>
+                        </span>
+                        {o.detalle && <span className="block text-[#616161]">{o.detalle}</span>}
+                        {o.tipo === 'ENVIO' && cotizacion.datos.envioGratisDesde != null && costo > 0 && (
+                          <span className="block text-[#616161]">Gratis en compras desde {formatoMoneda(cotizacion.datos.envioGratisDesde)}</span>
+                        )}
+                      </span>
+                    </label>
+                  );
+                })}
+                {cotizacion.datos.mensaje && <p className="text-xs text-[#616161]">{cotizacion.datos.mensaje}</p>}
+              </fieldset>
             )}
             {noEnvia && <Mensaje tipo="error" texto={cotizacion.datos.mensaje} />}
             {cotizacion?.error && <Mensaje tipo="error" texto={cotizacion.error} />}

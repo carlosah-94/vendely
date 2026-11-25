@@ -12,11 +12,12 @@ import java.time.OffsetDateTime;
  */
 public record PedidoResumenResponse(Long idPedido, Integer numeroPedido, OffsetDateTime fechaCreacion,
                                     Long idLogin, String cliente, String moneda, BigDecimal total, String estado,
-                                    String estadoPago) {
+                                    String estadoPago, String tipoEntrega) {
 
     public static PedidoResumenResponse desde(Pedido p, String cliente, String estadoPago) {
         return new PedidoResumenResponse(p.getIdPedido(), p.getNumeroPedido(), p.getFechaCreacion(),
-                p.getIdLogin(), cliente, p.getMoneda(), p.getTotal(), nombreEstado(p.getEstado()), estadoPago);
+                p.getIdLogin(), cliente, p.getMoneda(), p.getTotal(), nombreEstado(p.getEstado()), estadoPago,
+                curso.fullstack.shopify.entity.TipoEntrega.de(p.getTipoEntrega()).name());
     }
 
     // La base guarda el estado como número (CHECK 0..3); al frontend se le envía un texto legible.

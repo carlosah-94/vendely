@@ -11,8 +11,16 @@ public record EnviosResponse(
         String moneda,          // los costos van en esta moneda
         List<TarifaResponse> nacionales,
         List<TarifaResponse> internacionales,
-        Boolean internacionalIncluido   // false: el plan actual no incluye envíos internacionales (las tarifas quedan guardadas)
+        Boolean internacionalIncluido,  // false: el plan actual no incluye envíos internacionales (las tarifas quedan guardadas)
+        List<ZonaDelivery> delivery,    // distritos a los que la tienda lleva sus pedidos (V18)
+        Recojo recojo                   // recojo en el local (V18)
 ) {
+    /** Un distrito con delivery de la tienda. estado: ACTIVA o PAUSADA. */
+    public record ZonaDelivery(Long idDivision, String distrito, String provincia, BigDecimal costo,
+                               BigDecimal envioGratisDesde, String estado) {}
+
+    public record Recojo(Boolean activo, String direccion, String horario) {}
+
     /**
      * Una tarifa. idZona = id de la región (nacional) o código del país (internacional).
      * estado: "ACTIVA", "PAUSADA" o "SIN_TARIFA" (región sin configurar: no se envía ahí).

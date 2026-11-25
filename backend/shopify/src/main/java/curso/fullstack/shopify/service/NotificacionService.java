@@ -8,6 +8,7 @@ import curso.fullstack.shopify.entity.Inventario;
 import curso.fullstack.shopify.entity.Notificacion;
 import curso.fullstack.shopify.entity.Pedido;
 import curso.fullstack.shopify.entity.Tienda;
+import curso.fullstack.shopify.entity.TipoEntrega;
 import curso.fullstack.shopify.exception.ApiException;
 import curso.fullstack.shopify.repository.DetallePedidoRepository;
 import curso.fullstack.shopify.repository.InventarioRepository;
@@ -133,6 +134,34 @@ public class NotificacionService {
         Pedido p = pedidoRepository.findById(idPedido).orElse(null);
         Tienda t = tiendaRepository.findById(idTienda).orElse(null);
         if (p == null || t == null || yaSeRegistro(idPedido, Notificacion.PEDIDO_ENVIADO)) {
+            return;
+        }
+        TipoEntrega tipo = TipoEntrega.de(p.getTipoEntrega());
+        if (tipo == TipoEntrega.RECOJO) {
+            // Recojo en tienda (V18): no "va en camino", ya está listo en el local.
+            String html = envoltura(t, "Tu pedido está listo para recoger", """
+                    <p>El pedido <strong>#%d</strong> ya está listo. Puedes pasar a recogerlo:</p>
+                    <table style="border-collapse:collapse;margin:12px 0">
+                      <tr><td style="padding:4px 12px 4px 0;color:#6b7280">Dirección</td><td><strong>%s</strong></td></tr>
+                      <tr><td style="padding:4px 12px 4px 0;color:#6b7280">Horario</td><td><strong>%s</strong></td></tr>
+                    </table>
+                    <p>Menciona tu número de pedido al llegar.</p>
+                    """.formatted(p.getNumeroPedido(), escapar(t.getRecojoDireccion()),
+                    escapar(t.getRecojoHorario() == null ? "Consulta con la tienda" : t.getRecojoHorario())));
+            enviar(idTienda, idPedido, Notificacion.PEDIDO_ENVIADO, p.getCorreoContacto(),
+                    "Tu pedido #" + p.getNumeroPedido() + " está listo para recoger", html, null);
+            return;
+        }
+        if (tipo == TipoEntrega.DELIVERY) {
+            String quien = p.getEmpresaEnvio() == null ? ""
+                    : "<p>Lo lleva: <strong>" + escapar(p.getEmpresaEnvio()) + "</strong></p>";
+            String html = envoltura(t, "Tu pedido va en camino", """
+                    <p>El pedido <strong>#%d</strong> salió hacia tu dirección con el delivery de %s.</p>
+                    %s
+                    <p>Ten tu celular a la mano por si te llaman al llegar.</p>
+                    """.formatted(p.getNumeroPedido(), escapar(t.getNombre()), quien));
+            enviar(idTienda, idPedido, Notificacion.PEDIDO_ENVIADO, p.getCorreoContacto(),
+                    "Tu pedido #" + p.getNumeroPedido() + " va en camino", html, null);
             return;
         }
         String html = envoltura(t, "Tu pedido va en camino", """

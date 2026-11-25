@@ -132,6 +132,66 @@ public interface EnvioRepository extends Repository<Tienda, Long> {
     Optional<Cotizacion> cotizar(@Param("idTienda") Long idTienda, @Param("idLogin") Long idLogin,
                                  @Param("idDireccion") Long idDireccion);
 
+    // ------------------------------------------------------------ delivery de la tienda (V18)
+
+    /** Un distrito al que la tienda lleva sus pedidos. estado: 1 activa · 0 pausada. */
+    interface Zona {
+        Long getIdDivision();
+        String getDistrito();
+        String getProvincia();
+        BigDecimal getCosto();
+        BigDecimal getEnvioGratisDesde();
+        Short getEstado();
+    }
+
+    @Query(value = """
+            SELECT z.id_division AS "idDivision", d.nombre AS "distrito", pa.nombre AS "provincia",
+                   z.costo AS "costo", z.envio_gratis_desde AS "envioGratisDesde", z.estado AS "estado"
+              FROM zonas_delivery z
+              JOIN divisiones d ON d.id_division = z.id_division
+              LEFT JOIN divisiones pa ON pa.id_division = d.id_padre
+             WHERE z.id_tienda = :idTienda
+             ORDER BY d.nombre
+            """, nativeQuery = true)
+    List<Zona> zonasDelivery(@Param("idTienda") Long idTienda);
+
+    /** ¿Es un distrito (último nivel de la lista oficial) del país de la tienda? Lo mismo exige la base. */
+    @Query(value = """
+            SELECT EXISTS (SELECT 1 FROM divisiones d JOIN tiendas t ON t.id_pais = d.id_pais
+                            WHERE t.id_tienda = :idTienda AND d.id_division = :idDivision
+                              AND d.nivel = (SELECT max(n.nivel) FROM niveles_division n WHERE n.id_pais = d.id_pais))
+            """, nativeQuery = true)
+    boolean esDistritoDeLaTienda(@Param("idTienda") Long idTienda, @Param("idDivision") Long idDivision);
+
+    @Modifying
+    @Query(value = """
+            INSERT INTO zonas_delivery (id_tienda, id_division, costo, envio_gratis_desde, estado)
+            VALUES (:idTienda, :idDivision, :costo, :gratis, :estado)
+            ON CONFLICT (id_tienda, id_division) DO UPDATE
+               SET costo = EXCLUDED.costo, envio_gratis_desde = EXCLUDED.envio_gratis_desde, estado = EXCLUDED.estado
+            """, nativeQuery = true)
+    int guardarZona(@Param("idTienda") Long idTienda, @Param("idDivision") Long idDivision,
+                    @Param("costo") BigDecimal costo, @Param("gratis") BigDecimal envioGratisDesde,
+                    @Param("estado") Short estado);
+
+    @Modifying
+    @Query(value = "DELETE FROM zonas_delivery WHERE id_tienda = :idTienda AND id_division = :idDivision",
+           nativeQuery = true)
+    int borrarZona(@Param("idTienda") Long idTienda, @Param("idDivision") Long idDivision);
+
+    /** El delivery activo al distrito de una dirección del cliente (la misma regla del trigger T2). */
+    @Query(value = """
+            SELECT z.id_division AS "idDivision", d.nombre AS "distrito", pa.nombre AS "provincia",
+                   z.costo AS "costo", z.envio_gratis_desde AS "envioGratisDesde", z.estado AS "estado"
+              FROM direcciones dir
+              JOIN zonas_delivery z ON z.id_division = dir.id_division AND z.id_tienda = :idTienda AND z.estado = 1
+              JOIN divisiones d ON d.id_division = z.id_division
+              LEFT JOIN divisiones pa ON pa.id_division = d.id_padre
+             WHERE dir.id_direccion = :idDireccion AND dir.id_login = :idLogin AND dir.estado = 1
+            """, nativeQuery = true)
+    Optional<Zona> deliveryPara(@Param("idTienda") Long idTienda, @Param("idLogin") Long idLogin,
+                                @Param("idDireccion") Long idDireccion);
+
     /** Países a los que una tienda vende: el suyo y los que tienen tarifa internacional activa. */
     interface PaisEnvio {
         String getIdPais();
