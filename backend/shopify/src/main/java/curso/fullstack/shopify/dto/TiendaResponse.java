@@ -42,7 +42,8 @@ public record TiendaResponse(
         Boolean soporte,            // true: quien la mira es soporte de Vendely, con permiso del dueño
         OffsetDateTime soporteHasta, // hasta cuándo soporte de Vendely puede entrar (null = sin permiso)
         String whatsapp,            // +51987654321 o null (V17)
-        String rubro                // moda, tecnologia, comida, belleza, hogar, deporte, mascotas, otro o null
+        String rubro,               // moda, tecnologia, comida, belleza, hogar, deporte, mascotas, otro o null
+        Boolean puedeVender         // false: en Perú, falta el RUC del dueño y la tienda no recibe pedidos (V24)
 ) {
     private static final List<String> TODOS = Arrays.stream(PermisoTienda.values()).map(Enum::name).toList();
 
@@ -69,6 +70,7 @@ public record TiendaResponse(
                 esDueno, lista, DisenoTienda.de(t),
                 t.getTema(), t.getTemaAplicadoEl(),
                 plan == null ? null : plan.getMaxProductos() == null ? null : plan.getMaxProductos().intValue(),
-                soporte, t.soporteActivo() ? t.getSoporteHasta() : null, t.getWhatsapp(), t.getRubro());
+                soporte, t.soporteActivo() ? t.getSoporteHasta() : null, t.getWhatsapp(), t.getRubro(),
+                !Boolean.FALSE.equals(t.getPuedeVender()));
     }
 }

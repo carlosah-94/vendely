@@ -41,6 +41,11 @@ public class Propietario {
     @Column(name = "numero_documento", nullable = false, length = 20)
     private String numeroDocumento;
 
+    /** RUC del dueño (V24): sin él, sus tiendas de Perú no pueden vender. Lo valida la base. */
+    @Setter
+    @Column(name = "ruc", length = 11)
+    private String ruc;
+
     @Setter
     @Column(name = "razon_social", length = 150)
     private String razonSocial;

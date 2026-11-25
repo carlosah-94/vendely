@@ -21,7 +21,12 @@ public record PerfilResponse(
         boolean dobleFactor,
         Negocio negocio
 ) {
-    /** tipoDocumento: "RUC", "DNI", "RUT"…; el documento no se edita (identifica al dueño). */
+    /**
+     * tipoDocumento: "RUC", "DNI", "RUT"…; el documento no se edita (identifica al dueño).
+     * pais: el del documento (PE, CL). ruc: el RUC registrado (V24) o null. listoParaVender: en
+     * Perú, true solo con RUC y razón social; en Chile, su RUT ya basta.
+     */
     public record Negocio(String tipoDocumento, String nombreDocumento, String numeroDocumento,
-                          String razonSocial, String telefonoComercial) {}
+                          String razonSocial, String telefonoComercial, String pais, String ruc,
+                          boolean listoParaVender) {}
 }

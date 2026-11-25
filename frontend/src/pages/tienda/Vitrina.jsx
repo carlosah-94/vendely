@@ -153,7 +153,8 @@ export default function Vitrina() {
       document.getElementById('catalogo')?.scrollIntoView({ behavior: 'smooth' });
     },
     elegirCategoria: (slug) => cambiarFiltro({ categoria: slug }),
-    agregarAlCarrito: (p) => {
+    // Una tienda que todavía no vende (sin RUC del dueño, V24) muestra sus productos sin botón de compra.
+    agregarAlCarrito: tienda.puedeVender === false ? null : (p) => {
       // Un producto que pide un dato (el texto de la torta) se agrega desde su página.
       if (p.preguntaCliente) {
         navigate(`/tienda/${subdominio}/producto/${p.idProducto}`);

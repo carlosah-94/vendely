@@ -57,12 +57,69 @@ public class PerfilService {
 
         Optional<Propietario> propietario = propietarioRepository.findByIdLogin(l.getIdLogin());
         propietario.ifPresent(p -> {
-            p.setRazonSocial(vacioANull(r.razonSocial()));
             p.setTelefonoComercial(vacioANull(r.telefonoComercial()));
+            datosTributarios(p, l, vacioANull(r.ruc()), vacioANull(r.razonSocial()));
             propietarioRepository.saveAndFlush(p);
         });
         log.info("Perfil actualizado: idLogin={}", l.getIdLogin());
         return new Guardado(respuesta(l, propietario), UsuarioResponse.desde(l));
+    }
+
+    /**
+     * RUC y razón social del dueño (V24). Las mismas reglas que la base, con mensajes claros:
+     *   - Perú: el RUC con su dígito verificador correcto. Si se registró con su RUC, es ese mismo.
+     *     Un RUC 10 de una persona con DNI lleva su DNI adentro. Con RUC, la razón social es
+     *     obligatoria; con RUC 10, si no la escribe, es su nombre completo.
+     *   - Otros países (Chile): su RUT ya es su identificación tributaria; aquí no hay RUC.
+     */
+    private void datosTributarios(Propietario p, Login l, String ruc, String razonSocial) {
+        String pais = paisDelDocumento(p);
+        if (!"PE".equals(pais)) {
+            p.setRazonSocial(razonSocial);
+            return;
+        }
+        if (p.getTipoDocumento() == 2) {
+            // Se registró con su RUC: es ese mismo y no cambia. Una cuenta antigua con un RUC que no
+            // pasa el verificador no puede vender; guarda su razón social y lo resuelve con soporte.
+            if (!DocumentoTributario.esRucValido(p.getNumeroDocumento())) {
+                p.setRazonSocial(razonSocial);
+                return;
+            }
+            ruc = p.getNumeroDocumento();
+        }
+        if (ruc == null) {
+            p.setRuc(null);
+            p.setRazonSocial(razonSocial);
+            return;
+        }
+        if (!DocumentoTributario.esRucValido(ruc)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "El RUC no es válido: revisa los números (el último dígito no coincide)");
+        }
+        if (p.getTipoDocumento() == 1 && ruc.startsWith("10") && !ruc.substring(2, 10).equals(p.getNumeroDocumento())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "Tu RUC 10 debe contener tu DNI: 10 + " + p.getNumeroDocumento() + " + un dígito");
+        }
+        if (razonSocial == null && ruc.startsWith("10")) razonSocial = nombreCompleto(l);
+        if (razonSocial == null || razonSocial.length() < 3) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "Escribe la razón social: el nombre legal de tu negocio registrado en la SUNAT");
+        }
+        if (propietarioRepository.existsByRucAndIdPropietarioNot(ruc, p.getIdPropietario())) {
+            throw new ApiException(HttpStatus.CONFLICT, "Ese RUC ya está registrado en otra cuenta de Vendely");
+        }
+        p.setRuc(ruc);
+        p.setRazonSocial(razonSocial);
+    }
+
+    private String paisDelDocumento(Propietario p) {
+        return jdbc.queryForObject("SELECT id_pais FROM tipos_documento WHERE id_tipo_documento = ?",
+                String.class, p.getTipoDocumento());
+    }
+
+    private static String nombreCompleto(Login l) {
+        return String.join(" ", java.util.stream.Stream.of(l.getNombres(), l.getPrimerApellido(), l.getSegundoApellido())
+                .filter(x -> x != null && !x.isBlank()).map(String::trim).toList());
     }
 
     // ------------------------------------------------------------------ apoyo
@@ -78,9 +135,10 @@ public class PerfilService {
                     "SELECT codigo, nombre FROM tipos_documento WHERE id_tipo_documento = ?",
                     (rs, i) -> new String[] {rs.getString("codigo"), rs.getString("nombre")},
                     p.getTipoDocumento());
+            String pais = paisDelDocumento(p);
             return new PerfilResponse.Negocio(tipo.isEmpty() ? null : tipo.get(0)[0],
                     tipo.isEmpty() ? null : tipo.get(0)[1], p.getNumeroDocumento(), p.getRazonSocial(),
-                    p.getTelefonoComercial());
+                    p.getTelefonoComercial(), pais, p.getRuc(), !"PE".equals(pais) || p.getRuc() != null);
         }).orElse(null);
         return new PerfilResponse(l.getIdLogin(), l.getUsuario(), l.getCorreo(), l.getNombres(),
                 l.getPrimerApellido(), l.getSegundoApellido(), l.getTelefono(), l.getRol().name(),

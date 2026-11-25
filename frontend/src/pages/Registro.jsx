@@ -7,6 +7,7 @@ import { NOMBRE_MONEDA, usePaisesHabilitados } from '../hooks/usePaisesHabilitad
 import { api, mensajeDeError } from '../services/api';
 import { estiloInput } from '../utils/estilos';
 import SelectorRubro from '../components/SelectorRubro';
+import { problemaRuc, rutValido } from '../utils/documentos';
 
 /**
  * Países donde un dueño puede registrarse: los que tienen tipos de documento en la tabla
@@ -19,11 +20,11 @@ import SelectorRubro from '../components/SelectorRubro';
 const TIPOS_DOCUMENTO = [
   { pais: 'Perú', idPais: 'PE', prefijo: '+51', tipos: [
     { id: 1, codigo: 'DNI', patron: /^[0-9]{8}$/, ejemplo: '12345678' },
-    { id: 2, codigo: 'RUC', patron: /^(10|15|17|20)[0-9]{9}$/, ejemplo: '20601234567', empresa: true },
+    { id: 2, codigo: 'RUC', patron: /^(10|15|17|20)[0-9]{9}$/, ejemplo: '20601234565', empresa: true },
     { id: 3, codigo: 'Carné de extranjería', patron: /^[0-9]{9}$/, ejemplo: '123456789' },
   ] },
   { pais: 'Chile', idPais: 'CL', prefijo: '+56', tipos: [
-    { id: 4, codigo: 'RUT', patron: /^[0-9]{7,8}-[0-9K]$/, ejemplo: '12345678-K', empresa: true },
+    { id: 4, codigo: 'RUT', patron: /^[0-9]{7,8}-[0-9K]$/, ejemplo: '12345678-5', empresa: true },
   ] },
   { pais: 'México', idPais: 'MX', prefijo: '+52', tipos: [
     { id: 5, codigo: 'RFC', patron: /^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/, ejemplo: 'ABC010203XYZ', empresa: true },
@@ -112,6 +113,11 @@ function validarCuenta(d) {
     e.tipoDocumento = 'Elige el tipo de documento';
   } else if (!tipo.patron.test(d.numeroDocumento.trim().toUpperCase())) {
     e.numeroDocumento = `Formato no válido. Ejemplo: ${tipo.ejemplo}`;
+  } else if (tipo.id === 2 && problemaRuc(d.numeroDocumento.trim())) {
+    // V24: además del formato, el dígito verificador (un RUC mal escrito o inventado no pasa).
+    e.numeroDocumento = problemaRuc(d.numeroDocumento.trim());
+  } else if (tipo.id === 4 && !rutValido(d.numeroDocumento.trim().toUpperCase())) {
+    e.numeroDocumento = 'El RUT no es válido: revisa los números y el dígito verificador';
   }
   return e;
 }

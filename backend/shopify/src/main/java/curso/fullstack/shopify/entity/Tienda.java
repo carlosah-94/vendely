@@ -163,6 +163,10 @@ public class Tienda {
     @Column(name = "contenido_rubro", columnDefinition = "jsonb")
     private ContenidoRubro contenidoRubro;
 
+    /** ¿Ya puede vender? En Perú, solo si su dueño registró su RUC (V24, fn_tienda_puede_vender). */
+    @org.hibernate.annotations.Formula("fn_tienda_puede_vender(id_tienda)")
+    private Boolean puedeVender;
+
     /** WhatsApp de la tienda con código de país (+51987654321), V17. null = sin botón de WhatsApp. Todos los planes. */
     @Setter
     @Column(name = "whatsapp", length = 16)
