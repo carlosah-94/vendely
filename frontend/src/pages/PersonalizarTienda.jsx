@@ -11,7 +11,7 @@ import { api, mensajeDeError } from '../services/api';
 import { revisarArchivo, subirImagen } from '../services/imagenes';
 import { BOTONES, DISENO_INICIAL, FONDOS, FUENTES, disenoDe, enlaceSeguro } from '../utils/diseno';
 import { listarCategorias } from '../services/categorias';
-import { temaActual } from '../utils/temas';
+import { esTemaRubro, rubroIntacto, temaActual } from '../utils/temas';
 import { BOTON, TARJETA, inputPanel } from '../utils/panel';
 import { PATRON_WHATSAPP, normalizarWhatsapp } from '../utils/whatsapp';
 
@@ -90,6 +90,7 @@ function desdeTienda(t) {
     mostrarGarantias: d.mostrarGarantias,
     mostrarDestacado: d.mostrarDestacado,
     mostrarCategorias: d.mostrarCategorias,
+    mostrarSeccionRubro: d.mostrarSeccionRubro !== false,
     pro: formularioPro(d.pro),
   };
 }
@@ -124,6 +125,8 @@ function Editor({ tienda, tiendas, idTienda, onCambiarTienda }) {
   const [v, setV] = useState(() => desdeTienda(tienda));
   const personaliza = tienda.permitePersonalizar !== false;
   const conPlantillas = tienda.permitePlantillas !== false;
+  // Plan Gratis con la plantilla de su rubro intacta: la vista previa la muestra con sus colores.
+  const rubroFijo = !personaliza && rubroIntacto(tienda);
   const [errores, setErrores] = useState({});
   const [error, setError] = useState('');
   const [guardando, setGuardando] = useState(false);
@@ -224,6 +227,7 @@ function Editor({ tienda, tiendas, idTienda, onCambiarTienda }) {
         mostrarGarantias: v.mostrarGarantias,
         mostrarDestacado: v.mostrarDestacado,
         mostrarCategorias: v.mostrarCategorias,
+        mostrarSeccionRubro: v.mostrarSeccionRubro,
       });
       setV(desdeTienda(data));
       avisar('Tienda actualizada');
@@ -241,12 +245,16 @@ function Editor({ tienda, tiendas, idTienda, onCambiarTienda }) {
     nombre: v.nombre || 'Tu tienda',
     descripcion: v.descripcion,
     logoUrl: personaliza && ES_URL.test(v.logoUrl.trim()) ? v.logoUrl.trim() : null,
-    colorPrincipal: personaliza && HEX.test(v.colorPrincipal) ? v.colorPrincipal : null,
+    // La plantilla de su rubro, sin cambios, se ve con sus colores en cualquier plan (como la vitrina).
+    colorPrincipal: personaliza && HEX.test(v.colorPrincipal) ? v.colorPrincipal : rubroFijo ? tienda.colorPrincipal : null,
     plantilla: conPlantillas ? v.plantilla : 'clasica',
     permiteInvitados: v.permiteInvitados,
     selloVendely: !personaliza,
     diseno: {
       ...DISENO_INICIAL,
+      ...(rubroFijo && {
+        colorAcento: disenoDe(tienda).colorAcento, fuente: disenoDe(tienda).fuente, estiloBotones: disenoDe(tienda).estiloBotones,
+      }),
       ...(personaliza && {
         colorAcento: HEX.test(v.colorAcento) ? v.colorAcento : null,
         textoAnuncio: v.textoAnuncio.trim() || null,
@@ -259,9 +267,10 @@ function Editor({ tienda, tiendas, idTienda, onCambiarTienda }) {
       mostrarGarantias: v.mostrarGarantias,
       mostrarDestacado: v.mostrarDestacado,
       mostrarCategorias: v.mostrarCategorias,
+      mostrarSeccionRubro: v.mostrarSeccionRubro,
       ...(conPlantillas && { pro: proParaEnviar(v.pro, true) }),
     },
-  }), [v, personaliza, conPlantillas]);
+  }), [v, personaliza, conPlantillas, rubroFijo, tienda]);
 
   return (
     <section className="space-y-4">
@@ -441,6 +450,11 @@ function Editor({ tienda, tiendas, idTienda, onCambiarTienda }) {
               onCambiar={(x) => cambiar('mostrarDestacado', x)} />
             <Interruptor etiqueta="Categorías" ayuda="Accesos a cada categoría en la portada" valor={v.mostrarCategorias}
               onCambiar={(x) => cambiar('mostrarCategorias', x)} />
+            {esTemaRubro(tienda.tema) && (
+              <Interruptor etiqueta="Sección de tu rubro" valor={v.mostrarSeccionRubro}
+                ayuda="La sección pensada para tu negocio: cómo pedir y recojo (comida), marcas y garantía (tecnología), guía de tallas (moda), rutina y preguntas (belleza)..."
+                onCambiar={(x) => cambiar('mostrarSeccionRubro', x)} />
+            )}
           </Seccion>
 
           <div className="sticky bottom-0 -mx-1 flex items-center justify-end gap-3 bg-[#f1f1f1]/90 px-1 py-3 backdrop-blur">

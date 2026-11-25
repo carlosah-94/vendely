@@ -202,3 +202,12 @@ body {
     opacity: 1;
   }
 }
+
+/* Plantillas por rubro (V22): sello que gira despacio y elementos que flotan. */
+.giro-lento { animation: giro-lento 18s linear infinite; }
+@keyframes giro-lento { to { transform: rotate(360deg); } }
+.flotar { animation: flotar 6s ease-in-out infinite; }
+@keyframes flotar { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+@media (prefers-reduced-motion: reduce) {
+  .giro-lento, .flotar { animation: none !important; }
+}

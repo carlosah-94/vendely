@@ -63,7 +63,9 @@ public record TiendaActualizarRequest(
         // Tema aplicado desde Tienda online → Temas (V13). Opcional: null = no cambia. Es solo el
         // nombre: los colores, la letra, la plantilla... del tema llegan en los campos de arriba,
         // y con ellos se valida el plan.
-        @Pattern(regexp = "^(esencial|mercado|minimal|escaparate|pop|atelier|arena)$", message = "Ese tema no existe")
+        // Plantillas por rubro (V22): horno, circuito, impulso, pasarela, glow, nido, huellitas.
+        @Pattern(regexp = "^(esencial|mercado|minimal|escaparate|pop|atelier|arena|horno|circuito|impulso|pasarela|glow|nido|huellitas)$",
+                message = "Ese tema no existe")
         String tema,
 
         // Diseño avanzado del plan Pro (V15). null = no cambia. Quitarlo todo (portada de siempre,
@@ -78,5 +80,8 @@ public record TiendaActualizarRequest(
 
         // Qué vende (V17). null = no cambia. Cambiarlo no crea categorías: el kit es solo al crear.
         @Pattern(regexp = "^(moda|tecnologia|comida|belleza|hogar|deporte|mascotas|otro)$", message = "Ese rubro no existe")
-        String rubro
+        String rubro,
+
+        // Sección propia del rubro en la portada (V22). null = no cambia. Cualquier plan.
+        Boolean mostrarSeccionRubro
 ) {}

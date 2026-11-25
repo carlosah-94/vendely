@@ -1,8 +1,9 @@
 import { RUBROS } from '../utils/rubros';
+import { temaDeRubro } from '../utils/temas';
 
 /**
- * "¿Qué vas a vender?": una opción por rubro. Debajo se ve qué categorías trae el kit, para que el
- * dueño sepa qué va a encontrar al entrar a su tienda.
+ * "¿Qué vas a vender?": una opción por rubro, con los colores de su plantilla (V22). Debajo se ve
+ * qué plantilla y qué categorías trae, para que el dueño sepa qué va a encontrar al entrar.
  */
 export default function SelectorRubro({ valor, onCambiar }) {
   const elegido = RUBROS.find((r) => r.id === valor);
@@ -12,6 +13,7 @@ export default function SelectorRubro({ valor, onCambiar }) {
       <div role="radiogroup" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {RUBROS.map((r) => {
           const activo = r.id === valor;
+          const tema = temaDeRubro(r.id);
           return (
             <button
               key={r.id}
@@ -23,14 +25,24 @@ export default function SelectorRubro({ valor, onCambiar }) {
                 activo ? 'border-[#303030] bg-[#303030] text-white' : 'border-[#d4d4d4] bg-white text-[#303030] hover:border-[#8a8a8a]'
               }`}
             >
-              {r.nombre}
+              <span className="flex items-center justify-center gap-1.5">
+                {tema && (
+                  <span aria-hidden="true" className="flex shrink-0">
+                    <span className="h-3 w-3 rounded-full ring-1 ring-white" style={{ background: tema.colorPrincipal }} />
+                    <span className="-ml-1 h-3 w-3 rounded-full ring-1 ring-white" style={{ background: tema.estilo.colorAcento }} />
+                  </span>
+                )}
+                {r.nombre}
+              </span>
             </button>
           );
         })}
       </div>
       <p className="mt-1.5 text-[12px] text-[#616161]">
         {elegido
-          ? elegido.id === 'otro' ? elegido.kit : `Tu tienda empieza con: ${elegido.kit}. Puedes cambiarlas cuando quieras.`
+          ? elegido.id === 'otro'
+            ? elegido.kit
+            : <>Tu tienda nace con la plantilla <b>{temaDeRubro(elegido.id)?.nombre}</b> y las categorías {elegido.kit}. Puedes cambiarlo cuando quieras.</>
           : 'Te armamos la tienda con categorías y textos pensados para tu negocio.'}
       </p>
     </fieldset>
