@@ -91,7 +91,17 @@ public class PagoService {
      */
     @Transactional
     public PagoIniciadoResponse iniciar(UsuarioAutenticado yo, Long idPedido, MetodoPago metodo) {
-        Pedido p = pedidoDelCliente(yo, idPedido);
+        return iniciar(pedidoDelCliente(yo, idPedido), metodo);
+    }
+
+    /** Lo mismo para el pedido de un invitado (su clave ya la revisó el controlador). */
+    @Transactional
+    public PagoIniciadoResponse iniciarInvitado(Long idTienda, Long idPedido, MetodoPago metodo) {
+        return iniciar(pedidoDeInvitado(idTienda, idPedido), metodo);
+    }
+
+    private PagoIniciadoResponse iniciar(Pedido p, MetodoPago metodo) {
+        Long idPedido = p.getIdPedido();
         if (pagoRepository.existsByIdPedidoAndEstado(idPedido, Pago.APROBADO)) {
             throw new ApiException(HttpStatus.CONFLICT, "El pedido #" + p.getNumeroPedido() + " ya está pagado");
         }
@@ -191,6 +201,12 @@ public class PagoService {
     @Transactional
     public ResultadoPagoResponse confirmar(UsuarioAutenticado yo, Long idPedido, String paymentId) {
         return aplicarPago(pedidoDelCliente(yo, idPedido), paymentId, null);
+    }
+
+    /** Confirmación del pago de un invitado: el mismo camino, sin cuenta. */
+    @Transactional
+    public ResultadoPagoResponse confirmarInvitado(Long idTienda, Long idPedido, String paymentId) {
+        return aplicarPago(pedidoDeInvitado(idTienda, idPedido), paymentId, null);
     }
 
     /**
@@ -729,6 +745,13 @@ public class PagoService {
     private Pedido pedidoDelCliente(UsuarioAutenticado yo, Long idPedido) {
         return pedidoRepository.findByIdPedidoAndIdTienda(idPedido, yo.idTienda())
                 .filter(p -> yo.idLogin().equals(p.getIdLogin()))
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El pedido no existe"));
+    }
+
+    /** Pedido sin cuenta (id_login NULL) de esa tienda; el de un cliente no se paga por aquí. */
+    private Pedido pedidoDeInvitado(Long idTienda, Long idPedido) {
+        return pedidoRepository.findByIdPedidoAndIdTienda(idPedido, idTienda)
+                .filter(p -> p.getIdLogin() == null)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El pedido no existe"));
     }
 

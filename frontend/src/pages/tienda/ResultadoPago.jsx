@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useOutletContext, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useOutletContext, useSearchParams } from 'react-router-dom';
 import { IconoCerrar, IconoCheck } from '../../components/Iconos';
+import { useAuth } from '../../context/AuthContext';
 import { useCarrito } from '../../context/CarritoContext';
+import { confirmarPagoInvitado, iniciarPagoInvitado } from '../../services/invitado';
+import { clavePedido } from '../../utils/compraInvitado';
 import { mensajeDeError } from '../../services/api';
 import { confirmarPago, iniciarPago } from '../../services/tienda';
 import { metodoDelRegreso } from '../../utils/metodosPago';
@@ -15,14 +18,20 @@ import { borrarPedidoEnCurso } from '../../utils/pedidoEnCurso';
  * NUNCA se cree el "status" de la URL: el backend consulta el pago en la pasarela.
  */
 export default function ResultadoPago() {
-  const { subdominio } = useOutletContext();
+  const { subdominio, tienda } = useOutletContext();
   const [params] = useSearchParams();
   const { vaciar } = useCarrito();
+  const { usuario, cargando } = useAuth();
+  const location = useLocation();
 
   const paymentId = params.get('payment_id') ?? params.get('collection_id') ?? params.get('token');
   const idPedido = params.get('external_reference') ?? params.get('pedido');
   const cancelado = params.get('cancelado') === '1';
   const sinDatos = cancelado || !paymentId || !idPedido || paymentId === 'null';
+  // Cliente con sesión, o invitado que compró en este navegador (tiene la clave de ese pedido).
+  const esCliente = usuario?.rol === 'CLIENTE' && usuario.idTienda === tienda.idTienda;
+  const invitado = !esCliente && Boolean(idPedido && clavePedido(subdominio, idPedido));
+  const listo = !cargando && (esCliente || invitado);
 
   // Sin payment_id el cliente volvió sin pagar: no hay nada que confirmar.
   const [estado, setEstado] = useState({ fase: sinDatos ? 'rechazado' : 'cargando', numero: null, error: '' });
@@ -31,11 +40,12 @@ export default function ResultadoPago() {
   const yaConfirmado = useRef(false);
 
   useEffect(() => {
-    if (sinDatos || yaConfirmado.current) {
+    if (sinDatos || !listo || yaConfirmado.current) {
       return;
     }
     yaConfirmado.current = true;
-    confirmarPago(idPedido, paymentId)
+    const confirmar = invitado ? confirmarPagoInvitado(subdominio, idPedido, paymentId) : confirmarPago(idPedido, paymentId);
+    confirmar
       .then((r) => {
         if (r.estadoPago === 'APROBADO') {
           vaciar();
@@ -48,14 +58,16 @@ export default function ResultadoPago() {
         }
       })
       .catch((e) => setEstado({ fase: 'rechazado', numero: null, error: mensajeDeError(e) }));
-  }, [sinDatos, idPedido, paymentId, vaciar, subdominio]);
+  }, [sinDatos, listo, invitado, idPedido, paymentId, vaciar, subdominio]);
 
   async function reintentar() {
     setReintentando(true);
     setErrorReintento('');
     try {
       // Se reintenta con la misma pasarela de la que volvió (si se sabe); si no, la de por defecto.
-      const { urlPago } = await iniciarPago(idPedido, metodoDelRegreso(params));
+      const { urlPago } = invitado
+        ? await iniciarPagoInvitado(subdominio, idPedido, metodoDelRegreso(params))
+        : await iniciarPago(idPedido, metodoDelRegreso(params));
       window.location.href = urlPago;
     } catch (e) {
       setErrorReintento(mensajeDeError(e));
@@ -64,6 +76,17 @@ export default function ResultadoPago() {
   }
 
   const base = `/tienda/${subdominio}`;
+  // El invitado no tiene "Mis pedidos": va a la página de su pedido (la abre su clave).
+  const enlacePedidos = invitado ? `${base}/pedido/${idPedido}` : `${base}/mis-pedidos`;
+  const textoPedidos = invitado ? 'Ver mi pedido' : 'Ver mis pedidos';
+
+  if (cargando) {
+    return <p className="p-16 text-center text-[#616161]">Cargando...</p>;
+  }
+  if (!esCliente && !invitado) {
+    // Ni sesión ni clave de este pedido (otro navegador): que inicie sesión, o use el enlace del correo.
+    return <Navigate to={`${base}/ingresar`} replace state={{ volver: location.pathname + location.search }} />;
+  }
 
   if (estado.fase === 'cargando') {
     return <p className="p-16 text-center text-[#616161]">Confirmando tu pago...</p>;
@@ -79,8 +102,8 @@ export default function ResultadoPago() {
         <p className="text-lg font-medium text-green-700">Pago aprobado</p>
         <p className="text-[#616161]">Tu pedido #{estado.numero} fue confirmado. Te enviaremos tu compra a la dirección indicada.</p>
         <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:justify-center">
-          <Link to={`${base}/mis-pedidos`} className="rounded-md bg-[var(--tienda)] px-6 py-3 font-medium text-[var(--tienda-texto)] hover:brightness-90">
-            Ver mis pedidos
+          <Link to={enlacePedidos} className="rounded-md bg-[var(--tienda)] px-6 py-3 font-medium text-[var(--tienda-texto)] hover:brightness-90">
+            {textoPedidos}
           </Link>
           <Link to={base} className="rounded-md border border-[#303030] px-6 py-3 font-medium">
             Seguir comprando
@@ -94,9 +117,9 @@ export default function ResultadoPago() {
     return (
       <div className="mx-auto max-w-md space-y-4 px-4 py-16 text-center">
         <h1 className="text-3xl font-semibold tracking-tight">Tu pago está pendiente</h1>
-        <p className="text-[#616161]">La pasarela aún no confirma el pago del pedido #{estado.numero}. Revisa más tarde en Mis pedidos.</p>
-        <Link to={`${base}/mis-pedidos`} className="inline-block rounded-md bg-[var(--tienda)] px-6 py-3 font-medium text-[var(--tienda-texto)]">
-          Ver mis pedidos
+        <p className="text-[#616161]">La pasarela aún no confirma el pago del pedido #{estado.numero}. Revisa más tarde {invitado ? 'en tu pedido' : 'en Mis pedidos'}.</p>
+        <Link to={enlacePedidos} className="inline-block rounded-md bg-[var(--tienda)] px-6 py-3 font-medium text-[var(--tienda-texto)]">
+          {textoPedidos}
         </Link>
       </div>
     );
@@ -123,8 +146,8 @@ export default function ResultadoPago() {
             {reintentando ? 'Un momento...' : 'Reintentar pago'}
           </button>
         )}
-        <Link to={`${base}/mis-pedidos`} className="rounded-md border border-[#303030] px-6 py-3 font-medium">
-          Ver mis pedidos
+        <Link to={enlacePedidos} className="rounded-md border border-[#303030] px-6 py-3 font-medium">
+          {textoPedidos}
         </Link>
       </div>
     </div>

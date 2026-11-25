@@ -4,6 +4,7 @@ import curso.fullstack.shopify.repository.EnvioRepository;
 import curso.fullstack.shopify.entity.PermisoTienda;
 import curso.fullstack.shopify.dto.DatosComprobante;
 import curso.fullstack.shopify.dto.EnvioPedidoRequest;
+import curso.fullstack.shopify.dto.PedidoInvitadoRequest;
 import curso.fullstack.shopify.dto.LineaVentaRequest;
 import curso.fullstack.shopify.dto.LineaVentaResponse;
 import curso.fullstack.shopify.dto.PedidoClienteRequest;
@@ -99,7 +100,8 @@ public class PedidoService {
                 .filter(l -> l.getRol() == RolUsuario.CLIENTE && idTienda.equals(l.getIdTienda()))
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El cliente no existe en esta tienda"));
 
-        return crearPedido(idTienda, cliente, r.idDireccionEnvio(), r.lineas(), null, TipoEntrega.ENVIO, false, null);
+        return crearPedido(idTienda, cliente.getIdLogin(), cliente.getCorreo(), r.idDireccionEnvio(), r.lineas(), null,
+                TipoEntrega.ENVIO, false, null);
     }
 
     /**
@@ -117,27 +119,58 @@ public class PedidoService {
                 .filter(l -> l.getRol() == RolUsuario.CLIENTE && yo.idTienda().equals(l.getIdTienda()))
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El cliente no existe en esta tienda"));
 
-        return crearPedido(yo.idTienda(), cliente, r.idDireccionEnvio(), r.lineas(), r.codigoCupon(),
-                TipoEntrega.de(r.tipoEntrega()), true, r.comprobante());
+        return crearPedido(yo.idTienda(), cliente.getIdLogin(), cliente.getCorreo(), r.idDireccionEnvio(), r.lineas(),
+                r.codigoCupon(), TipoEntrega.de(r.tipoEntrega()), true, r.comprobante());
+    }
+
+    /**
+     * Pedido de un invitado (sin cuenta), desde la tienda pública: id_login NULL y el correo que
+     * escribió. La tienda debe aceptar invitados (lo exige también la base, tg_pedidos_invitado).
+     * La dirección es suya: el controlador ya revisó su clave.
+     */
+    @Transactional
+    public VentaResponse registrarComoInvitado(Tienda tienda, PedidoInvitadoRequest r) {
+        if (!tienda.estaActiva()) {
+            throw new ApiException(HttpStatus.CONFLICT, "La tienda está suspendida");
+        }
+        if (!Boolean.TRUE.equals(tienda.getPermiteInvitados())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "Esta tienda pide iniciar sesión para comprar");
+        }
+        return crearPedido(tienda.getIdTienda(), null, r.correo().trim().toLowerCase(java.util.Locale.ROOT),
+                r.idDireccionEnvio(), r.lineas(), r.codigoCupon(), TipoEntrega.de(r.tipoEntrega()), true, r.comprobante());
+    }
+
+    /** El pedido de un invitado (la clave ya se revisó): solo si es de esa tienda y sin cuenta. */
+    @Transactional(readOnly = true)
+    public VentaResponse pedidoDeInvitado(Long idTienda, Long idPedido) {
+        Pedido p = buscarEnTienda(idPedido, idTienda);
+        if (p.getIdLogin() != null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "El pedido no existe");
+        }
+        return conLineas(p);
     }
 
     /**
      * Lógica común de una venta (panel y tienda): valida la dirección, descuenta el stock,
      * toma el precio vigente y guarda pedido + líneas. Debe llamarse dentro de una transacción.
      */
-    private VentaResponse crearPedido(Long idTienda, Login cliente, Long idDireccion, List<LineaVentaRequest> lineasPedidas,
+    private VentaResponse crearPedido(Long idTienda, Long idLogin, String correo, Long idDireccion, List<LineaVentaRequest> lineasPedidas,
                                       String codigoCupon, TipoEntrega tipoEntrega, boolean exigirRespuestas,
                                       DatosComprobante comprobante) {
         // 0. Boleta o factura (V25): se revisa antes de tocar el stock, con mensajes claros.
         boolean enPeru = tiendaRepository.findById(idTienda).map(t -> "PE".equals(t.getIdPais())).orElse(false);
         Comprobante datosComprobante = enPeru ? Comprobante.revisar(comprobante) : Comprobante.NINGUNO;
-        // 1. La dirección es suya y está activa
-        if (!direccionRepository.existsByIdDireccionAndIdLoginAndEstado(idDireccion, cliente.getIdLogin(), (short) 1)) {
+        // 1. La dirección es suya y está activa (la de un invitado tiene id_login NULL; su clave ya se revisó)
+        boolean suya = idLogin == null
+                ? direccionRepository.findById(idDireccion).filter(d -> d.getIdLogin() == null
+                        && Short.valueOf((short) 1).equals(d.getEstado())).isPresent()
+                : direccionRepository.existsByIdDireccionAndIdLoginAndEstado(idDireccion, idLogin, (short) 1);
+        if (!suya) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "La dirección de envío no es de este cliente");
         }
         // 1b. Una dirección en otro país solo si el plan incluye envíos internacionales. Las tarifas
         //     guardadas de un plan anterior no se usan (el trigger de la base las cobraría igual).
-        Optional<EnvioRepository.Cotizacion> cotizacion = envioRepository.cotizar(idTienda, cliente.getIdLogin(), idDireccion);
+        Optional<EnvioRepository.Cotizacion> cotizacion = envioRepository.cotizar(idTienda, idLogin, idDireccion);
         boolean internacional = cotizacion.map(c -> Boolean.TRUE.equals(c.getInternacional())).orElse(false);
         if (internacional && !planService.permite(idTienda, FuncionPlan.ENVIO_INTERNACIONAL)) {
             throw new ApiException(HttpStatus.CONFLICT, "Esta tienda no envía a " + cotizacion.get().getPais()
@@ -148,7 +181,7 @@ public class PedidoService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "El delivery y el recojo en tienda son solo dentro del país de la tienda");
         }
         if (tipoEntrega == TipoEntrega.DELIVERY
-                && envioRepository.deliveryPara(idTienda, cliente.getIdLogin(), idDireccion).isEmpty()) {
+                && envioRepository.deliveryPara(idTienda, idLogin, idDireccion).isEmpty()) {
             throw new ApiException(HttpStatus.CONFLICT, "La tienda no hace delivery a ese distrito. Elige otra forma de entrega.");
         }
         if (tipoEntrega == TipoEntrega.RECOJO && !tiendaRepository.findById(idTienda)
@@ -237,15 +270,19 @@ public class PedidoService {
         // 4. Código de descuento (opcional): se revisa con el subtotal real y rebaja el pedido completo.
         //    Si ya no sirve (venció, se agotó...), 400 y @Transactional devuelve el stock descontado.
         CuponService.Aplicado cupon = codigoCupon == null || codigoCupon.isBlank() ? null
-                : cuponService.aplicar(idTienda, cliente.getIdLogin(), codigoCupon, subtotal);
+                : cuponService.aplicar(idTienda, idLogin, codigoCupon, subtotal);
+        // Un código "una vez por cliente" necesita saber quién es el cliente: un invitado no puede usarlo.
+        if (cupon != null && idLogin == null && cupon.cupon().isUnaVezPorCliente()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Ese código es para clientes con cuenta: inicia sesión para usarlo");
+        }
 
         // 5. Guardar el pedido: Java manda el subtotal; el trigger pone número, envío, total e impuesto (IGV, IVA)
         Pedido p = new Pedido();
         p.setIdTienda(idTienda);
-        p.setIdLogin(cliente.getIdLogin());
+        p.setIdLogin(idLogin);
         p.setIdDireccionEnvio(idDireccion);
         p.setTipoEntrega(tipoEntrega.codigo());
-        p.setCorreoContacto(cliente.getCorreo());
+        p.setCorreoContacto(correo);
         p.setSubtotal(subtotal);
         if (cupon != null) {
             p.setIdCupon(cupon.cupon().getIdCupon());

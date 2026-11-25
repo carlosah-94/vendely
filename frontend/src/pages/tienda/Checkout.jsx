@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Link, useOutletContext } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, Navigate, useLocation, useOutletContext } from 'react-router-dom';
 import BuscadorDistrito from '../../components/BuscadorDistrito';
 import Campo from '../../components/Campo';
 import { IconoCheck } from '../../components/Iconos';
@@ -11,6 +11,10 @@ import { mensajeDeError } from '../../services/api';
 import { cotizarEnvio, listarPaises } from '../../services/envios';
 import ElegirComprobante, { COMPROBANTE_INICIAL, comprobanteParaEnviar, problemaComprobante } from '../../components/tienda/ElegirComprobante';
 import { crearDireccion, crearPedido, iniciarPago, listarDirecciones, validarCupon, verMiPedido } from '../../services/tienda';
+import {
+  cotizarEnvioInvitado, crearDireccionInvitado, crearPedidoInvitado, iniciarPagoInvitado, validarCuponInvitado, verPedidoInvitado,
+} from '../../services/invitado';
+import { correoValido } from '../../utils/compraInvitado';
 import { estiloInput } from '../../utils/estilos';
 import { formatoMoneda } from '../../utils/formato';
 import { METODOS_PAGO, metodosDeTienda } from '../../utils/metodosPago';
@@ -25,13 +29,49 @@ import { borrarPedidoEnCurso, guardarPedidoEnCurso, huellaCarrito, leerPedidoEnC
  * reintentar el pago del mismo pedido.
  */
 export default function Checkout() {
+  const contexto = useOutletContext();
+  const { usuario, cargando } = useAuth();
+  const location = useLocation();
+  if (cargando) {
+    return <p className="p-8 text-[#616161]">Cargando...</p>;
+  }
+  const esCliente = usuario?.rol === 'CLIENTE' && usuario.idTienda === contexto.tienda.idTienda;
+  // Sin cuenta solo se compra si la tienda acepta invitados (la base también lo exige).
+  if (!esCliente && contexto.tienda.permiteInvitados === false) {
+    return <Navigate to={`/tienda/${contexto.subdominio}/ingresar`} replace state={{ volver: location.pathname }} />;
+  }
+  // key: si el cliente inicia o cierra sesión, el checkout empieza de nuevo con el otro modo.
+  return <CheckoutCompra key={esCliente ? 'cliente' : 'invitado'} esCliente={esCliente} />;
+}
+
+/**
+ * Compra como invitado (sin cuenta): pide el correo y la dirección con el nombre de quien recibe.
+ * Las mismas operaciones van por las rutas de invitado, con la clave secreta que da el backend.
+ */
+function useComprador(esCliente, subdominio) {
+  return useMemo(() => (esCliente
+    ? { cotizar: cotizarEnvio, validarCupon, crearPedido, iniciarPago, verPedido: verMiPedido }
+    : {
+      cotizar: (id, s) => cotizarEnvioInvitado(subdominio, id, s),
+      validarCupon: (c, s) => validarCuponInvitado(subdominio, c, s),
+      crearPedido: (d) => crearPedidoInvitado(subdominio, d),
+      iniciarPago: (id, m) => iniciarPagoInvitado(subdominio, id, m),
+      verPedido: (id) => verPedidoInvitado(subdominio, id),
+    }), [esCliente, subdominio]);
+}
+
+function CheckoutCompra({ esCliente }) {
   const { tienda, subdominio } = useOutletContext();
   const { usuario } = useAuth();
   const { items, subtotal, vaciar } = useCarrito();
+  const comprador = useComprador(esCliente, subdominio);
+  // Correo de contacto del invitado: ahí llegan la confirmación, el comprobante y el enlace al pedido.
+  const [correo, setCorreo] = useState('');
 
-  const [direcciones, setDirecciones] = useState(null); // null = cargando
+  // null = cargando. El invitado empieza sin direcciones, escribiendo la suya.
+  const [direcciones, setDirecciones] = useState(esCliente ? null : []);
   const [idDireccion, setIdDireccion] = useState(null);
-  const [nueva, setNueva] = useState(false);
+  const [nueva, setNueva] = useState(!esCliente);
   const [errorCarga, setErrorCarga] = useState('');
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -63,13 +103,13 @@ export default function Checkout() {
   useEffect(() => {
     if (!idDireccion || nueva) return undefined;
     let vigente = true;
-    cotizarEnvio(idDireccion, subtotal)
+    comprador.cotizar(idDireccion, subtotal)
       .then((datos) => vigente && setEnvio({ idDireccion, subtotal, datos, error: '' }))
       .catch((e) => vigente && setEnvio({ idDireccion, subtotal, datos: null, error: mensajeDeError(e) }));
     return () => {
       vigente = false;
     };
-  }, [idDireccion, nueva, subtotal]);
+  }, [idDireccion, nueva, subtotal, comprador]);
 
   // Solo vale la cotización de la dirección y el subtotal actuales.
   const cotizacion = envio && envio.idDireccion === idDireccion && envio.subtotal === subtotal && !nueva ? envio : null;
@@ -80,6 +120,7 @@ export default function Checkout() {
   const noEnvia = cotizacion?.datos && !cotizacion.datos.disponible;
 
   useEffect(() => {
+    if (!esCliente) return undefined;   // el invitado no tiene direcciones guardadas
     let vigente = true;
     listarDirecciones()
       .then((lista) => {
@@ -92,7 +133,7 @@ export default function Checkout() {
     return () => {
       vigente = false;
     };
-  }, []);
+  }, [esCliente]);
 
   // Al volver con "Atrás" el navegador puede restaurar la página tal como quedó al ir a la pasarela
   // (bfcache): botón en "Procesando..." y el pedido de antes. Se reinicia y se revisa de nuevo.
@@ -114,7 +155,7 @@ export default function Checkout() {
   const revisando = revisionHecha !== claveRevision;
   useEffect(() => {
     let vigente = true;
-    revisarPedidoEnCurso(subdominio, huella).then(({ pagado, pedido }) => {
+    revisarPedidoEnCurso(subdominio, huella, comprador.verPedido).then(({ pagado, pedido }) => {
       if (!vigente) return;
       if (pagado != null) {
         // Ya se pagó: no se puede pagar dos veces. El carrito de esa compra se vacía.
@@ -127,13 +168,13 @@ export default function Checkout() {
     return () => {
       vigente = false;
     };
-  }, [subdominio, huella, claveRevision, vaciar]);
+  }, [subdominio, huella, claveRevision, vaciar, comprador]);
 
   // Si el carrito cambia con un código aplicado, el descuento se vuelve a calcular (o se quita si ya no alcanza).
   useEffect(() => {
     if (!cupon || cupon.subtotal === subtotal) return undefined;
     let vigente = true;
-    validarCupon(cupon.codigo, subtotal)
+    comprador.validarCupon(cupon.codigo, subtotal)
       .then((r) => vigente && setCupon({ codigo: r.codigo, descuento: Number(r.descuento), subtotal }))
       .catch((e) => {
         if (!vigente) return;
@@ -143,7 +184,7 @@ export default function Checkout() {
     return () => {
       vigente = false;
     };
-  }, [cupon, subtotal]);
+  }, [cupon, subtotal, comprador]);
 
   async function aplicarCupon(e) {
     e.preventDefault();
@@ -152,7 +193,7 @@ export default function Checkout() {
     setAplicando(true);
     setErrorCupon('');
     try {
-      const r = await validarCupon(codigo, subtotal);
+      const r = await comprador.validarCupon(codigo, subtotal);
       setCupon({ codigo: r.codigo, descuento: Number(r.descuento), subtotal });
       setCodigoEscrito('');
     } catch (ex) {
@@ -164,6 +205,10 @@ export default function Checkout() {
 
   async function pagar() {
     setError('');
+    if (!esCliente && !pedidoCreado && !correoValido(correo)) {
+      setError('Escribe un correo válido: ahí te llegan la confirmación y tu comprobante.');
+      return;
+    }
     // El comprobante se revisa antes de crear el pedido (el servidor y la base lo revisan otra vez).
     if (conComprobante && !pedidoCreado
         && problemaComprobante(comprobante, subtotal - (cupon?.descuento ?? 0) + (costoEnvio ?? 0))) {
@@ -174,7 +219,8 @@ export default function Checkout() {
     try {
       let pedido = pedidoCreado;
       if (!pedido) {
-        pedido = await crearPedido({
+        pedido = await comprador.crearPedido({
+          ...(!esCliente && { correo: correo.trim() }),
           idDireccionEnvio: idDireccion,
           lineas: items.map((i) => ({ idVariante: i.idVariante, cantidad: i.cantidad, datoCliente: i.datoCliente ?? null })),
           codigoCupon: cupon?.codigo ?? null,
@@ -184,7 +230,7 @@ export default function Checkout() {
         setPedidoCreado(pedido);
       }
       guardarPedidoEnCurso(subdominio, pedido.idPedido, items);
-      const { urlPago } = await iniciarPago(pedido.idPedido, metodoElegido);
+      const { urlPago } = await comprador.iniciarPago(pedido.idPedido, metodoElegido);
       window.location.href = urlPago;
     } catch (e) {
       // 409 (stock insuficiente, etc.): se muestra el mensaje y no se continúa.
@@ -204,9 +250,13 @@ export default function Checkout() {
           El pago de tu pedido #{pedidoPagado} ya se aprobó. No necesitas pagarlo otra vez.
         </p>
         <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:justify-center">
-          <Link to={`/tienda/${subdominio}/mis-pedidos`} className="rounded-md bg-[var(--tienda)] px-6 py-3 font-medium text-[var(--tienda-texto)] hover:brightness-90">
-            Ver mis pedidos
-          </Link>
+          {esCliente ? (
+            <Link to={`/tienda/${subdominio}/mis-pedidos`} className="rounded-md bg-[var(--tienda)] px-6 py-3 font-medium text-[var(--tienda-texto)] hover:brightness-90">
+              Ver mis pedidos
+            </Link>
+          ) : (
+            <p className="text-sm text-[#616161]">Te enviamos el comprobante y el enlace a tu pedido por correo.</p>
+          )}
           <Link to={`/tienda/${subdominio}`} className="rounded-md border border-[#303030] px-6 py-3 font-medium">
             Seguir comprando
           </Link>
@@ -348,8 +398,26 @@ export default function Checkout() {
           {errorCarga && <Mensaje tipo="error" texto={errorCarga} />}
 
           <section className="space-y-2">
-            <h2 className="text-lg font-semibold">Contacto</h2>
-            <p className="rounded-md border border-[#d9d9d9] px-3 py-2.5 text-sm">{usuario.correo}</p>
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="text-lg font-semibold">Contacto</h2>
+              {!esCliente && (
+                <Link to={`/tienda/${subdominio}/ingresar`} state={{ volver: `/tienda/${subdominio}/checkout` }}
+                  className="text-sm text-violet-700 hover:underline">
+                  ¿Tienes cuenta? Inicia sesión
+                </Link>
+              )}
+            </div>
+            {esCliente ? (
+              <p className="rounded-md border border-[#d9d9d9] px-3 py-2.5 text-sm">{usuario.correo}</p>
+            ) : (
+              <Campo etiqueta="Correo electrónico"
+                error={correo && !correoValido(correo) ? 'Revisa tu correo, por ejemplo ana@gmail.com' : undefined}
+                ayuda="Compras sin crear cuenta. Aquí te llegan la confirmación, tu comprobante y el enlace para ver tu pedido.">
+                <input type="email" value={correo} autoComplete="email" maxLength={150} disabled={Boolean(pedidoCreado)}
+                  onChange={(e) => setCorreo(e.target.value)} placeholder="ana@gmail.com"
+                  className={estiloInput(correo && !correoValido(correo))} />
+              </Campo>
+            )}
           </section>
 
           <section className="space-y-3">
@@ -439,6 +507,7 @@ export default function Checkout() {
 
             {nueva && direcciones && (
               <FormularioDireccion
+                invitado={esCliente ? null : subdominio}
                 idPais={tienda.idPais}
                 nivelTienda={tienda.nivelFinal}
                 puedeCancelar={direcciones.length > 0}
@@ -502,7 +571,8 @@ export default function Checkout() {
           <button
             type="button"
             onClick={pagar}
-            disabled={enviando || revisando || !idDireccion || nueva || !cotizacion?.datos?.disponible || !metodoElegido}
+            disabled={enviando || revisando || !idDireccion || nueva || !cotizacion?.datos?.disponible || !metodoElegido
+              || (!esCliente && !pedidoCreado && !correoValido(correo))}
             className="w-full rounded-md bg-[var(--tienda)] py-4 text-lg font-medium text-[var(--tienda-texto)] hover:brightness-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {enviando ? 'Procesando...' : metodoElegido ? `Pagar con ${METODOS_PAGO[metodoElegido].nombre}` : 'Pagar ahora'}
@@ -526,7 +596,7 @@ export default function Checkout() {
  * - pedido: el pedido para reintentar el pago (cancelado, rechazado o a medias), o null si hay
  *   que crear uno nuevo (no había, el pedido se canceló, o el carrito cambió desde entonces).
  */
-async function revisarPedidoEnCurso(subdominio, huella) {
+async function revisarPedidoEnCurso(subdominio, huella, verPedido) {
   const guardado = leerPedidoEnCurso(subdominio);
   if (!guardado) return { pagado: null, pedido: null };
   if (guardado.huella !== huella) {
@@ -535,7 +605,7 @@ async function revisarPedidoEnCurso(subdominio, huella) {
     return { pagado: null, pedido: null };
   }
   try {
-    const pedido = await verMiPedido(guardado.idPedido);
+    const pedido = await verPedido(guardado.idPedido);
     if (pedido.estadoPago === 'APROBADO') {
       borrarPedidoEnCurso(subdominio);
       return { pagado: pedido.numeroPedido, pedido: null };
@@ -568,10 +638,11 @@ function textoUbicacion(d, idPaisTienda) {
  * se busca el distrito o la comuna; en otro país se escriben la ciudad, la región y el código
  * postal (como en Shopify).
  */
-function FormularioDireccion({ idPais, nivelTienda = 'Distrito', puedeCancelar, onCancelar, onGuardada }) {
+function FormularioDireccion({ invitado = null, idPais, nivelTienda = 'Distrito', puedeCancelar, onCancelar, onGuardada }) {
   const [paises, setPaises] = useState([]);
   const [datos, setDatos] = useState({
     idPais, idDistrito: null, ciudad: '', region: '', codigoPostal: '', direccion: '', referencia: '', telefono: '+',
+    destinatario: '',
   });
   const [errores, setErrores] = useState({});
   const [error, setError] = useState('');
@@ -611,6 +682,8 @@ function FormularioDireccion({ idPais, nivelTienda = 'Distrito', puedeCancelar, 
     if (!local && !datos.ciudad.trim()) e.ciudad = 'Escribe la ciudad';
     if (!local && pais?.requiereCodigoPostal && !datos.codigoPostal.trim()) e.codigoPostal = 'El código postal es obligatorio en este país';
     if (!datos.direccion.trim()) e.direccion = 'La dirección es obligatoria';
+    if (invitado && datos.destinatario.trim().length < 2) e.destinatario = 'Escribe el nombre de quien recibe';
+    if (invitado && /[<>]/.test(datos.destinatario)) e.destinatario = 'No uses los signos < ni >';
     if (!/^\+[1-9][0-9]{6,14}$/.test(datos.telefono.trim())) e.telefono = 'Formato internacional, por ejemplo +51987654321';
     setErrores(e);
     if (Object.keys(e).length > 0) return;
@@ -618,7 +691,7 @@ function FormularioDireccion({ idPais, nivelTienda = 'Distrito', puedeCancelar, 
     setGuardando(true);
     setError('');
     try {
-      const creada = await crearDireccion({
+      const direccion = {
         idPais: datos.idPais,
         idDistrito: local ? datos.idDistrito : null,
         ciudad: local ? null : datos.ciudad.trim(),
@@ -627,7 +700,12 @@ function FormularioDireccion({ idPais, nivelTienda = 'Distrito', puedeCancelar, 
         direccion: datos.direccion.trim(),
         referencia: datos.referencia.trim() || null,
         telefono: datos.telefono.trim(),
-      });
+      };
+      const creada = invitado
+        ? await crearDireccionInvitado(invitado, {
+          destinatario: datos.destinatario.trim(), telefono: datos.telefono.trim(), direccion,
+        })
+        : await crearDireccion(direccion);
       onGuardada(creada);
     } catch (err) {
       if (err.response?.data?.campos) {
@@ -643,6 +721,13 @@ function FormularioDireccion({ idPais, nivelTienda = 'Distrito', puedeCancelar, 
   return (
     <div className="space-y-4 rounded-md border border-[#d9d9d9] p-4">
       {error && <Mensaje tipo="error" texto={error} />}
+      {invitado && (
+        <Campo etiqueta="Nombre de quien recibe" error={errores.destinatario}>
+          <input value={datos.destinatario} maxLength={150} autoComplete="name" placeholder="Ana Torres"
+            onChange={(e) => setDatos((d) => ({ ...d, destinatario: e.target.value }))}
+            className={estiloInput(errores.destinatario)} />
+        </Campo>
+      )}
       <Campo etiqueta="País o región">
         <select value={datos.idPais} onChange={(e) => cambiarPais(e.target.value)} className={estiloInput()}>
           {paises.length === 0 && <option value={idPais}>{idPais}</option>}
