@@ -8,4 +8,7 @@ public interface MensajeSoporteRepository extends JpaRepository<MensajeSoporte, 
 
     /** La conversación de una tienda, de la más antigua a la más nueva (como un chat). */
     List<MensajeSoporte> findByIdTiendaOrderByFechaAscIdMensajeAsc(Long idTienda);
+
+    /** Los mensajes de esas tiendas, del más nuevo al más antiguo (para la bandeja del equipo). */
+    List<MensajeSoporte> findByIdTiendaInOrderByIdMensajeDesc(List<Long> idsTienda);
 }

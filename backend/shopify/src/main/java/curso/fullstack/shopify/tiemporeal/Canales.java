@@ -16,6 +16,8 @@ import java.util.regex.Pattern;
  *   /topic/tiendas/{id}/pedidos      pedidos nuevos, pagos y cambios de estado   el dueño y empleados con pedidos
  *   /topic/tiendas/{id}/inventario   cambios de stock, para el panel             el dueño y empleados con inventario o productos
  *   /topic/tiendas/{id}/stock        el stock que ve la tienda pública           cualquiera
+ *   /topic/tiendas/{id}/soporte      mensajes nuevos con soporte de Vendely      el dueño y soporte con acceso
+ *   /topic/soporte                   "una tienda escribió a soporte"             solo superadmin
  *   /user/queue/pedidos              el estado de MIS pedidos                    cada cliente
  */
 public final class Canales {
@@ -25,7 +27,10 @@ public final class Canales {
     /** Lo que el cliente pide escuchar para recibir lo de arriba. */
     public static final String MIS_PEDIDOS_SUSCRIPCION = "/user/queue/pedidos";
 
-    private static final Pattern DE_TIENDA = Pattern.compile("^/topic/tiendas/(\\d{1,18})/(pedidos|inventario|stock)$");
+    /** Avisos para el equipo de Vendely: una tienda escribió a soporte o le dio acceso. */
+    public static final String SOPORTE_EQUIPO = "/topic/soporte";
+
+    private static final Pattern DE_TIENDA = Pattern.compile("^/topic/tiendas/(\\d{1,18})/(pedidos|inventario|stock|soporte)$");
 
     private Canales() {
     }
@@ -36,6 +41,10 @@ public final class Canales {
 
     public static String inventario(Long idTienda) {
         return "/topic/tiendas/" + idTienda + "/inventario";
+    }
+
+    public static String soporte(Long idTienda) {
+        return "/topic/tiendas/" + idTienda + "/soporte";
     }
 
     public static String stock(Long idTienda) {
@@ -58,7 +67,7 @@ public final class Canales {
     /**
      * Quién puede escuchar el canal de una tienda: se pregunta afuera, porque depende de la base
      * (si es el dueño, o un empleado con el permiso que corresponde a ese canal).
-     * canal es "pedidos" o "inventario".
+     * canal es "pedidos", "inventario" o "soporte".
      */
     @FunctionalInterface
     public interface AccesoTienda {
@@ -68,6 +77,9 @@ public final class Canales {
     public static boolean puedeEscuchar(UsuarioAutenticado usuario, String destino, AccesoTienda acceso) {
         if (destino == null) {
             return false;
+        }
+        if (SOPORTE_EQUIPO.equals(destino)) {
+            return usuario != null && usuario.rol() == RolUsuario.SUPERADMIN;
         }
         if (MIS_PEDIDOS_SUSCRIPCION.equals(destino)) {
             // Cada sesión recibe solo lo suyo: Spring entrega /user/queue/... al usuario de esa

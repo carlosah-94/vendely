@@ -1,5 +1,6 @@
 package curso.fullstack.shopify.service;
 
+import curso.fullstack.shopify.dto.BandejaSoporteResponse;
 import curso.fullstack.shopify.dto.MensajeSoporteResponse;
 import curso.fullstack.shopify.dto.SoporteResponse;
 import curso.fullstack.shopify.entity.Login;
@@ -15,8 +16,12 @@ import curso.fullstack.shopify.repository.RegistroSoporteRepository;
 import curso.fullstack.shopify.repository.TiendaRepository;
 import curso.fullstack.shopify.security.UsuarioAutenticado;
 import curso.fullstack.shopify.security.VerificadorTienda;
+import curso.fullstack.shopify.tiemporeal.TiempoRealSoporte;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -49,10 +54,12 @@ public class SoporteService {
     private final LoginRepository loginRepository;
     private final PropietarioRepository propietarioRepository;
     private final AvisoSoporte aviso;
+    private final TiempoRealSoporte enVivo;
 
     public SoporteService(VerificadorTienda verificadorTienda, TiendaRepository tiendaRepository,
             RegistroSoporteRepository registroRepository, MensajeSoporteRepository mensajeRepository,
-            LoginRepository loginRepository, PropietarioRepository propietarioRepository, AvisoSoporte aviso) {
+            LoginRepository loginRepository, PropietarioRepository propietarioRepository, AvisoSoporte aviso,
+            TiempoRealSoporte enVivo) {
         this.verificadorTienda = verificadorTienda;
         this.tiendaRepository = tiendaRepository;
         this.registroRepository = registroRepository;
@@ -60,6 +67,7 @@ public class SoporteService {
         this.loginRepository = loginRepository;
         this.propietarioRepository = propietarioRepository;
         this.aviso = aviso;
+        this.enVivo = enVivo;
     }
 
     @Transactional(readOnly = true)
@@ -81,6 +89,9 @@ public class SoporteService {
         String texto = limpio(mensaje);
         if (texto != null) {
             guardarDelDueno(yo, t, texto);
+        } else {
+            String tienda = t.getNombre();
+            despuesDeGuardar(() -> enVivo.acceso(idTienda, tienda));
         }
         return responder(t);
     }
@@ -96,6 +107,8 @@ public class SoporteService {
             if (estabaActivo) {
                 registroRepository.save(RegistroSoporte.de(idTienda, yo.idLogin(), RegistroSoporte.QUITADO));
                 log.info("Acceso de soporte quitado: idTienda={}", idTienda);
+                String tienda = t.getNombre();
+                despuesDeGuardar(() -> enVivo.acceso(idTienda, tienda));
             }
         }
         return responder(t);
@@ -124,7 +137,10 @@ public class SoporteService {
             mensajeRepository.save(MensajeSoporte.de(idTienda, yo.idLogin(), true, texto));
             String correoDueno = correoDelDueno(t);
             String tienda = t.getNombre();
-            despuesDeGuardar(() -> aviso.alDueno(correoDueno, tienda, texto));
+            despuesDeGuardar(() -> {
+                enVivo.mensaje(idTienda, tienda, true, texto);
+                aviso.alDueno(correoDueno, tienda, texto);
+            });
             log.info("Soporte respondió: idTienda={}", idTienda);
         } else {
             if (!t.soporteActivo()) {
@@ -133,6 +149,40 @@ public class SoporteService {
             guardarDelDueno(yo, t, texto);
         }
         return conversacion(idTienda);
+    }
+
+    /**
+     * La bandeja del equipo (solo superadmin): por cada tienda con acceso activo, cuántos mensajes
+     * del dueño esperan respuesta y cuál fue el último. Así se ve de un vistazo a quién contestar.
+     */
+    @Transactional(readOnly = true)
+    public List<BandejaSoporteResponse> bandeja() {
+        List<Long> ids = tiendaRepository.findBySoporteHastaAfterOrderBySoporteHastaAsc(OffsetDateTime.now())
+                .stream().map(Tienda::getIdTienda).toList();
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, List<MensajeSoporte>> porTienda = new LinkedHashMap<>();
+        ids.forEach(id -> porTienda.put(id, new ArrayList<>()));
+        for (MensajeSoporte m : mensajeRepository.findByIdTiendaInOrderByIdMensajeDesc(ids)) {
+            porTienda.get(m.getIdTienda()).add(m);
+        }
+        return porTienda.entrySet().stream().map(e -> {
+            List<MensajeSoporte> lista = e.getValue();   // del más nuevo al más antiguo
+            if (lista.isEmpty()) {
+                return new BandejaSoporteResponse(e.getKey(), 0, null, null, null);
+            }
+            int sinResponder = 0;
+            for (MensajeSoporte m : lista) {
+                if (Boolean.TRUE.equals(m.getDeSoporte())) {
+                    break;
+                }
+                sinResponder++;
+            }
+            MensajeSoporte ultimo = lista.get(0);
+            return new BandejaSoporteResponse(e.getKey(), sinResponder, ultimo.getTexto(), ultimo.getFecha(),
+                    Boolean.TRUE.equals(ultimo.getDeSoporte()));
+        }).toList();
     }
 
     // ------------------------------------------------------------------ apoyo
@@ -156,7 +206,11 @@ public class SoporteService {
         String correo = dueno == null ? t.getCorreoContacto() : dueno.getCorreo();
         String tienda = t.getNombre();
         String subdominio = t.getSubdominio();
-        despuesDeGuardar(() -> aviso.alEquipo(tienda, subdominio, nombre, correo, texto));
+        Long idTienda = t.getIdTienda();
+        despuesDeGuardar(() -> {
+            enVivo.mensaje(idTienda, tienda, false, texto);
+            aviso.alEquipo(tienda, subdominio, nombre, correo, texto);
+        });
         log.info("Mensaje del dueño a soporte: idTienda={}", t.getIdTienda());
     }
 

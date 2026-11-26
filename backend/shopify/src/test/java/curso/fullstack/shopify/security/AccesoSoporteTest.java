@@ -210,6 +210,29 @@ class AccesoSoporteTest extends PruebaIntegracion {
     }
 
     @Test
+    void laBandejaDelEquipoCuentaLoQueFaltaResponder() throws Exception {
+        permitir(2);
+        escribir(tienda.idDueno(), "Hola");
+        escribir(tienda.idDueno(), "¿Me ayudan con las fotos?");
+
+        String bandeja = "$[?(@.idTienda == " + tienda.idTienda() + ")]";
+        mvc.perform(get("/api/admin/soporte/bandeja").header("Authorization", token(soporte)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(bandeja + ".sinResponder", contains(2)))
+                .andExpect(jsonPath(bandeja + ".ultimoTexto", contains("¿Me ayudan con las fotos?")));
+
+        // Al responder soporte, queda al día.
+        escribir(soporte, "Claro, envíalas por aquí");
+        mvc.perform(get("/api/admin/soporte/bandeja").header("Authorization", token(soporte)))
+                .andExpect(jsonPath(bandeja + ".sinResponder", contains(0)))
+                .andExpect(jsonPath(bandeja + ".ultimoDeSoporte", contains(true)));
+
+        // Solo el equipo de Vendely ve la bandeja.
+        mvc.perform(get("/api/admin/soporte/bandeja").header("Authorization", token(tienda.idDueno())))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void unMensajeVacioNoSeGuarda() throws Exception {
         permitir(1);
 
@@ -225,6 +248,12 @@ class AccesoSoporteTest extends PruebaIntegracion {
                         .contentType(MediaType.APPLICATION_JSON).content("{\"dias\":" + dias + "}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.activoHasta", notNullValue()));
+    }
+
+    private void escribir(long idLogin, String texto) throws Exception {
+        mvc.perform(post(ruta("soporte/mensajes")).header("Authorization", token(idLogin))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"mensaje\":\"" + texto + "\"}"))
+                .andExpect(status().isOk());
     }
 
     /** JSONPath a la tienda de esta prueba dentro de la lista de /api/panel/tiendas (y a un campo suyo). */

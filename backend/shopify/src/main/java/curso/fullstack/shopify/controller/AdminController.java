@@ -3,11 +3,13 @@ package curso.fullstack.shopify.controller;
 import curso.fullstack.shopify.dto.AdminCuentaResponse;
 import curso.fullstack.shopify.dto.AdminResumenResponse;
 import curso.fullstack.shopify.dto.AdminTiendaResponse;
+import curso.fullstack.shopify.dto.BandejaSoporteResponse;
 import curso.fullstack.shopify.dto.CambioEstadoRequest;
 import curso.fullstack.shopify.dto.PlanEditarRequest;
 import curso.fullstack.shopify.dto.PlanResponse;
 import curso.fullstack.shopify.security.UsuarioAutenticado;
 import curso.fullstack.shopify.service.AdminService;
+import curso.fullstack.shopify.service.SoporteService;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -34,6 +36,7 @@ import org.springframework.web.bind.annotation.RestController;
  * DELETE /api/admin/cuentas/{id}/doble-factor quitar la doble autenticacion (telefono perdido)
  * GET   /api/admin/planes                   los planes de Vendely
  * PUT   /api/admin/planes/{id}              cambiar precio, limites y beneficios de un plan
+ * GET   /api/admin/soporte/bandeja          tiendas con acceso a soporte: mensajes sin responder y el último
  */
 @RestController
 @RequestMapping("/api/admin")
@@ -41,10 +44,18 @@ public class AdminController {
 
     private final AdminService adminService;
     private final DobleFactorService dobleFactorService;
+    private final SoporteService soporteService;
 
-    public AdminController(AdminService adminService, DobleFactorService dobleFactorService) {
+    public AdminController(AdminService adminService, DobleFactorService dobleFactorService,
+                           SoporteService soporteService) {
         this.adminService = adminService;
         this.dobleFactorService = dobleFactorService;
+        this.soporteService = soporteService;
+    }
+
+    @GetMapping("/soporte/bandeja")
+    public List<BandejaSoporteResponse> bandejaSoporte() {
+        return soporteService.bandeja();
     }
 
     @GetMapping("/resumen")
