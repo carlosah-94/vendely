@@ -15,7 +15,10 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * Acceso de soporte de Vendely a la tienda (solo el dueño) y la conversación con soporte.
@@ -25,6 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
  * DELETE /api/panel/tiendas/{id}/soporte            quitar el permiso ya
  * GET    /api/panel/tiendas/{id}/soporte/mensajes   la conversación (el dueño, o soporte con acceso)
  * POST   /api/panel/tiendas/{id}/soporte/mensajes   escribir { "mensaje": "..." } (los dos, con el acceso activo)
+ * POST   /api/panel/tiendas/{id}/soporte/mensajes/adjunto   escribir con un archivo (multipart: archivo y mensaje opcional)
  */
 @RestController
 @RequestMapping("/api/panel/tiendas/{idTienda}/soporte")
@@ -58,6 +62,15 @@ public class SoporteController {
                                                  @PathVariable Long idTienda,
                                                  @Valid @RequestBody MensajeSoporteRequest request) {
         return soporteService.escribir(yo, idTienda, request.mensaje());
+    }
+
+    /** Un mensaje con archivo (Excel, CSV, PDF, Word, TXT, fotos o ZIP, hasta 10 MB). El texto es opcional. */
+    @PostMapping("/mensajes/adjunto")
+    public List<MensajeSoporteResponse> escribirConAdjunto(@AuthenticationPrincipal UsuarioAutenticado yo,
+                                                           @PathVariable Long idTienda,
+                                                           @RequestPart("archivo") MultipartFile archivo,
+                                                           @RequestParam(value = "mensaje", required = false) String mensaje) {
+        return soporteService.escribirConAdjunto(yo, idTienda, mensaje, archivo);
     }
 
     @DeleteMapping

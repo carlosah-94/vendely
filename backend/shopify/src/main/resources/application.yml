@@ -78,8 +78,10 @@ app:
       # Las fotos de los productos. ImagenService rechaza mas de 2 MB con un mensaje claro;
       # este limite es la red de seguridad del servidor, un poco mas alto para que el mensaje
       # lo de la aplicacion y no el servidor.
-      max-file-size: 3MB
-      max-request-size: 4MB
+      # Los adjuntos de soporte (V26) llegan hasta 10 MB: el limite sube a 11 MB para que el
+      # mensaje claro lo de ArchivoSoporte. Las fotos siguen limitadas a 2 MB por ImagenService.
+      max-file-size: 11MB
+      max-request-size: 12MB
   resend:
     # Clave de resend.com para enviar los correos. Sin ella, NotificacionService los registra
     # como "simulado" y no envía nada: el proyecto corre completo sin crear ninguna cuenta.

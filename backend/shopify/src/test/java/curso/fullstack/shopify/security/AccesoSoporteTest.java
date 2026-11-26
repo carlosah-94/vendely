@@ -5,19 +5,25 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import curso.fullstack.shopify.DatosPrueba;
 import curso.fullstack.shopify.PruebaIntegracion;
+import curso.fullstack.shopify.dto.ImagenSubidaResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 
 /**
  * Acceso de soporte (V16): el dueño deja entrar a soporte de Vendely a armar su tienda.
@@ -230,6 +236,56 @@ class AccesoSoporteTest extends PruebaIntegracion {
         // Solo el equipo de Vendely ve la bandeja.
         mvc.perform(get("/api/admin/soporte/bandeja").header("Authorization", token(tienda.idDueno())))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void adjuntarRevisaLosPermisosAntesDeSubirNada() throws Exception {
+        MockMultipartFile excel = new MockMultipartFile("archivo", "productos.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", new byte[] {'P', 'K', 3, 4, 20, 0});
+        String adjunto = ruta("soporte/mensajes/adjunto");
+
+        // Sin acceso activo: el dueño recibe lo mismo que al escribir; soporte, 403; un empleado, 403.
+        mvc.perform(multipart(adjunto).file(excel).header("Authorization", token(tienda.idDueno())))
+                .andExpect(status().isConflict());
+        mvc.perform(multipart(adjunto).file(excel).header("Authorization", token(soporte)))
+                .andExpect(status().isForbidden());
+
+        // Con acceso, pero sin Cloudinary (en las pruebas no hay CLOUDINARY_URL): 503 con un mensaje claro.
+        permitir(1);
+        mvc.perform(multipart(adjunto).file(excel).param("mensaje", "Aquí va el Excel")
+                        .header("Authorization", token(tienda.idDueno())))
+                .andExpect(status().isServiceUnavailable());
+        mvc.perform(get(ruta("soporte/mensajes")).header("Authorization", token(tienda.idDueno())))
+                .andExpect(jsonPath("$", hasSize(0)));
+    }
+
+    @Test
+    void elDuenoMandaElExcelYSoporteLoVeEnLaConversacion() throws Exception {
+        String url = "https://res.cloudinary.com/demo/raw/upload/v1/vendely/t" + tienda.idTienda() + "/soporte/productos_ab12.xlsx";
+        when(cloudinary.estaConfigurado()).thenReturn(true);
+        when(cloudinary.subirArchivo(any(), eq("productos.xlsx"), eq("vendely/t" + tienda.idTienda() + "/soporte"), eq(false)))
+                .thenReturn(new ImagenSubidaResponse(url, "vendely/t" + tienda.idTienda() + "/soporte/productos_ab12.xlsx"));
+        permitir(2);
+
+        // Solo el archivo, sin texto.
+        mvc.perform(multipart(ruta("soporte/mensajes/adjunto"))
+                        .file(new MockMultipartFile("archivo", "productos.xlsx", "application/octet-stream",
+                                new byte[] {'P', 'K', 3, 4, 20, 0}))
+                        .header("Authorization", token(tienda.idDueno())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].texto").value(""))
+                .andExpect(jsonPath("$[0].adjunto.nombre").value("productos.xlsx"))
+                .andExpect(jsonPath("$[0].adjunto.url").value(url))
+                .andExpect(jsonPath("$[0].adjunto.esImagen").value(false))
+                // El tipo sale de la extensión, no del que mandó el navegador.
+                .andExpect(jsonPath("$[0].adjunto.tipo").value("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
+
+        mvc.perform(get(ruta("soporte/mensajes")).header("Authorization", token(soporte)))
+                .andExpect(jsonPath("$[0].adjunto.nombre").value("productos.xlsx"));
+        String bandeja = "$[?(@.idTienda == " + tienda.idTienda() + ")]";
+        mvc.perform(get("/api/admin/soporte/bandeja").header("Authorization", token(soporte)))
+                .andExpect(jsonPath(bandeja + ".ultimoTexto", contains("📎 productos.xlsx")));
     }
 
     @Test
