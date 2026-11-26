@@ -9,6 +9,7 @@ import { useToast } from '../context/ToastContext';
 import { useTiendaActual } from '../hooks/useTiendaActual';
 import { mensajeDeError } from '../services/api';
 import { guardarPerfil, obtenerPerfil } from '../services/perfil';
+import { problemaRuc } from '../utils/documentos';
 import { formatoFecha } from '../utils/formato';
 import { BOTON, BOTON_SECUNDARIO, TARJETA, etiqueta, inputPanel } from '../utils/panel';
 
@@ -28,6 +29,7 @@ function datosDelFormulario(p) {
     telefono: p.telefono ?? '',
     razonSocial: p.negocio?.razonSocial ?? '',
     telefonoComercial: p.negocio?.telefonoComercial ?? '',
+    ruc: p.negocio?.ruc ?? '',
   };
 }
 
@@ -39,7 +41,7 @@ export default function Perfil() {
   const { usuario, actualizarUsuario } = useAuth();
   const { avisar } = useToast();
   const esPanelTienda = usuario.rol === 'ADMIN_TIENDA' || usuario.rol === 'EMPLEADO';
-  const { tiendas, tienda, cambiarTienda } = useTiendaActual(esPanelTienda);
+  const { tiendas, tienda, cambiarTienda, recargar: recargarTiendas } = useTiendaActual(esPanelTienda);
   const [perfil, setPerfil] = useState(null);
   const [d, setD] = useState(null);
   const [errores, setErrores] = useState({});
@@ -76,6 +78,16 @@ export default function Perfil() {
     if (d.telefonoComercial.trim() && !TELEFONO.test(d.telefonoComercial.trim())) {
       er.telefonoComercial = 'Formato internacional, por ejemplo +51987654321';
     }
+    // RUC y razón social (V24), las mismas reglas que el servidor y la base.
+    const negocio = perfil.negocio;
+    if (negocio?.pais === 'PE' && negocio.tipoDocumento !== 'RUC' && d.ruc.trim()) {
+      const problema = problemaRuc(d.ruc.trim(), negocio.tipoDocumento === 'DNI' ? negocio.numeroDocumento : null);
+      if (problema) er.ruc = problema;
+      else if (d.ruc.trim().startsWith('20') && d.razonSocial.trim().length < 3) {
+        er.razonSocial = 'Escribe la razón social: el nombre legal de tu empresa en la SUNAT';
+      }
+    }
+    if (d.razonSocial.trim() && d.razonSocial.trim().length < 3) er.razonSocial = 'Al menos 3 caracteres';
     setErrores(er);
     if (Object.keys(er).length) return;
     setGuardando(true);
@@ -88,10 +100,12 @@ export default function Perfil() {
         telefono: d.telefono.trim(),
         razonSocial: d.razonSocial.trim(),
         telefonoComercial: d.telefonoComercial.trim(),
+        ruc: d.ruc.trim(),
       });
       setPerfil(r.perfil);
       setD(datosDelFormulario(r.perfil));
       actualizarUsuario(r.usuario);   // el nombre de arriba y del menú se actualiza al instante
+      recargarTiendas();              // con RUC, sus tiendas ya pueden vender: se quita el aviso del panel
       avisar('Perfil guardado');
     } catch (ex) {
       if (ex.response?.data?.campos) setErrores(ex.response.data.campos);
@@ -149,7 +163,18 @@ export default function Perfil() {
 
           {perfil.negocio && (
             <div className={`${TARJETA} space-y-3 p-5 text-[13px]`}>
-              <h2 className="font-semibold text-[#101010]">Datos del negocio</h2>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="font-semibold text-[#101010]">Datos del negocio</h2>
+                {perfil.negocio.listoParaVender
+                  ? <span className={etiqueta('exito')}>Listo para vender</span>
+                  : <span className={etiqueta('aviso')}>Falta tu RUC para vender</span>}
+              </div>
+              {!perfil.negocio.listoParaVender && (
+                <p className="rounded-lg bg-[#fff4d6] px-3 py-2 text-[12px] text-[#5c4200]">
+                  En Perú, para vender debes entregar boleta o factura, y para eso necesitas RUC. Tus tiendas no recibirán
+                  pedidos hasta que registres tu RUC y tu razón social.
+                </p>
+              )}
               <div className="grid gap-3 sm:grid-cols-2">
                 <CampoPanel etiqueta={perfil.negocio.nombreDocumento ?? 'Documento'} ayuda="Identifica al dueño; no se cambia desde aquí.">
                   <input
@@ -158,8 +183,21 @@ export default function Perfil() {
                     className={`${inputPanel()} bg-[#f7f7f7] text-[#616161]`}
                   />
                 </CampoPanel>
-                <CampoPanel etiqueta="Razón social (opcional)" error={errores.razonSocial}>
-                  <input value={d.razonSocial} onChange={cambiar('razonSocial')} placeholder="Mi Empresa S.A.C." className={inputPanel(errores.razonSocial)} />
+                {perfil.negocio.pais === 'PE' && perfil.negocio.tipoDocumento !== 'RUC' && (
+                  <CampoPanel etiqueta="RUC" error={errores.ruc}
+                    ayuda={perfil.negocio.tipoDocumento === 'DNI'
+                      ? `Persona con negocio: 10 + tu DNI + un dígito. Empresa: empieza con 20.`
+                      : 'Los 11 dígitos de tu RUC.'}>
+                    <input value={d.ruc} onChange={(e) => setD((v) => ({ ...v, ruc: e.target.value.replace(/\D/g, '').slice(0, 11) }))}
+                      inputMode="numeric" placeholder={perfil.negocio.tipoDocumento === 'DNI' ? `10${perfil.negocio.numeroDocumento}?` : '20123456789'}
+                      className={inputPanel(errores.ruc)} />
+                  </CampoPanel>
+                )}
+                <CampoPanel
+                  etiqueta={perfil.negocio.pais === 'PE' && (d.ruc || perfil.negocio.tipoDocumento === 'RUC') ? 'Razón social' : 'Razón social (opcional)'}
+                  error={errores.razonSocial}
+                  ayuda={d.ruc.startsWith('10') ? 'Con RUC 10 es tu nombre completo: si la dejas vacía, la ponemos por ti.' : 'El nombre legal de tu negocio en la SUNAT. Sale en tus boletas y facturas.'}>
+                  <input value={d.razonSocial} onChange={cambiar('razonSocial')} placeholder="Dulces Delicias S.A.C." className={inputPanel(errores.razonSocial)} />
                 </CampoPanel>
                 <CampoPanel etiqueta="Teléfono del negocio (opcional)" error={errores.telefonoComercial}>
                   <input type="tel" value={d.telefonoComercial} onChange={cambiar('telefonoComercial')} placeholder="+51987654321" className={inputPanel(errores.telefonoComercial)} />

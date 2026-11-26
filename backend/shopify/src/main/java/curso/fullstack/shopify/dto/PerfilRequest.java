@@ -19,6 +19,10 @@ public record PerfilRequest(
 
         @Size(max = 150, message = "La razón social puede tener hasta 150 caracteres") String razonSocial,
 
+        // RUC del dueño (V24): vacío = sin RUC. Su dígito verificador lo revisan el servicio y la base.
+        @Pattern(regexp = "^$|^[0-9]{11}$", message = "El RUC tiene 11 dígitos")
+        String ruc,
+
         @Pattern(regexp = "^$|^\\+[1-9][0-9]{6,14}$",
                  message = "El teléfono debe tener formato internacional, por ejemplo +51987654321")
         String telefonoComercial

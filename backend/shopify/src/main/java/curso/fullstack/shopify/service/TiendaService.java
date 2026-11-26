@@ -1,5 +1,6 @@
 package curso.fullstack.shopify.service;
 
+import curso.fullstack.shopify.dto.ContenidoRubro;
 import curso.fullstack.shopify.dto.DisenoPro;
 import curso.fullstack.shopify.dto.TiendaActualizarRequest;
 import curso.fullstack.shopify.dto.TiendaCrearRequest;
@@ -92,6 +93,9 @@ public class TiendaService {
         t.setRubro(r.rubro());
         if (t.getDescripcion() == null) t.setDescripcion(kit.descripcion());
         t.setTextoAnuncio(kit.anuncio());
+        // Y la plantilla de su rubro (V22): nace con el diseño pensado para su negocio, en
+        // cualquier plan. Si mandó su propio color, se respeta ese diseño.
+        if (t.getColorPrincipal() == null) TemaRubro.de(r.rubro()).ifPresent(tema -> tema.aplicarA(t));
         tiendaRepository.saveAndFlush(t);
         entityManager.refresh(t); // trae los valores que pone la base (fecha de creación)
         for (String nombre : kit.categorias()) {
@@ -144,6 +148,7 @@ public class TiendaService {
     @Transactional
     public TiendaResponse actualizar(UsuarioAutenticado yo, Long idTienda, TiendaActualizarRequest r) {
         Tienda t = verificadorTienda.delDueno(yo, idTienda);
+        aplicarTemaRubro(t, r);
         // Logo y color propios solo con plan Basico o Pro. Nombre, descripcion y correo los edita cualquiera.
         if (cambia(t.getLogoUrl(), vacioANull(r.logoUrl()))
                 || cambia(t.getColorPrincipal(), r.colorPrincipal() == null || r.colorPrincipal().isBlank()
@@ -159,6 +164,7 @@ public class TiendaService {
         }
         personalizar(t, r);
         if (r.whatsapp() != null) t.setWhatsapp(vacioANull(r.whatsapp()));
+        String rubroAnterior = t.getRubro();
         if (r.rubro() != null) t.setRubro(r.rubro());
         if (r.tema() != null && (cambia(t.getTema(), r.tema()) || t.getTemaAplicadoEl() == null)) {
             t.setTema(r.tema());
@@ -166,6 +172,7 @@ public class TiendaService {
         }
         copiarDatos(t, r.nombre(), r.descripcion(), r.correoContacto(), r.logoUrl(), r.colorPrincipal(),
                 r.permiteInvitados());
+        seguirAlRubro(t, rubroAnterior);
         tiendaRepository.saveAndFlush(t);
         log.info("Tienda actualizada: idTienda={}", idTienda);
         // Con lo que puede quien la editó: el dueño, o soporte de Vendely (que no es el dueño).
@@ -214,6 +221,12 @@ public class TiendaService {
         if (r.mostrarGarantias() != null) t.setMostrarGarantias(r.mostrarGarantias());
         if (r.mostrarDestacado() != null) t.setMostrarDestacado(r.mostrarDestacado());
         if (r.mostrarCategorias() != null) t.setMostrarCategorias(r.mostrarCategorias());
+        if (r.mostrarSeccionRubro() != null) t.setMostrarSeccionRubro(r.mostrarSeccionRubro());
+        // Contenido de la plantilla por rubro (V23): textos y secciones, cualquier plan.
+        if (r.contenidoRubro() != null) {
+            ContenidoRubro c = r.contenidoRubro().limpio();
+            t.setContenidoRubro(c.usaAlgo() ? c : null);
+        }
 
         if (r.disenoPro() != null) {
             DisenoPro nuevo = r.disenoPro().limpio();
@@ -225,6 +238,64 @@ public class TiendaService {
         }
     }
 
+    /**
+     * Plantillas por rubro (V22), antes de revisar el plan:
+     *   - La de SU rubro, tal cual: se pone directo. Así, al revisar después, nada "cambia" y
+     *     cualquier plan (también Gratis) puede aplicarla.
+     *   - La de OTRO rubro: no se permite en ningún plan (una pastelería no usa la plantilla de
+     *     mascotas). Si su negocio cambió, cambia su rubro y la plantilla lo sigue (seguirAlRubro).
+     *   - La de su rubro con otros colores o letra: sigue el camino normal (PERSONALIZAR).
+     */
+    private void aplicarTemaRubro(Tienda t, TiendaActualizarRequest r) {
+        TemaRubro tema = r.tema() == null ? null : TemaRubro.porValor(r.tema()).orElse(null);
+        if (tema == null) return;
+        String rubro = r.rubro() != null ? r.rubro() : t.getRubro();
+        if (!tema.rubro().equals(rubro)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "Esa plantilla es para otro rubro. Si tu negocio cambió, cambia el rubro de tu tienda.");
+        }
+        String plantilla = r.plantilla() != null ? r.plantilla() : t.getPlantilla();
+        String principal = r.colorPrincipal() != null ? r.colorPrincipal() : t.getColorPrincipal();
+        String acento = r.colorAcento() != null ? r.colorAcento() : t.getColorAcento();
+        String fuente = r.fuente() != null ? r.fuente() : t.getFuente();
+        String botones = r.estiloBotones() != null ? r.estiloBotones() : t.getEstiloBotones();
+        String fondo = r.fondo() != null ? r.fondo() : t.getFondo();
+        if (tema.mismosValores(plantilla, principal, acento, fuente, botones, fondo)) {
+            tema.aplicarA(t);
+        }
+    }
+
+    /**
+     * Si el dueño cambió el rubro y su tienda usaba la plantilla de su rubro (o ninguna), pasa a la
+     * plantilla del rubro nuevo; si el nuevo no tiene ("otro"), vuelve al tema Esencial. Si había
+     * elegido un tema general (Mercado, Minimal...), se respeta. Las categorías no se tocan.
+     */
+    private static void seguirAlRubro(Tienda t, String rubroAnterior) {
+        if (java.util.Objects.equals(rubroAnterior, t.getRubro())) return;
+        if (t.getTema() != null && !TemaRubro.esDeRubro(t.getTema())) return;
+        TemaRubro.de(t.getRubro()).ifPresentOrElse(tema -> tema.aplicarA(t), () -> {
+            t.setTema("esencial");
+            t.setTemaAplicadoEl(java.time.OffsetDateTime.now());
+            t.setPlantilla(TemaRubro.PLANTILLA);
+            t.setColorPrincipal(null);
+            t.setColorAcento(null);
+            t.setFuente("auto");
+            t.setEstiloBotones("auto");
+            t.setFondo(TemaRubro.FONDO);
+        });
+    }
+
+    /** Los distritos donde la tienda hace delivery propio (V19), para mostrarlos en su plantilla. */
+    @SuppressWarnings("unchecked")
+    private List<String> distritosDelivery(Long idTienda) {
+        return entityManager.createNativeQuery("""
+                SELECT d.nombre FROM zonas_delivery z
+                  JOIN divisiones d ON d.id_division = z.id_division
+                 WHERE z.id_tienda = :idTienda AND z.estado = 1
+                 ORDER BY d.nombre LIMIT 12""")
+                .setParameter("idTienda", idTienda).getResultList();
+    }
+
     // ------------------------------------------------------------ vitrina pública
 
     @Transactional(readOnly = true)
@@ -234,7 +305,7 @@ public class TiendaService {
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "La tienda no existe"));
         // metodosPago: con qué puede pagar el cliente en esta tienda (servidor + plan).
         return TiendaPublicaResponse.desde(t, paisDe(t), planService.planDe(t.getIdTienda()),
-                metodoPagoService.disponibles(t.getIdTienda()));
+                metodoPagoService.disponibles(t.getIdTienda()), distritosDelivery(t.getIdTienda()));
     }
 
     // ------------------------------------------------------------------ apoyo

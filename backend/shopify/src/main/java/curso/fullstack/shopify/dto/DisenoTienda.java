@@ -18,6 +18,8 @@ public record DisenoTienda(
         Boolean mostrarGarantias,
         Boolean mostrarDestacado,
         Boolean mostrarCategorias,
+        Boolean mostrarSeccionRubro, // sección propia del rubro (V22)
+        ContenidoRubro contenidoRubro, // textos de la plantilla por rubro (V23), cualquier plan; null = los de siempre
         DisenoPro pro             // diseño avanzado (V15): solo con PLANTILLAS (Pro); si no, el vacío
 ) {
     /** Lo guardado, tal cual (para el panel). */
@@ -42,6 +44,8 @@ public record DisenoTienda(
                 !Boolean.FALSE.equals(t.getMostrarGarantias()),
                 !Boolean.FALSE.equals(t.getMostrarDestacado()),
                 !Boolean.FALSE.equals(t.getMostrarCategorias()),
+                !Boolean.FALSE.equals(t.getMostrarSeccionRubro()),
+                t.getContenidoRubro(),
                 plantillas && t.getDisenoPro() != null ? t.getDisenoPro().limpio() : DisenoPro.VACIO);
     }
 }

@@ -3,7 +3,7 @@ import { mensajeDeError } from '../services/api';
 import { listarCategorias } from '../services/categorias';
 import { borrarImagen, revisarArchivo, subirImagen } from '../services/imagenes';
 import { actualizarProducto, crearProducto } from '../services/productos';
-import { ejemploMonto, esMontoValido, montoVacio, simboloMoneda } from '../utils/formato';
+import { ejemploMonto, esMontoValido, formatoMoneda, gananciaPorUnidad, montoVacio, simboloMoneda } from '../utils/formato';
 import { claveVariante, combinaciones, MAX_VARIANTES } from '../utils/variantes';
 import EditorVariantes from './EditorVariantes';
 import { IconoCerrar } from './Iconos';
@@ -26,6 +26,7 @@ function filasIniciales(producto) {
       idVariante: v.idVariante,
       precio: v.precio != null ? String(v.precio) : '',
       precioComparacion: v.precioComparacion != null ? String(v.precioComparacion) : '',
+      costo: v.costo != null ? String(v.costo) : '',
       stock: String(v.stock ?? 0),
       sku: v.sku ?? '',
     };
@@ -34,7 +35,7 @@ function filasIniciales(producto) {
 }
 
 /** Reglas de las opciones y variantes (las mismas que revisa el backend). */
-function validarVariantes(opciones, filas, precioBase) {
+function validarVariantes(opciones, filas, precioBase, costoBase, veCosto) {
   const e = {};
   const nombres = new Set();
   opciones.forEach((o, i) => {
@@ -51,10 +52,12 @@ function validarVariantes(opciones, filas, precioBase) {
     const f = filas[clave] ?? {};
     const precio = (f.precio ?? '').trim() || precioBase.trim();
     const comparacion = (f.precioComparacion ?? '').trim();
+    const costo = (f.costo ?? '').trim() || costoBase.trim();
     let error = '';
     if (!esMontoValido(precio) || Number(precio.replace(',', '.')) <= 0) error = 'Precio no válido';
     else if (comparacion && (!esMontoValido(comparacion)
       || Number(comparacion.replace(',', '.')) <= Number(precio.replace(',', '.')))) error = 'El precio "antes" debe ser mayor';
+    else if (veCosto && !esMontoValido(costo)) error = 'Falta el costo';
     else if ((f.stock ?? '').trim() && !/^\d+$/.test(f.stock.trim())) error = 'Stock no válido';
     else if ((f.sku ?? '').trim().length > 60) error = 'SKU muy largo';
     if (error) e[`fila:${clave}`] = error;
@@ -62,7 +65,7 @@ function validarVariantes(opciones, filas, precioBase) {
   return e;
 }
 
-function validar(datos) {
+function validar(datos, veCosto) {
   const e = {};
   const nombre = datos.nombre.trim();
   if (nombre.length < 3 || nombre.length > 200) e.nombre = 'El nombre debe tener entre 3 y 200 caracteres';
@@ -75,6 +78,16 @@ function validar(datos) {
   const precio = datos.precio.trim().replace(',', '.');
   if (!esMontoValido(precio)) e.precio = `Escribe un precio válido, ${ejemploMonto()}`;
   else if (Number(precio) <= 0) e.precio = 'El precio debe ser mayor que 0';
+
+  // Costo: lo que te costó cada unidad. Obligatorio para el dueño (con variantes, cada una puede traer el suyo).
+  // Sin él no se puede calcular la ganancia.
+  if (veCosto && !datos.conVariantes) {
+    const costo = datos.costo.trim().replace(',', '.');
+    if (costo === '') e.costo = 'Escribe cuánto te costó cada unidad (para calcular tu ganancia)';
+    else if (!esMontoValido(costo)) e.costo = `Escribe un costo válido, ${ejemploMonto()}`;
+  } else if (veCosto && datos.costo.trim() !== '' && !esMontoValido(datos.costo)) {
+    e.costo = `Escribe un costo válido, ${ejemploMonto()}`;
+  }
 
   // Precio de comparación: opcional; si se escribe, debe ser mayor que el precio (si no, no es rebaja).
   const comparacion = datos.precioComparacion.trim().replace(',', '.');
@@ -98,7 +111,7 @@ function validar(datos) {
  * Al editar el precio, el backend cierra el precio anterior y crea uno nuevo: las ventas
  * pasadas conservan el precio con el que se hicieron.
  */
-export default function FormularioProducto({ idTienda, impuesto = 'IGV', producto, onGuardado, onCerrar }) {
+export default function FormularioProducto({ idTienda, impuesto = 'IGV', tasaImpuesto = 0, veCosto = false, producto, onGuardado, onCerrar }) {
   const esNuevo = !producto;
   const [datos, setDatos] = useState({
     nombre: producto?.nombre ?? '',
@@ -107,6 +120,7 @@ export default function FormularioProducto({ idTienda, impuesto = 'IGV', product
     preguntaCliente: producto?.preguntaCliente ?? '',
     precio: producto?.precio != null ? String(producto.precio) : '',
     precioComparacion: producto?.precioComparacion != null ? String(producto.precioComparacion) : '',
+    costo: producto?.costo != null ? String(producto.costo) : '',
     sku: producto?.sku ?? '',
     stock: producto?.stock != null ? String(producto.stock) : '0',
     // Al crear queda activo; al editar se respeta su estado (BORRADOR = desactivado).
@@ -225,8 +239,8 @@ export default function FormularioProducto({ idTienda, impuesto = 'IGV', product
     evento.preventDefault();
     setErrorGeneral('');
     const encontrados = {
-      ...validar({ ...datos, conVariantes }),
-      ...(conVariantes ? validarVariantes(opciones, filas, datos.precio) : {}),
+      ...validar({ ...datos, conVariantes }, veCosto),
+      ...(conVariantes ? validarVariantes(opciones, filas, datos.precio, datos.costo, veCosto) : {}),
     };
     setErrores(encontrados);
     if (Object.keys(encontrados).length > 0) {
@@ -239,6 +253,8 @@ export default function FormularioProducto({ idTienda, impuesto = 'IGV', product
       marca: datos.marca.trim() || null,
       preguntaCliente: datos.preguntaCliente.trim() || null,
       precio: aNumero(datos.precio),
+      // Un empleado no ve ni cambia costos: no se envía y el servidor conserva el que ya había.
+      costo: veCosto && datos.costo.trim() ? aNumero(datos.costo) : null,
       // Con variantes, cada una lleva su precio "antes" (columna Antes): no se hereda del producto.
       precioComparacion: !conVariantes && datos.precioComparacion.trim() ? aNumero(datos.precioComparacion) : null,
       sku: conVariantes ? null : datos.sku.trim() || null,
@@ -259,6 +275,7 @@ export default function FormularioProducto({ idTienda, impuesto = 'IGV', product
             valores,
             precio: (f.precio ?? '').trim() ? aNumero(f.precio) : null,
             precioComparacion: (f.precioComparacion ?? '').trim() ? aNumero(f.precioComparacion) : null,
+            costo: veCosto && (f.costo ?? '').trim() ? aNumero(f.costo) : null,
             sku: (f.sku ?? '').trim() || null,
             stock: (f.stock ?? '').trim() ? Number(f.stock.trim()) : 0,
           };
@@ -286,6 +303,8 @@ export default function FormularioProducto({ idTienda, impuesto = 'IGV', product
         setErrores(porCampo);
       } else if (e.response?.status === 409 && /nombre/i.test(texto)) {
         setErrores({ nombre: texto });                        // nombre repetido en la tienda
+      } else if (/costo/i.test(texto)) {
+        setErrores({ costo: texto });                         // falta el costo
       } else if (/comparaci/i.test(texto)) {
         setErrores({ precioComparacion: texto });             // precio tachado menor o igual al precio
       } else {
@@ -299,6 +318,7 @@ export default function FormularioProducto({ idTienda, impuesto = 'IGV', product
   const precio = Number(datos.precio.replace(',', '.'));
   const comparacion = Number(datos.precioComparacion.replace(',', '.'));
   const descuento = precio > 0 && comparacion > precio ? Math.round((1 - precio / comparacion) * 100) : null;
+  const utilidad = veCosto && !conVariantes ? gananciaPorUnidad(datos.precio, datos.costo, tasaImpuesto) : null;
 
   return (
     <div className="fixed inset-0 z-20 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:py-10">
@@ -497,7 +517,27 @@ export default function FormularioProducto({ idTienda, impuesto = 'IGV', product
                   </ConPrefijo>
                 </Campo>
                 )}
+                {veCosto && (
+                <Campo
+                  etiqueta={conVariantes ? 'Costo por defecto' : 'Costo por unidad'}
+                  error={errores.costo}
+                  ayuda={conVariantes
+                    ? 'Para las variantes que dejes sin costo. Lo que te costó cada unidad'
+                    : 'Lo que te costó cada unidad (lo que pagaste al proveedor). Solo tú lo ves'}
+                >
+                  <ConPrefijo>
+                    <input inputMode="decimal" value={datos.costo} onChange={cambiar('costo')} placeholder={montoVacio()} className={estiloInput(errores.costo, true)} />
+                  </ConPrefijo>
+                </Campo>
+                )}
               </div>
+              {utilidad && (
+                <p className={`rounded-lg px-3 py-2 text-[13px] ${utilidad.ganancia < 0 ? 'bg-[#fee9e8] text-[#8e1f0b]' : 'bg-[#e8fcd9] text-[#0c5132]'}`}>
+                  {utilidad.ganancia < 0
+                    ? `Vendes con pérdida: pierdes ${formatoMoneda(-utilidad.ganancia)} por unidad (sin ${impuesto}).`
+                    : `Te quedan ${formatoMoneda(utilidad.ganancia)} por unidad (${utilidad.margen.toFixed(1)} % de margen), sin ${impuesto}.`}
+                </p>
+              )}
               {!esNuevo && (
                 <p className="text-[12px] text-[#616161]">Si cambias el precio, las ventas pasadas conservan el precio con que se hicieron.</p>
               )}
@@ -514,6 +554,8 @@ export default function FormularioProducto({ idTienda, impuesto = 'IGV', product
                 filas={filas}
                 onFilas={setFilas}
                 precioBase={datos.precio}
+                costoBase={datos.costo}
+                veCosto={veCosto}
                 errores={errores}
               />
               {conVariantes && !esNuevo && producto.opciones?.length === 0 && (

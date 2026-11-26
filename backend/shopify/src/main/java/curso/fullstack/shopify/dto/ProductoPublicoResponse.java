@@ -48,7 +48,7 @@ public record ProductoPublicoResponse(
         }
         List<VarianteResponse> rebajadas = variantes.stream().map(v -> v.precio() == null ? v
                 : new VarianteResponse(v.idVariante(), v.valores(), v.nombre(), rebajar(o, v.precio(), decimales),
-                        tachado(v.precio(), v.precioComparacion()), v.sku(), v.stock())).toList();
+                        tachado(v.precio(), v.precioComparacion()), null, v.sku(), v.stock())).toList();
         OfertaPublica datos = new OfertaPublica(o.getNombre(),
                 o.getTipoDescuento() == Oferta.PORCENTAJE ? "PORCENTAJE" : "MONTO_FIJO", o.getValor());
         return new ProductoPublicoResponse(idProducto, nombre, slug, descripcion, marca, idVariante,

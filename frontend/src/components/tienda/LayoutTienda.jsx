@@ -135,7 +135,13 @@ function Marco({ subdominio }) {
   return (
     <div className={`flex min-h-screen flex-col text-[#303030] ${estilo.className}`} style={{ fontSize: 16, ...estilo.style }}>
       {/* Barra de anuncio: el texto del dueño (Básico y Pro) o, si no hay, a dónde envía */}
-      {diseno.mostrarAnuncio && <BarraAnuncio tienda={tienda} diseno={diseno} paises={paises} />}
+      {diseno.mostrarAnuncio && tienda.puedeVender !== false && <BarraAnuncio tienda={tienda} diseno={diseno} paises={paises} />}
+      {/* V24: sin RUC del dueño la tienda se puede ver, pero todavía no vende. */}
+      {tienda.puedeVender === false && (
+        <div className="bg-[#303030] px-4 py-2 text-center text-sm font-medium text-white">
+          Esta tienda abrirá pronto: puedes ver sus productos, pero todavía no recibe pedidos.
+        </div>
+      )}
       <Cabecera tienda={tienda} subdominio={subdominio} diseno={diseno} />
       <main className="flex-1">
         <Outlet context={contexto} />

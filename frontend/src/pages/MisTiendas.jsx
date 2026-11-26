@@ -172,11 +172,11 @@ function FormularioTienda({ onCerrar, onCreada }) {
       const valor = e.target.value;
       setD((v) => {
         const nuevo = { ...v, [campo]: valor };
-        if (campo === 'nombre' && !subdominioEditado) nuevo.subdominio = aSubdominio(valor);
-        if (campo === 'subdominio') nuevo.subdominio = valor.toLowerCase();
+        if (campo === 'nombre' && (!subdominioEditado || !v.subdominio)) nuevo.subdominio = aSubdominio(valor);
+        if (campo === 'subdominio') nuevo.subdominio = valor.toLowerCase().replace(/\s+/g, '-');
         return nuevo;
       });
-      if (campo === 'subdominio') setSubdominioEditado(true);
+      if (campo === 'subdominio') setSubdominioEditado(valor.trim() !== '');
       setErrores((er) => ({ ...er, [campo]: undefined }));
     };
   }
@@ -184,7 +184,11 @@ function FormularioTienda({ onCerrar, onCreada }) {
   async function enviar(e) {
     e.preventDefault();
     const er = {};
-    if (!d.nombre.trim()) er.nombre = 'Escribe el nombre de la tienda';
+    const nombre = d.nombre.trim();
+    if (!nombre) er.nombre = 'Escribe el nombre de la tienda';
+    else if (nombre.length < 3) er.nombre = 'El nombre debe tener al menos 3 caracteres';
+    else if (nombre.length > 150) er.nombre = 'El nombre puede tener hasta 150 caracteres';
+    else if (!/[\p{L}\p{N}]/u.test(nombre)) er.nombre = 'El nombre debe tener al menos una letra o un número';
     if (!/^[a-z0-9]([a-z0-9-]{1,61}[a-z0-9])$/.test(d.subdominio)) {
       er.subdominio = 'Entre 3 y 63 caracteres: letras, números y guiones (sin guion al inicio ni al final)';
     }

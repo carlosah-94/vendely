@@ -6,6 +6,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import curso.fullstack.shopify.dto.ContenidoRubro;
 import curso.fullstack.shopify.dto.DisenoPro;
 import java.time.OffsetDateTime;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -136,6 +137,11 @@ public class Tienda {
     @Column(name = "mostrar_categorias", nullable = false)
     private Boolean mostrarCategorias = true;
 
+    /** Sección propia del rubro (horario y entrega, marcas, guía de tallas...), V22. */
+    @Setter
+    @Column(name = "mostrar_seccion_rubro", nullable = false)
+    private Boolean mostrarSeccionRubro = true;
+
     /** Tema aplicado en Tienda online → Temas (V13). null = nunca aplicó uno. Catálogo: utils/temas.js. */
     @Setter
     @Column(name = "tema", length = 20)
@@ -150,6 +156,16 @@ public class Tienda {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "diseno_pro", columnDefinition = "jsonb")
     private DisenoPro disenoPro;
+
+    /** Textos y secciones de la plantilla por rubro que el dueño adapta (V23). null = los de la plantilla. */
+    @Setter
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "contenido_rubro", columnDefinition = "jsonb")
+    private ContenidoRubro contenidoRubro;
+
+    /** ¿Ya puede vender? En Perú, solo si su dueño registró su RUC (V24, fn_tienda_puede_vender). */
+    @org.hibernate.annotations.Formula("fn_tienda_puede_vender(id_tienda)")
+    private Boolean puedeVender;
 
     /** WhatsApp de la tienda con código de país (+51987654321), V17. null = sin botón de WhatsApp. Todos los planes. */
     @Setter

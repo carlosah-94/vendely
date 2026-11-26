@@ -2,7 +2,9 @@ package curso.fullstack.shopify.service;
 
 import curso.fullstack.shopify.repository.EnvioRepository;
 import curso.fullstack.shopify.entity.PermisoTienda;
+import curso.fullstack.shopify.dto.DatosComprobante;
 import curso.fullstack.shopify.dto.EnvioPedidoRequest;
+import curso.fullstack.shopify.dto.PedidoInvitadoRequest;
 import curso.fullstack.shopify.dto.LineaVentaRequest;
 import curso.fullstack.shopify.dto.LineaVentaResponse;
 import curso.fullstack.shopify.dto.PedidoClienteRequest;
@@ -98,7 +100,8 @@ public class PedidoService {
                 .filter(l -> l.getRol() == RolUsuario.CLIENTE && idTienda.equals(l.getIdTienda()))
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El cliente no existe en esta tienda"));
 
-        return crearPedido(idTienda, cliente, r.idDireccionEnvio(), r.lineas(), null, TipoEntrega.ENVIO, false);
+        return crearPedido(idTienda, cliente.getIdLogin(), cliente.getCorreo(), r.idDireccionEnvio(), r.lineas(), null,
+                TipoEntrega.ENVIO, false, null);
     }
 
     /**
@@ -116,23 +119,58 @@ public class PedidoService {
                 .filter(l -> l.getRol() == RolUsuario.CLIENTE && yo.idTienda().equals(l.getIdTienda()))
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El cliente no existe en esta tienda"));
 
-        return crearPedido(yo.idTienda(), cliente, r.idDireccionEnvio(), r.lineas(), r.codigoCupon(),
-                TipoEntrega.de(r.tipoEntrega()), true);
+        return crearPedido(yo.idTienda(), cliente.getIdLogin(), cliente.getCorreo(), r.idDireccionEnvio(), r.lineas(),
+                r.codigoCupon(), TipoEntrega.de(r.tipoEntrega()), true, r.comprobante());
+    }
+
+    /**
+     * Pedido de un invitado (sin cuenta), desde la tienda pública: id_login NULL y el correo que
+     * escribió. La tienda debe aceptar invitados (lo exige también la base, tg_pedidos_invitado).
+     * La dirección es suya: el controlador ya revisó su clave.
+     */
+    @Transactional
+    public VentaResponse registrarComoInvitado(Tienda tienda, PedidoInvitadoRequest r) {
+        if (!tienda.estaActiva()) {
+            throw new ApiException(HttpStatus.CONFLICT, "La tienda está suspendida");
+        }
+        if (!Boolean.TRUE.equals(tienda.getPermiteInvitados())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "Esta tienda pide iniciar sesión para comprar");
+        }
+        return crearPedido(tienda.getIdTienda(), null, r.correo().trim().toLowerCase(java.util.Locale.ROOT),
+                r.idDireccionEnvio(), r.lineas(), r.codigoCupon(), TipoEntrega.de(r.tipoEntrega()), true, r.comprobante());
+    }
+
+    /** El pedido de un invitado (la clave ya se revisó): solo si es de esa tienda y sin cuenta. */
+    @Transactional(readOnly = true)
+    public VentaResponse pedidoDeInvitado(Long idTienda, Long idPedido) {
+        Pedido p = buscarEnTienda(idPedido, idTienda);
+        if (p.getIdLogin() != null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "El pedido no existe");
+        }
+        return conLineas(p);
     }
 
     /**
      * Lógica común de una venta (panel y tienda): valida la dirección, descuenta el stock,
      * toma el precio vigente y guarda pedido + líneas. Debe llamarse dentro de una transacción.
      */
-    private VentaResponse crearPedido(Long idTienda, Login cliente, Long idDireccion, List<LineaVentaRequest> lineasPedidas,
-                                      String codigoCupon, TipoEntrega tipoEntrega, boolean exigirRespuestas) {
-        // 1. La dirección es suya y está activa
-        if (!direccionRepository.existsByIdDireccionAndIdLoginAndEstado(idDireccion, cliente.getIdLogin(), (short) 1)) {
+    private VentaResponse crearPedido(Long idTienda, Long idLogin, String correo, Long idDireccion, List<LineaVentaRequest> lineasPedidas,
+                                      String codigoCupon, TipoEntrega tipoEntrega, boolean exigirRespuestas,
+                                      DatosComprobante comprobante) {
+        // 0. Boleta o factura (V25): se revisa antes de tocar el stock, con mensajes claros.
+        boolean enPeru = tiendaRepository.findById(idTienda).map(t -> "PE".equals(t.getIdPais())).orElse(false);
+        Comprobante datosComprobante = enPeru ? Comprobante.revisar(comprobante) : Comprobante.NINGUNO;
+        // 1. La dirección es suya y está activa (la de un invitado tiene id_login NULL; su clave ya se revisó)
+        boolean suya = idLogin == null
+                ? direccionRepository.findById(idDireccion).filter(d -> d.getIdLogin() == null
+                        && Short.valueOf((short) 1).equals(d.getEstado())).isPresent()
+                : direccionRepository.existsByIdDireccionAndIdLoginAndEstado(idDireccion, idLogin, (short) 1);
+        if (!suya) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "La dirección de envío no es de este cliente");
         }
         // 1b. Una dirección en otro país solo si el plan incluye envíos internacionales. Las tarifas
         //     guardadas de un plan anterior no se usan (el trigger de la base las cobraría igual).
-        Optional<EnvioRepository.Cotizacion> cotizacion = envioRepository.cotizar(idTienda, cliente.getIdLogin(), idDireccion);
+        Optional<EnvioRepository.Cotizacion> cotizacion = envioRepository.cotizar(idTienda, idLogin, idDireccion);
         boolean internacional = cotizacion.map(c -> Boolean.TRUE.equals(c.getInternacional())).orElse(false);
         if (internacional && !planService.permite(idTienda, FuncionPlan.ENVIO_INTERNACIONAL)) {
             throw new ApiException(HttpStatus.CONFLICT, "Esta tienda no envía a " + cotizacion.get().getPais()
@@ -143,7 +181,7 @@ public class PedidoService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "El delivery y el recojo en tienda son solo dentro del país de la tienda");
         }
         if (tipoEntrega == TipoEntrega.DELIVERY
-                && envioRepository.deliveryPara(idTienda, cliente.getIdLogin(), idDireccion).isEmpty()) {
+                && envioRepository.deliveryPara(idTienda, idLogin, idDireccion).isEmpty()) {
             throw new ApiException(HttpStatus.CONFLICT, "La tienda no hace delivery a ese distrito. Elige otra forma de entrega.");
         }
         if (tipoEntrega == TipoEntrega.RECOJO && !tiendaRepository.findById(idTienda)
@@ -232,21 +270,39 @@ public class PedidoService {
         // 4. Código de descuento (opcional): se revisa con el subtotal real y rebaja el pedido completo.
         //    Si ya no sirve (venció, se agotó...), 400 y @Transactional devuelve el stock descontado.
         CuponService.Aplicado cupon = codigoCupon == null || codigoCupon.isBlank() ? null
-                : cuponService.aplicar(idTienda, cliente.getIdLogin(), codigoCupon, subtotal);
+                : cuponService.aplicar(idTienda, idLogin, codigoCupon, subtotal);
+        // Un código "una vez por cliente" necesita saber quién es el cliente: un invitado no puede usarlo.
+        if (cupon != null && idLogin == null && cupon.cupon().isUnaVezPorCliente()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Ese código es para clientes con cuenta: inicia sesión para usarlo");
+        }
 
         // 5. Guardar el pedido: Java manda el subtotal; el trigger pone número, envío, total e impuesto (IGV, IVA)
         Pedido p = new Pedido();
         p.setIdTienda(idTienda);
-        p.setIdLogin(cliente.getIdLogin());
+        p.setIdLogin(idLogin);
         p.setIdDireccionEnvio(idDireccion);
         p.setTipoEntrega(tipoEntrega.codigo());
-        p.setCorreoContacto(cliente.getCorreo());
+        p.setCorreoContacto(correo);
         p.setSubtotal(subtotal);
         if (cupon != null) {
             p.setIdCupon(cupon.cupon().getIdCupon());
             p.setDescuentoCupon(cupon.descuento());
         }
-        pedidoRepository.saveAndFlush(p);
+        p.setTipoComprobante(datosComprobante.tipo());
+        p.setClienteDocTipo(datosComprobante.docTipo());
+        p.setClienteDocNumero(datosComprobante.docNumero());
+        p.setClienteRazonSocial(datosComprobante.razonSocial());
+        try {
+            pedidoRepository.saveAndFlush(p);
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            // La boleta desde S/ 700 debe identificar al cliente (lo revisa la base: el total, con
+            // el envío, lo calcula su trigger). @Transactional devuelve el stock ya descontado.
+            if (String.valueOf(ex.getMostSpecificCause().getMessage()).contains("ck_pedidos_boleta")) {
+                throw new ApiException(HttpStatus.BAD_REQUEST,
+                        "Para una boleta desde S/ 700, la SUNAT pide identificar al comprador: escribe tu DNI o carné de extranjería");
+            }
+            throw ex;
+        }
         em.refresh(p);                       // lee lo que completó el trigger
 
         // 6. Guardar las líneas
@@ -259,6 +315,43 @@ public class PedidoService {
         log.info("Venta registrada: tienda={}, pedido #{} (id={}), {} producto(s), total {} {}",
                 idTienda, p.getNumeroPedido(), p.getIdPedido(), detalles.size(), p.getTotal(), p.getMoneda());
         return VentaResponse.desde(p, lineas, "SIN_PAGO", cupon == null ? null : cupon.cupon().getCodigo());
+    }
+
+    /**
+     * Los datos del comprobante ya revisados (V25), con las mismas reglas que la base:
+     *   FACTURA: RUC con dígito verificador + razón social. BOLETA: DNI (8) o CE (9), opcional.
+     */
+    private record Comprobante(String tipo, String docTipo, String docNumero, String razonSocial) {
+        static final Comprobante NINGUNO = new Comprobante(null, null, null, null);
+
+        static Comprobante revisar(DatosComprobante d) {
+            if (d == null || d.tipo() == null || "BOLETA".equals(d.tipo())) {
+                String tipoDoc = d == null || d.tipoDocumento() == null || d.tipoDocumento().isBlank() ? null : d.tipoDocumento();
+                String numero = d == null || d.numeroDocumento() == null || d.numeroDocumento().isBlank() ? null : d.numeroDocumento().trim();
+                if (numero == null) return new Comprobante("B", null, null, null);
+                if (tipoDoc == null) tipoDoc = "DNI";
+                if ("RUC".equals(tipoDoc)) {
+                    throw new ApiException(HttpStatus.BAD_REQUEST, "Con RUC se emite factura: elige Factura");
+                }
+                if ("DNI".equals(tipoDoc) && !numero.matches("^[0-9]{8}$")) {
+                    throw new ApiException(HttpStatus.BAD_REQUEST, "El DNI tiene 8 dígitos");
+                }
+                if ("CE".equals(tipoDoc) && !numero.matches("^[0-9]{9}$")) {
+                    throw new ApiException(HttpStatus.BAD_REQUEST, "El carné de extranjería tiene 9 dígitos");
+                }
+                return new Comprobante("B", tipoDoc, numero, null);
+            }
+            String ruc = d.numeroDocumento() == null ? "" : d.numeroDocumento().trim();
+            if (!DocumentoTributario.esRucValido(ruc)) {
+                throw new ApiException(HttpStatus.BAD_REQUEST,
+                        "El RUC de la factura no es válido: revisa los números (el último dígito no coincide)");
+            }
+            String razon = d.razonSocial() == null ? "" : d.razonSocial().trim();
+            if (razon.length() < 3) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "Para la factura escribe la razón social de la empresa");
+            }
+            return new Comprobante("F", "RUC", ruc, razon);
+        }
     }
 
     // =====================================================================

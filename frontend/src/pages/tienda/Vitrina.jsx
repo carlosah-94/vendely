@@ -8,6 +8,8 @@ import PrecioTienda from '../../components/tienda/PrecioTienda';
 import { BandaPromo, PortadaPro } from '../../components/tienda/BloquesPro';
 import VitrinaBoutique from '../../components/tienda/VitrinaBoutique';
 import VitrinaModerna from '../../components/tienda/VitrinaModerna';
+import VitrinaRubro from '../../components/tienda/VitrinaRubro';
+import { esTemaRubro } from '../../utils/temas';
 import { BotonComprar, tieneVariosPrecios } from '../../components/tienda/comprar';
 import { useCarrito } from '../../context/CarritoContext';
 import { mensajeDeError } from '../../services/api';
@@ -151,7 +153,8 @@ export default function Vitrina() {
       document.getElementById('catalogo')?.scrollIntoView({ behavior: 'smooth' });
     },
     elegirCategoria: (slug) => cambiarFiltro({ categoria: slug }),
-    agregarAlCarrito: (p) => {
+    // Una tienda que todavía no vende (sin RUC del dueño, V24) muestra sus productos sin botón de compra.
+    agregarAlCarrito: tienda.puedeVender === false ? null : (p) => {
       // Un producto que pide un dato (el texto de la torta) se agrega desde su página.
       if (p.preguntaCliente) {
         navigate(`/tienda/${subdominio}/producto/${p.idProducto}`);
@@ -162,6 +165,8 @@ export default function Vitrina() {
     },
   };
 
+  // Plantilla por rubro (V22): Horno, Circuito, Impulso... tienen su propia vitrina.
+  if (esTemaRubro(tienda.tema)) return <VitrinaRubro {...vista} />;
   if (tienda.plantilla === 'moderna') return <VitrinaModerna {...vista} />;
   if (tienda.plantilla === 'boutique') return <VitrinaBoutique {...vista} />;
   return <VitrinaClasica {...vista} />;

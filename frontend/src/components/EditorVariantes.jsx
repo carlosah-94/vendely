@@ -9,9 +9,9 @@ import { IconoCerrar, IconoMas } from './Iconos';
  * 2. Se generan solas todas las combinaciones ("M / Negro") y cada una tiene su precio, stock y SKU.
  *
  * opciones: [{ nombre, valores: [] }]
- * filas: { [clave]: { idVariante, precio, precioComparacion, stock, sku } } (datos escritos por combinación)
+ * filas: { [clave]: { idVariante, precio, precioComparacion, costo, stock, sku } } (datos escritos por combinación)
  */
-export default function EditorVariantes({ opciones, onOpciones, filas, onFilas, precioBase, errores }) {
+export default function EditorVariantes({ opciones, onOpciones, filas, onFilas, precioBase, costoBase = '', veCosto = false, errores }) {
   const combos = combinaciones(opciones);
 
   function cambiarOpcion(indice, cambios) {
@@ -54,6 +54,7 @@ export default function EditorVariantes({ opciones, onOpciones, filas, onFilas, 
                 <th className="px-3 py-2 font-medium">Variante</th>
                 <th className="px-3 py-2 font-medium">Precio ({simboloMoneda()})</th>
                 <th className="px-3 py-2 font-medium">Antes ({simboloMoneda()})</th>
+                {veCosto && <th className="px-3 py-2 font-medium">Costo ({simboloMoneda()})</th>}
                 <th className="px-3 py-2 font-medium">Stock</th>
                 <th className="px-3 py-2 font-medium">SKU</th>
               </tr>
@@ -88,6 +89,18 @@ export default function EditorVariantes({ opciones, onOpciones, filas, onFilas, 
                         className="w-24 rounded-md border border-[#c9c9c9] px-2 py-1"
                       />
                     </td>
+                    {veCosto && (
+                      <td className="px-3 py-1.5">
+                        <input
+                          inputMode="decimal"
+                          value={f.costo ?? ''}
+                          placeholder={costoBase || montoVacio()}
+                          onChange={(e) => cambiarFila(clave, 'costo', e.target.value)}
+                          aria-label={`Costo de ${nombreVariante(valores)}`}
+                          className="w-24 rounded-md border border-[#c9c9c9] px-2 py-1"
+                        />
+                      </td>
+                    )}
                     <td className="px-3 py-1.5">
                       <input
                         inputMode="numeric"
@@ -112,7 +125,7 @@ export default function EditorVariantes({ opciones, onOpciones, filas, onFilas, 
             </tbody>
           </table>
           <p className="border-t border-[#ebebeb] px-3 py-2 text-[12px] text-[#616161]">
-            {combos.length} variantes. Si dejas el precio vacío se usa el precio del producto.
+            {combos.length} variantes. Si dejas el precio{veCosto ? ' o el costo' : ''} vacío se usa el del producto.
           </p>
         </div>
       )}

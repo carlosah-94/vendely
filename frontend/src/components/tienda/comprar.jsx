@@ -13,6 +13,10 @@ export function tieneVariosPrecios(p) {
  * Lo usan las 3 plantillas, cada una con sus clases.
  */
 export function BotonComprar({ producto: p, subdominio, onAgregar, className, textoAgregar = 'Agregar al carrito' }) {
+  // Sin onAgregar: la tienda todavía no recibe pedidos (falta el RUC del dueño, V24).
+  if (!onAgregar) {
+    return <button type="button" disabled className={className}>Muy pronto</button>;
+  }
   if ((p.variantes?.length ?? 0) > 1) {
     return (
       <Link to={`/tienda/${subdominio}/producto/${p.idProducto}`} className={className}>

@@ -90,7 +90,7 @@ export async function verMiPedido(idPedido) {
 }
 
 /** Descarga el comprobante de compra de uno de mis pedidos (issue #3). */
-export async function descargarMiComprobante(idPedido, numeroPedido) {
+export async function descargarMiComprobante(idPedido, numeroPedido, numeroComprobante) {
   return descargarPdf(`/cliente/pedidos/${idPedido}/comprobante`,
-    `comprobante-${numeroPedido ?? idPedido}.pdf`);
+    `${numeroComprobante ?? `comprobante-${numeroPedido ?? idPedido}`}.pdf`);
 }

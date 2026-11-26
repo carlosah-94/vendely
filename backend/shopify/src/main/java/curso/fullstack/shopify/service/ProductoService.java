@@ -98,13 +98,13 @@ public class ProductoService {
     @Transactional(readOnly = true)
     public List<ProductoResponse> listar(UsuarioAutenticado yo, Long idTienda) {
         verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.PRODUCTOS, PermisoTienda.PEDIDOS, PermisoTienda.INVENTARIO);
-        return respuestas(productoRepository.filasDeTienda(idTienda));
+        return respuestas(productoRepository.filasDeTienda(idTienda), verificadorTienda.veFinanzas(yo, idTienda));
     }
 
     @Transactional(readOnly = true)
     public ProductoResponse ver(UsuarioAutenticado yo, Long idTienda, Long idProducto) {
         verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.PRODUCTOS, PermisoTienda.PEDIDOS, PermisoTienda.INVENTARIO);
-        return fila(idTienda, idProducto);
+        return fila(idTienda, idProducto, verificadorTienda.veFinanzas(yo, idTienda));
     }
 
     // ------------------------------------------------------------------ crear
@@ -115,6 +115,7 @@ public class ProductoService {
         verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.PRODUCTOS);
         planService.exigir(idTienda, FuncionPlan.CREAR_PRODUCTO);   // plan Gratis: hasta 10 productos
         validarPrecioComparacion(r);
+        boolean veCosto = verificadorTienda.veFinanzas(yo, idTienda);
         String nombre = r.nombre().trim();
         String slug = slug(nombre);
 
@@ -124,7 +125,7 @@ public class ProductoService {
             throw new ApiException(HttpStatus.CONFLICT, "Ya hay un producto con ese nombre en esta tienda");
         }
 
-        List<Plan> planes = planificar(r);        // valida opciones y variantes antes de guardar nada
+        List<Plan> planes = planificar(r, veCosto);   // valida opciones y variantes antes de guardar nada
 
         Producto p = new Producto();
         p.setIdTienda(idTienda);
@@ -134,14 +135,14 @@ public class ProductoService {
         crearOpciones(p.getIdProducto(), r.opciones());
         short posicion = 1;
         for (Plan plan : planes) {
-            guardarVariante(p.getIdProducto(), null, plan, posicion++);
+            guardarVariante(p.getIdProducto(), null, plan, posicion++, veCosto);
         }
 
         guardarImagenes(p, r.imagenes());
         categoriaService.asignar(idTienda, p.getIdProducto(), r.categorias());
 
         log.info("Producto creado: idProducto={}, tienda={}", p.getIdProducto(), idTienda);
-        return fila(idTienda, p.getIdProducto());
+        return fila(idTienda, p.getIdProducto(), veCosto);
     }
 
     // ------------------------------------------------------------------ editar
@@ -151,6 +152,7 @@ public class ProductoService {
         verificadorTienda.conPermiso(yo, idTienda, PermisoTienda.PRODUCTOS);
         Producto p = buscarEnTienda(idProducto, idTienda);
         validarPrecioComparacion(r);
+        boolean veCosto = verificadorTienda.veFinanzas(yo, idTienda);
         String nombre = r.nombre().trim();
         String slug = slug(nombre);
 
@@ -160,7 +162,7 @@ public class ProductoService {
             throw new ApiException(HttpStatus.CONFLICT, "Ya hay otro producto con ese nombre en esta tienda");
         }
 
-        List<Plan> planes = planificar(r);
+        List<Plan> planes = planificar(r, veCosto);
         List<Variante> actuales = varianteRepository.findByIdProductoOrderByIdVarianteAsc(idProducto);
         Map<Long, Variante> porId = actuales.stream().collect(Collectors.toMap(Variante::getIdVariante, v -> v));
 
@@ -201,14 +203,14 @@ public class ProductoService {
 
         short posicion = 1;
         for (Plan plan : planes) {
-            guardarVariante(idProducto, plan.idVariante() == null ? null : porId.get(plan.idVariante()), plan, posicion++);
+            guardarVariante(idProducto, plan.idVariante() == null ? null : porId.get(plan.idVariante()), plan, posicion++, veCosto);
         }
 
         guardarImagenes(p, r.imagenes());
         categoriaService.asignar(idTienda, idProducto, r.categorias());
 
         log.info("Producto actualizado: idProducto={}, tienda={}", idProducto, idTienda);
-        return fila(idTienda, idProducto);
+        return fila(idTienda, idProducto, veCosto);
     }
 
     // ------------------------------------------------------------------ eliminar
@@ -313,17 +315,17 @@ public class ProductoService {
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El producto no existe en esta tienda"));
     }
 
-    private ProductoResponse fila(Long idTienda, Long idProducto) {
+    private ProductoResponse fila(Long idTienda, Long idProducto, boolean veCosto) {
         ProductoRepository.Fila f = productoRepository.filaDeTienda(idTienda, idProducto)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "El producto no existe en esta tienda"));
-        return respuestas(List.of(f)).get(0);
+        return respuestas(List.of(f), veCosto).get(0);
     }
 
     /** Respuestas del panel con las opciones y variantes de cada producto (2 consultas en total, no 2 por producto). */
-    private List<ProductoResponse> respuestas(List<ProductoRepository.Fila> filas) {
+    private List<ProductoResponse> respuestas(List<ProductoRepository.Fila> filas, boolean veCosto) {
         Detalle d = detalle(filas.stream().map(ProductoRepository.Fila::getIdProducto).toList());
         return filas.stream()
-                .map(f -> ProductoResponse.desde(f, d.opciones(f.getIdProducto()), d.variantes(f.getIdProducto())))
+                .map(f -> ProductoResponse.desde(f, d.opciones(f.getIdProducto()), d.variantes(f.getIdProducto(), veCosto), veCosto))
                 .toList();
     }
 
@@ -345,19 +347,21 @@ public class ProductoService {
     private record Detalle(Map<Long, List<VarianteRepository.FilaOpcion>> opciones,
                            Map<Long, List<VarianteRepository.Fila>> variantes) {
 
-        List<VarianteResponse> variantes(Long idProducto) {
-            return variantes.getOrDefault(idProducto, List.of()).stream().map(v -> respuesta(v, v.getSku())).toList();
+        /** veCosto: solo el dueño ve lo que le costó cada variante (un empleado no). */
+        List<VarianteResponse> variantes(Long idProducto, boolean veCosto) {
+            return variantes.getOrDefault(idProducto, List.of()).stream()
+                    .map(v -> respuesta(v, v.getSku(), veCosto ? v.getCosto() : null)).toList();
         }
 
-        /** En la tienda pública no se muestra el SKU (es un dato interno del vendedor). */
+        /** En la tienda pública no se muestra el SKU (dato interno del vendedor) ni el costo. */
         List<VarianteResponse> variantesPublicas(Long idProducto) {
-            return variantes.getOrDefault(idProducto, List.of()).stream().map(v -> respuesta(v, null)).toList();
+            return variantes.getOrDefault(idProducto, List.of()).stream().map(v -> respuesta(v, null, null)).toList();
         }
 
         /** Cada opción con sus valores, en el orden en que aparecen en las variantes. */
         List<OpcionResponse> opciones(Long idProducto) {
             List<VarianteRepository.FilaOpcion> lista = opciones.getOrDefault(idProducto, List.of());
-            List<VarianteResponse> vs = variantes(idProducto);
+            List<VarianteResponse> vs = variantesPublicas(idProducto);   // aquí solo importan los valores
             List<OpcionResponse> resultado = new ArrayList<>();
             for (int i = 0; i < lista.size(); i++) {
                 Set<String> valores = new java.util.LinkedHashSet<>();
@@ -371,11 +375,11 @@ public class ProductoService {
             return resultado;
         }
 
-        private static VarianteResponse respuesta(VarianteRepository.Fila v, String sku) {
+        private static VarianteResponse respuesta(VarianteRepository.Fila v, String sku, BigDecimal costo) {
             List<String> valores = v.getValores() == null ? List.of() : List.of(v.getValores().split(SEPARADOR, -1));
             String nombre = valores.isEmpty() ? "Única" : String.join(" / ", valores);
             return new VarianteResponse(v.getIdVariante(), valores, nombre, v.getPrecio(), v.getPrecioComparacion(),
-                    sku, v.getStock() == null ? 0 : v.getStock());
+                    costo, sku, v.getStock() == null ? 0 : v.getStock());
         }
     }
 
@@ -386,9 +390,9 @@ public class ProductoService {
      * idVariante = null para una variante nueva.
      */
     private record Plan(Long idVariante, List<String> valores, BigDecimal precio, BigDecimal precioComparacion,
-                        String sku, int stock) {
+                        BigDecimal costo, String sku, int stock) {
         Plan conId(Long id) {
-            return new Plan(id, valores, precio, precioComparacion, sku, stock);
+            return new Plan(id, valores, precio, precioComparacion, costo, sku, stock);
         }
     }
 
@@ -403,9 +407,10 @@ public class ProductoService {
      *   cada variante con un valor de cada opción y sin combinaciones repetidas (la base lo vuelve
      *   a revisar con el trigger T5, sin distinguir mayúsculas).
      */
-    private static List<Plan> planificar(ProductoRequest r) {
+    private static List<Plan> planificar(ProductoRequest r, boolean veCosto) {
         if (!tieneOpciones(r)) {
-            return List.of(new Plan(null, List.of(), r.precio(), r.precioComparacion(), vacioANull(r.sku()), r.stock()));
+            return List.of(new Plan(null, List.of(), r.precio(), r.precioComparacion(),
+                    costoDe(null, r.costo(), veCosto, "el producto"), vacioANull(r.sku()), r.stock()));
         }
         Set<String> nombres = new HashSet<>();
         List<Set<String>> valoresPorOpcion = new ArrayList<>();
@@ -453,10 +458,28 @@ public class ProductoService {
                 throw new ApiException(HttpStatus.BAD_REQUEST,
                         "En " + nombre + ", el precio de comparación debe ser mayor que el precio");
             }
-            planes.add(new Plan(v.idVariante(), valores, precio, comparacion, vacioANull(v.sku()),
+            planes.add(new Plan(v.idVariante(), valores, precio, comparacion,
+                    costoDe(v.costo(), r.costo(), veCosto, nombre), vacioANull(v.sku()),
                     v.stock() != null ? v.stock() : r.stock()));
         }
         return planes;
+    }
+
+    /**
+     * El costo que se va a guardar (V21). Al dueño se le EXIGE: sin costo no hay forma de calcular su
+     * ganancia. La variante usa el suyo o, si no trae, el del producto. Un empleado no ve ni cambia
+     * costos: se ignora lo que mande y guardarVariante conserva el que ya había.
+     */
+    private static BigDecimal costoDe(BigDecimal deVariante, BigDecimal deProducto, boolean veCosto, String que) {
+        if (!veCosto) {
+            return null;
+        }
+        BigDecimal costo = deVariante != null ? deVariante : deProducto;
+        if (costo == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Falta el costo de " + que
+                    + ": es lo que te costó cada unidad y sirve para calcular tu ganancia");
+        }
+        return costo;
     }
 
     private void crearOpciones(Long idProducto, List<OpcionRequest> opciones) {
@@ -473,7 +496,7 @@ public class ProductoService {
      * Crea o actualiza una variante con sus valores, su precio y su stock.
      * existente = null para una variante nueva.
      */
-    private void guardarVariante(Long idProducto, Variante existente, Plan plan, short posicion) {
+    private void guardarVariante(Long idProducto, Variante existente, Plan plan, short posicion, boolean veCosto) {
         Variante v = existente != null ? existente : new Variante();
         v.setIdProducto(idProducto);
         v.setSku(plan.sku());
@@ -489,15 +512,19 @@ public class ProductoService {
         // Precio: la base no deja editar el monto ni el precio tachado (cada venta guarda el precio
         // con que se hizo). Si alguno cambió, se cierra el vigente y se crea uno nuevo.
         // Si son iguales, no se toca el historial.
+        // El costo (V21) viaja con el precio: si cambia, también se cierra el vigente y se crea otro.
+        // Un empleado no ve costos: conserva el que ya tenía la variante.
         Precio actual = existente == null ? null : precioRepository.vigente(idVariante).orElse(null);
+        BigDecimal costo = veCosto ? plan.costo() : (actual == null ? null : actual.getCosto());
         if (actual == null
                 || actual.getMonto().compareTo(plan.precio()) != 0
-                || !mismoMonto(actual.getMontoComparacion(), plan.precioComparacion())) {
+                || !mismoMonto(actual.getMontoComparacion(), plan.precioComparacion())
+                || !mismoMonto(actual.getCosto(), costo)) {
             if (actual != null) {
                 precioRepository.cerrarVigente(idVariante);
                 log.info("Precio cambiado: idVariante={}, {} -> {}", idVariante, actual.getMonto(), plan.precio());
             }
-            crearPrecio(idVariante, plan.precio(), plan.precioComparacion());
+            crearPrecio(idVariante, plan.precio(), plan.precioComparacion(), costo);
         }
 
         // Stock: valor absoluto (para sumar mercadería que llega está Inventario → Recibir).
@@ -521,11 +548,12 @@ public class ProductoService {
         p.setEstado(Boolean.FALSE.equals(r.activo()) ? BORRADOR : ACTIVO);
     }
 
-    private void crearPrecio(Long idVariante, BigDecimal monto, BigDecimal montoComparacion) {
+    private void crearPrecio(Long idVariante, BigDecimal monto, BigDecimal montoComparacion, BigDecimal costo) {
         Precio precio = new Precio();
         precio.setIdVariante(idVariante);
         precio.setMonto(monto);
         precio.setMontoComparacion(montoComparacion);
+        precio.setCosto(costo);
         precioRepository.saveAndFlush(precio);    // fecha_inicio la pone la base (now())
     }
 

@@ -78,3 +78,16 @@ export function colorTextoSobre(hex) {
   const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
   return (0.299 * r + 0.587 * g + 0.114 * b) > 160 ? '#1a1a1a' : '#ffffff';
 }
+
+/**
+ * Lo que le queda al dueño por cada unidad vendida, sin el impuesto (IGV/IVA): el precio ya lo incluye y
+ * ese porcentaje es del Estado. Devuelve { ganancia, margen } o null si faltan datos.
+ * Ejemplo con IGV 18 %: precio 70, costo 40 → neto 59.32, ganancia 19.32, margen 32.6 %.
+ */
+export function gananciaPorUnidad(precio, costo, tasaImpuesto = 0) {
+  const p = Number(String(precio).replace(',', '.'));
+  const c = Number(String(costo).replace(',', '.'));
+  if (!(p > 0) || String(costo).trim() === '' || !(c >= 0)) return null;
+  const neto = p / (1 + Number(tasaImpuesto || 0) / 100);
+  return { neto, ganancia: neto - c, margen: ((neto - c) / neto) * 100 };
+}

@@ -7,6 +7,7 @@ import { NOMBRE_MONEDA, usePaisesHabilitados } from '../hooks/usePaisesHabilitad
 import { api, mensajeDeError } from '../services/api';
 import { estiloInput } from '../utils/estilos';
 import SelectorRubro from '../components/SelectorRubro';
+import { problemaRuc, rutValido } from '../utils/documentos';
 
 /**
  * Países donde un dueño puede registrarse: los que tienen tipos de documento en la tabla
@@ -19,11 +20,11 @@ import SelectorRubro from '../components/SelectorRubro';
 const TIPOS_DOCUMENTO = [
   { pais: 'Perú', idPais: 'PE', prefijo: '+51', tipos: [
     { id: 1, codigo: 'DNI', patron: /^[0-9]{8}$/, ejemplo: '12345678' },
-    { id: 2, codigo: 'RUC', patron: /^(10|15|17|20)[0-9]{9}$/, ejemplo: '20601234567', empresa: true },
+    { id: 2, codigo: 'RUC', patron: /^(10|15|17|20)[0-9]{9}$/, ejemplo: '20601234565', empresa: true },
     { id: 3, codigo: 'Carné de extranjería', patron: /^[0-9]{9}$/, ejemplo: '123456789' },
   ] },
   { pais: 'Chile', idPais: 'CL', prefijo: '+56', tipos: [
-    { id: 4, codigo: 'RUT', patron: /^[0-9]{7,8}-[0-9K]$/, ejemplo: '12345678-K', empresa: true },
+    { id: 4, codigo: 'RUT', patron: /^[0-9]{7,8}-[0-9K]$/, ejemplo: '12345678-5', empresa: true },
   ] },
   { pais: 'México', idPais: 'MX', prefijo: '+52', tipos: [
     { id: 5, codigo: 'RFC', patron: /^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/, ejemplo: 'ABC010203XYZ', empresa: true },
@@ -112,13 +113,22 @@ function validarCuenta(d) {
     e.tipoDocumento = 'Elige el tipo de documento';
   } else if (!tipo.patron.test(d.numeroDocumento.trim().toUpperCase())) {
     e.numeroDocumento = `Formato no válido. Ejemplo: ${tipo.ejemplo}`;
+  } else if (tipo.id === 2 && problemaRuc(d.numeroDocumento.trim())) {
+    // V24: además del formato, el dígito verificador (un RUC mal escrito o inventado no pasa).
+    e.numeroDocumento = problemaRuc(d.numeroDocumento.trim());
+  } else if (tipo.id === 4 && !rutValido(d.numeroDocumento.trim().toUpperCase())) {
+    e.numeroDocumento = 'El RUT no es válido: revisa los números y el dígito verificador';
   }
   return e;
 }
 
 function validarTienda(d) {
   const e = {};
-  if (!d.nombre.trim()) e.nombre = 'Escribe el nombre de tu tienda';
+  const nombre = d.nombre.trim();
+  if (!nombre) e.nombre = 'Escribe el nombre de tu tienda';
+  else if (nombre.length < 3) e.nombre = 'El nombre debe tener al menos 3 caracteres';
+  else if (nombre.length > 150) e.nombre = 'El nombre puede tener hasta 150 caracteres';
+  else if (!/[\p{L}\p{N}]/u.test(nombre)) e.nombre = 'El nombre debe tener al menos una letra o un número';
   if (!/^[a-z0-9]([a-z0-9-]{1,61}[a-z0-9])$/.test(d.subdominio)) {
     e.subdominio = 'Entre 3 y 63 caracteres: letras, números y guiones (sin guion al inicio ni al final)';
   }
@@ -172,8 +182,40 @@ export default function Registro() {
     return () => clearInterval(reloj);
   }, [paso]);
 
-  // Una persona que ya inició sesión no necesita crear otra cuenta.
+  /*
+   * Si el dueño recarga la página en el paso 2, su cuenta ya existe y su sesión sigue abierta.
+   * Antes eso lo mandaba al panel sin tienda. Ahora se revisa: si todavía no tiene tiendas,
+   * vuelve al paso 2 con el formulario limpio; si ya tiene, va al panel.
+   */
+  const duenoConSesion = usuario?.rol === 'ADMIN_TIENDA' && paso === 'cuenta';
+  useEffect(() => {
+    if (!duenoConSesion) return undefined;
+    let vigente = true;
+    api.get('/panel/tiendas')
+      .then(({ data }) => {
+        if (!vigente) return;
+        if (data.length > 0) {
+          navigate('/inicio', { replace: true });
+          return;
+        }
+        setTienda({ nombre: '', subdominio: '', correoContacto: usuario.correo ?? '', idPais: 'PE', rubro: '' });
+        setSubdominioEditado(false);
+        setErrores({});
+        setPaso('tienda');
+      })
+      .catch(() => { if (vigente) navigate('/inicio', { replace: true }); });
+    return () => { vigente = false; };
+  }, [duenoConSesion, usuario, navigate]);
+
+  // Otras cuentas con sesión (cliente, empleado, soporte) no necesitan crear una cuenta.
   if (usuario && paso === 'cuenta') {
+    if (duenoConSesion) {
+      return (
+        <LayoutAcceso ancho="max-w-lg">
+          <p className="text-sm text-slate-500">Cargando tus datos...</p>
+        </LayoutAcceso>
+      );
+    }
     return <Navigate to="/inicio" replace />;
   }
 
@@ -211,11 +253,13 @@ export default function Registro() {
       const valor = e.target.value;
       setTienda((t) => {
         const nueva = { ...t, [campo]: valor };
-        if (campo === 'nombre' && !subdominioEditado) nueva.subdominio = aSubdominio(valor);
-        if (campo === 'subdominio') nueva.subdominio = valor.toLowerCase();
+        // Se arma sola con el nombre mientras el dueño no la escriba, o si la dejó vacía.
+        if (campo === 'nombre' && (!subdominioEditado || !t.subdominio)) nueva.subdominio = aSubdominio(valor);
+        if (campo === 'subdominio') nueva.subdominio = valor.toLowerCase().replace(/\s+/g, '-');
         return nueva;
       });
-      if (campo === 'subdominio') setSubdominioEditado(true);
+      // Si borra la dirección, vuelve a armarse sola con el nombre.
+      if (campo === 'subdominio') setSubdominioEditado(valor.trim() !== '');
       setErrores((er) => ({ ...er, [campo]: undefined, ...(campo === 'nombre' ? { subdominio: undefined } : {}) }));
     };
   }
@@ -331,15 +375,18 @@ export default function Registro() {
   async function crearTienda(evento) {
     evento.preventDefault();
     setErrorGeneral('');
-    const encontrados = validarTienda(tienda);
+    // Si la dirección quedó vacía, se arma con el nombre antes de validar.
+    const datos = tienda.subdominio ? tienda : { ...tienda, subdominio: aSubdominio(tienda.nombre) };
+    if (datos !== tienda) setTienda(datos);
+    const encontrados = validarTienda(datos);
     setErrores(encontrados);
     if (Object.keys(encontrados).length > 0) return;
 
     setEnviando(true);
     try {
       await api.post('/panel/tiendas', {
-        nombre: tienda.nombre.trim(),
-        subdominio: tienda.subdominio,
+        nombre: datos.nombre.trim(),
+        subdominio: datos.subdominio,
         correoContacto: tienda.correoContacto.trim(),
         permiteInvitados: true,
         idPais: tienda.idPais,
@@ -502,7 +549,9 @@ export default function Registro() {
           <Campo
             etiqueta="Dirección web"
             error={errores.subdominio}
-            ayuda="No se puede cambiar después."
+            ayuda={tienda.subdominio
+              ? `Tu tienda se verá en ${window.location.host}/tienda/${tienda.subdominio}. No se puede cambiar después.`
+              : 'Se arma sola con el nombre de la tienda. No se puede cambiar después.'}
           >
             <div className={`flex overflow-hidden rounded-lg border bg-white focus-within:ring-2 ${
               errores.subdominio ? 'border-red-400 focus-within:ring-red-200' : 'border-slate-300 focus-within:border-violet-500 focus-within:ring-violet-200'
@@ -510,7 +559,7 @@ export default function Registro() {
               <input
                 value={tienda.subdominio}
                 onChange={cambiarTienda('subdominio')}
-                placeholder="moda-lima"
+                placeholder={aSubdominio(tienda.nombre) || 'mi-tienda'}
                 className="min-w-0 flex-1 px-3 py-2.5 text-slate-900 placeholder:text-slate-400 focus:outline-none"
               />
               <span className="flex items-center border-l border-slate-200 bg-slate-50 px-3 text-sm text-slate-500">.vendely.pe</span>

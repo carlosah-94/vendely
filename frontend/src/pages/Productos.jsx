@@ -9,7 +9,8 @@ import { useTiendaActual } from '../hooks/useTiendaActual';
 import { mensajeDeError } from '../services/api';
 import { listarCategorias } from '../services/categorias';
 import { eliminarProducto, listarProductos } from '../services/productos';
-import { formatoMoneda } from '../utils/formato';
+import { formatoMoneda, gananciaPorUnidad } from '../utils/formato';
+import { esDuenoDe, esSoporte } from '../utils/permisos';
 
 const ESTADO = {
   ACTIVO: { texto: 'Activo', estilo: 'bg-[#e8fcd9] text-[#0c5132]' },
@@ -84,6 +85,12 @@ export default function Productos() {
   const listaCategorias = categorias.idTienda === idTienda ? categorias.lista : [];
 
   const cargando = cargandoTiendas || (idTienda !== null && datos.idTienda !== idTienda);
+
+  // Costos y ganancias son de las finanzas: solo el dueño (o soporte con su permiso) los ve. Un empleado no.
+  const veCosto = Boolean(tienda) && (esDuenoDe(tienda) || esSoporte(tienda));
+  const tasa = Number(tienda?.tasaImpuesto ?? 0);
+  const sinCosto = veCosto ? datos.productos.filter((p) => p.costo == null) : [];
+  const columnas = veCosto ? 7 : 5;
 
   const texto = busqueda.trim().toLowerCase();
 
@@ -169,6 +176,12 @@ export default function Productos() {
       {errorAccion && <Mensaje tipo="error" texto={errorAccion} onCerrar={() => setErrorAccion('')} />}
       {datos.error && <Mensaje tipo="error" texto={datos.error} />}
       {tienda && !cargando && <LimiteDelPlan tienda={tienda} cantidad={datos.productos.length} />}
+      {veCosto && !cargando && sinCosto.length > 0 && (
+        <Mensaje
+          tipo="info"
+          texto={`${sinCosto.length === 1 ? '1 producto no tiene' : `${sinCosto.length} productos no tienen`} costo: sus ventas no cuentan en tus ganancias. Edítalos y agrega cuánto te costó cada unidad.`}
+        />
+      )}
 
       {tienda && !cargando && datos.productos.length === 0 && !datos.error && (
         <div className="flex flex-col items-center rounded-xl bg-white px-6 py-14 text-center shadow-[0_1px_0_rgba(0,0,0,0.08),0_0_0_1px_rgba(0,0,0,0.05)]">
@@ -244,6 +257,8 @@ export default function Productos() {
               <tr>
                 <th className="px-4 py-3 font-medium">Nombre</th>
                 <th className="px-4 py-3 text-right font-medium">Precio</th>
+                {veCosto && <th className="px-4 py-3 text-right font-medium">Costo</th>}
+                {veCosto && <th className="px-4 py-3 text-right font-medium">Margen</th>}
                 <th className="px-4 py-3 text-right font-medium">Stock</th>
                 <th className="px-4 py-3 font-medium">Estado</th>
                 <th className="px-4 py-3 text-right font-medium">Acciones</th>
@@ -251,10 +266,10 @@ export default function Productos() {
             </thead>
             <tbody className="divide-y divide-[#ebebeb]">
               {cargando && (
-                <tr><td colSpan={5} className="px-4 py-6 text-center text-slate-500">Cargando productos...</td></tr>
+                <tr><td colSpan={columnas} className="px-4 py-6 text-center text-slate-500">Cargando productos...</td></tr>
               )}
               {!cargando && visibles.length === 0 && (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-[#616161]">Ningún producto coincide con el filtro.</td></tr>
+                <tr><td colSpan={columnas} className="px-4 py-8 text-center text-[#616161]">Ningún producto coincide con el filtro.</td></tr>
               )}
               {!cargando && visibles.map((p) => (
                 <tr key={p.idProducto} className="hover:bg-[#f7f7f7]">
@@ -278,6 +293,12 @@ export default function Productos() {
                   <td className="whitespace-nowrap px-4 py-3 text-right text-[#303030]">
                     <PrecioLista producto={p} />
                   </td>
+                  {veCosto && (
+                    <td className="whitespace-nowrap px-4 py-3 text-right text-[#303030]">
+                      {p.costo != null ? formatoMoneda(p.costo) : <span className="text-[#8a8a8a]">Sin costo</span>}
+                    </td>
+                  )}
+                  {veCosto && <td className="whitespace-nowrap px-4 py-3 text-right"><MargenLista producto={p} tasa={tasa} /></td>}
                   <td className="whitespace-nowrap px-4 py-3 text-right">
                     {/* Sin stock: se resalta en rojo para que el dueño lo note. */}
                     {p.stock > 0 ? (
@@ -336,6 +357,8 @@ export default function Productos() {
         <FormularioProducto
           idTienda={idTienda}
           impuesto={tienda?.impuesto}
+          tasaImpuesto={tienda?.tasaImpuesto}
+          veCosto={veCosto}
           producto={formulario === 'nuevo' ? null : formulario}
           onGuardado={alGuardar}
           onCerrar={cerrarFormulario}
@@ -400,4 +423,17 @@ function PrecioLista({ producto: p }) {
       )}
     </>
   );
+}
+
+/**
+ * Margen del producto: lo que queda de cada sol vendido, sin el impuesto y después del costo.
+ * Con variantes se usa el precio y el costo "desde" (los menores), igual que la columna Precio.
+ */
+function MargenLista({ producto, tasa }) {
+  const u = gananciaPorUnidad(producto.precio, producto.costo ?? '', tasa);
+  if (!u) {
+    return <span className="text-[#8a8a8a]">-</span>;
+  }
+  const estilo = u.ganancia < 0 ? 'bg-[#fee9e8] text-[#8e1f0b]' : 'bg-[#e8fcd9] text-[#0c5132]';
+  return <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${estilo}`}>{u.margen.toFixed(0)} %</span>;
 }

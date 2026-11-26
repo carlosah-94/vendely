@@ -105,4 +105,39 @@ public class Pedido {
     @Setter
     @Column(name = "descuento_cupon", nullable = false, precision = 12, scale = 2, updatable = false)
     private BigDecimal descuentoCupon = BigDecimal.ZERO;
+
+    // ------------------------------------------------ boleta o factura (V25), solo tiendas de Perú
+
+    /** B = boleta, F = factura; null = sin comprobante SUNAT (otro país o pedido antiguo). Lo completa la base. */
+    @Setter
+    @Column(name = "tipo_comprobante", length = 1, updatable = false, columnDefinition = "bpchar(1)")
+    private String tipoComprobante;
+
+    /** Documento del cliente para el comprobante: DNI, CE o RUC (factura). Fijo desde que se crea. */
+    @Setter
+    @Column(name = "cliente_doc_tipo", length = 3, updatable = false)
+    private String clienteDocTipo;
+
+    @Setter
+    @Column(name = "cliente_doc_numero", length = 11, updatable = false)
+    private String clienteDocNumero;
+
+    @Setter
+    @Column(name = "cliente_razon_social", length = 150, updatable = false)
+    private String clienteRazonSocial;
+
+    /** Serie (B001, F001) y correlativo: los pone la base al aprobarse el pago, nunca Java. */
+    @Column(name = "comprobante_serie", insertable = false, updatable = false)
+    private String comprobanteSerie;
+
+    @Column(name = "comprobante_numero", insertable = false, updatable = false)
+    private Integer comprobanteNumero;
+
+    @Column(name = "comprobante_emitido_el", insertable = false, updatable = false)
+    private OffsetDateTime comprobanteEmitidoEl;
+
+    /** "B001-00000001" o null si todavía no se emite. */
+    public String numeroComprobante() {
+        return comprobanteNumero == null ? null : comprobanteSerie + "-" + String.format("%08d", comprobanteNumero);
+    }
 }

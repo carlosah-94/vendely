@@ -62,6 +62,16 @@ public class CuponService {
         return aplicar(yo.idTienda(), yo.idLogin(), codigo, subtotal).respuesta();
     }
 
+    /** Vista previa para un invitado: no hay cliente, así que un código "una vez por cliente" no aplica. */
+    @Transactional(readOnly = true)
+    public CuponAplicadoResponse validarInvitado(Long idTienda, String codigo, BigDecimal subtotal) {
+        Aplicado a = aplicar(idTienda, null, codigo, subtotal);
+        if (a.cupon().isUnaVezPorCliente()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Ese código es para clientes con cuenta: inicia sesión para usarlo");
+        }
+        return a.respuesta();
+    }
+
     /**
      * Revisa el código para un pedido de la tienda con ese subtotal y calcula el descuento.
      * 400 si no existe o no sirve, con un mensaje que el cliente entiende.

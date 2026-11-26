@@ -94,6 +94,13 @@ public class AuthService {
         p.setTipoDocumento(r.tipoDocumento());
         p.setNumeroDocumento(documento);
         p.setRazonSocial(vacioANull(r.razonSocial()));
+        // Quien se registra con su RUC ya puede vender: su RUC es su documento. Con RUC 10
+        // (persona) la razón social, si no la escribió, es su nombre completo. Con RUC 20
+        // (empresa) hace falta su razón social: si no la puso, la completa luego en Mi perfil.
+        if (r.tipoDocumento() == 2) {
+            if (p.getRazonSocial() == null && documento.startsWith("10")) p.setRazonSocial(nombreCompleto(login));
+            if (p.getRazonSocial() != null) p.setRuc(documento);
+        }
         propietarioRepository.save(p);
         verificacionCorreo.consumir(correo);     // el código ya se usó: no sirve para otra cuenta
 
@@ -252,6 +259,11 @@ public class AuthService {
      * Los demás tipos (RUT, RFC, NIT…) los valida la base con el patrón de
      * tipos_documento (trigger T13).
      */
+    private static String nombreCompleto(Login l) {
+        return String.join(" ", java.util.stream.Stream.of(l.getNombres(), l.getPrimerApellido(), l.getSegundoApellido())
+                .filter(x -> x != null && !x.isBlank()).map(String::trim).toList());
+    }
+
     private static void validarDocumento(Short tipo, String numero) {
         boolean ok = switch (tipo) {
             case 1 -> numero.matches("^[0-9]{8}$"); // DNI
@@ -266,6 +278,13 @@ public class AuthService {
                 case 3 -> "El carné de extranjería debe tener 9 dígitos";
                 default -> "Tipo de documento inválido";
             });
+        }
+        // Además del formato, el dígito verificador (V24): un número mal escrito o inventado no pasa.
+        if (tipo == 2 && !DocumentoTributario.esRucValido(numero)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "El RUC no es válido: revisa los números (el último dígito no coincide)");
+        }
+        if (tipo == 4 && !DocumentoTributario.esRutValido(numero)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "El RUT no es válido: revisa los números y el dígito verificador");
         }
     }
 }

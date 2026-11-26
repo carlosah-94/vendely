@@ -13,7 +13,7 @@ import java.util.List;
  * Una combinación de valores con su propio precio, stock y SKU, por ejemplo "M / Negro".
  * idVariante: el de una variante que ya existe (al editar); null para una nueva.
  * valores: uno por cada opción, en el mismo orden que las opciones.
- * precio, precioComparacion y stock son opcionales: si no vienen, se usan los del producto.
+ * precio, precioComparacion, costo y stock son opcionales: si no vienen, se usan los del producto.
  */
 public record VarianteRequest(
         Long idVariante,
@@ -28,6 +28,10 @@ public record VarianteRequest(
         @DecimalMin(value = "0.01", message = "El precio de comparación debe ser mayor que 0")
         @Digits(integer = 10, fraction = 2, message = "El precio de comparación admite hasta 2 decimales")
         BigDecimal precioComparacion,
+
+        @DecimalMin(value = "0.00", message = "El costo no puede ser negativo")
+        @Digits(integer = 10, fraction = 2, message = "El costo admite hasta 2 decimales")
+        BigDecimal costo,
 
         @Size(max = 60, message = "El SKU puede tener hasta 60 caracteres")
         String sku,

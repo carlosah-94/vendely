@@ -90,6 +90,7 @@ export const DISENO_INICIAL = {
   mostrarGarantias: true,
   mostrarDestacado: true,
   mostrarCategorias: true,
+  mostrarSeccionRubro: true,
 };
 
 /** El diseño de la tienda con los valores por defecto donde falte algo (tiendas antiguas, null). */

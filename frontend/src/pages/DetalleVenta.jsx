@@ -142,7 +142,7 @@ export default function DetalleVenta() {
   async function descargar() {
     setErrorAccion('');
     try {
-      await descargarComprobanteVenta(idTienda, idPedido, datos.venta?.numeroPedido);
+      await descargarComprobanteVenta(idTienda, idPedido, datos.venta?.numeroPedido, datos.venta?.numeroComprobante);
     } catch {
       setErrorAccion('No se pudo descargar el comprobante');
     }
@@ -183,6 +183,20 @@ export default function DetalleVenta() {
               {venta.estado === 'ENVIADO' ? entrega.enviado : NOMBRE_ESTADO[venta.estado] ?? venta.estado}
             </span>
           </p>
+          {/* Boleta o factura (V25): el número lo pone la base al aprobarse el pago. */}
+          {venta.tipoComprobante && (
+            <p className="mt-1 text-sm text-slate-600">
+              {venta.tipoComprobante === 'FACTURA' ? 'Factura' : 'Boleta'}{' '}
+              {venta.numeroComprobante
+                ? <b className="font-mono text-[#101010]">{venta.numeroComprobante}</b>
+                : <span className="text-slate-500">(se emite al aprobarse el pago)</span>}
+              {venta.clienteDocNumero && (
+                <span className="ml-2 text-slate-500">
+                  · {venta.clienteDocTipo} {venta.clienteDocNumero}{venta.clienteRazonSocial ? ` · ${venta.clienteRazonSocial}` : ''}
+                </span>
+              )}
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {/* En un pedido cancelado no se ofrece: el comprobante no dice que se canceló. */}
@@ -191,7 +205,7 @@ export default function DetalleVenta() {
               onClick={descargar}
               className="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
             >
-              Descargar comprobante
+              {venta.tipoComprobante === 'FACTURA' ? 'Descargar factura' : venta.tipoComprobante ? 'Descargar boleta' : 'Descargar comprobante'}
             </button>
           )}
           {confirmando ? (

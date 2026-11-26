@@ -29,7 +29,7 @@ export async function listarNotificaciones(idTienda, idPedido) {
 }
 
 /** Descarga el comprobante de la venta (PDF). */
-export async function descargarComprobanteVenta(idTienda, idPedido, numeroPedido) {
+export async function descargarComprobanteVenta(idTienda, idPedido, numeroPedido, numeroComprobante) {
   return descargarPdf(`/panel/tiendas/${idTienda}/pedidos/${idPedido}/comprobante`,
-    `comprobante-${numeroPedido ?? idPedido}.pdf`);
+    `${numeroComprobante ?? `comprobante-${numeroPedido ?? idPedido}`}.pdf`);
 }

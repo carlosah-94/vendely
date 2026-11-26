@@ -66,6 +66,58 @@ class InformeServiceTest extends PruebaIntegracion {
     }
 
     @Test
+    void laGananciaDescuentaElCostoYSacaelImpuestoYElEnvio() throws Exception {
+        // Precio 50 con IGV (18 %), costo 30. Dos unidades: subtotal 100, envío 10, total 110, IGV 16.78.
+        long camisa = datos.nuevoProductoConCosto(tienda.idTienda(), "50.00", "30.00", 10);
+        pagado(crearPedido(tienda, camisa, 2));
+
+        JsonNode g = informe("").at("/actual/ganancia");
+
+        // Ingresos sin IGV ni envío: 100 × (110 - 16.78) / 110 = 84.75. Costo: 2 × 30 = 60.
+        assertThat(g.get("ingresosNetos").decimalValue()).isEqualByComparingTo("84.75");
+        assertThat(g.get("costo").decimalValue()).isEqualByComparingTo("60.00");
+        assertThat(g.get("ganancia").decimalValue()).isEqualByComparingTo("24.75");
+        assertThat(g.get("margen").decimalValue()).isEqualByComparingTo("29.2");
+        assertThat(g.get("pedidosConCosto").asLong()).isEqualTo(1);
+        assertThat(g.get("pedidosSinCosto").asLong()).isZero();
+    }
+
+    @Test
+    void unPedidoConUnProductoSinCostoNoInflaLaGanancia() throws Exception {
+        long conCosto = datos.nuevoProductoConCosto(tienda.idTienda(), "50.00", "30.00", 10);
+        long sinCosto = datos.nuevoProducto(tienda.idTienda(), "20.00", 10);   // anterior a V21: sin costo
+        pagado(crearPedido(tienda, conCosto, 1));
+        pagado(crearPedido(tienda, sinCosto, 1));
+
+        JsonNode informe = informe("");
+
+        assertThat(informe.at("/actual/pedidos").asLong()).isEqualTo(2);
+        assertThat(informe.at("/actual/ganancia/pedidosConCosto").asLong()).isEqualTo(1);
+        assertThat(informe.at("/actual/ganancia/pedidosSinCosto").asLong()).isEqualTo(1);
+        // Solo cuenta el pedido con costo: 50 × (60 - 9.15) / 60 = 42.37 menos 30 = 12.37 (aprox.)
+        assertThat(informe.at("/actual/ganancia/costo").decimalValue()).isEqualByComparingTo("30.00");
+        assertThat(informe.at("/actual/ganancia/ganancia").decimalValue()).isBetween(new BigDecimal("12.30"), new BigDecimal("12.45"));
+        // El producto sin costo sale en la lista pero sin ganancia.
+        assertThat(informe.at("/productos/0/ganancia").isNull()).isFalse();
+        assertThat(informe.at("/productos/1/ganancia").isNull()).isTrue();
+    }
+
+    @Test
+    void elInventarioMuestraElDineroInvertidoYLaGananciaPotencial() throws Exception {
+        datos.nuevoProductoConCosto(tienda.idTienda(), "59.00", "20.00", 10);   // capital 200, venta 590
+        datos.nuevoProducto(tienda.idTienda(), "10.00", 5);                      // sin costo: se avisa, no entra
+
+        JsonNode inv = informe("").get("inventario");
+
+        assertThat(inv.get("capitalInvertido").decimalValue()).isEqualByComparingTo("200.00");
+        assertThat(inv.get("valorDeVenta").decimalValue()).isEqualByComparingTo("590.00");
+        // 590 / 1.18 = 500 sin IGV; menos el capital de 200 = 300.
+        assertThat(inv.get("gananciaPotencial").decimalValue()).isEqualByComparingTo("300.00");
+        assertThat(inv.get("productosSinCosto").asLong()).isEqualTo(1);
+        assertThat(inv.get("unidades").asLong()).isEqualTo(15);
+    }
+
+    @Test
     void unClienteQueYaHabiaCompradoAntesEsRecurrente() throws Exception {
         long camisa = datos.nuevoProducto(tienda.idTienda(), "50.00", 10);
         long viejo = pagado(crearPedido(tienda, camisa, 1));
