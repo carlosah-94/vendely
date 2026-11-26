@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Campanita from './Campanita';
 import MenuCuenta from './MenuCuenta';
-import { ToastProvider } from '../context/ToastContext';
+import { ToastProvider, useToast } from '../context/ToastContext';
+import { useBandejaSoporte, useNoLeidosSoporte } from '../hooks/useAvisosSoporte';
 import { useTiendaActual } from '../hooks/useTiendaActual';
 import {
   IconoBuscar, IconoCategoria, IconoCheck, IconoClientes, IconoDescuento, IconoEmpleados, IconoInforme, IconoEnlaceExterno, IconoEnvio, IconoInicio,
@@ -62,7 +63,16 @@ const NOMBRE_ROL = {
  * En el celular el menú se esconde y se abre con el botón de tres rayas.
  */
 export default function LayoutPanel() {
+  return (
+    <ToastProvider>
+      <MarcoPanel />
+    </ToastProvider>
+  );
+}
+
+function MarcoPanel() {
   const { usuario } = useAuth();
+  const { avisar } = useToast();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [menuAbierto, setMenuAbierto] = useState(false);
@@ -93,6 +103,23 @@ export default function LayoutPanel() {
   }
   const inicial = (usuario.nombres ?? '?').trim().charAt(0).toUpperCase();
 
+  // Mensajes de soporte: el dueño ve cuántas respuestas no leyó; el equipo, cuántas tiendas esperan.
+  const noLeidosDueno = useNoLeidosSoporte(tienda?.idTienda, usuario.rol === 'ADMIN_TIENDA' && duenoAqui && Boolean(tienda),
+    () => {
+      if (pathname !== '/panel/soporte') avisar('Soporte de Vendely te respondió. Míralo en «Soporte de Vendely».');
+    });
+  const { sinResponder } = useBandejaSoporte(usuario.rol === 'SUPERADMIN', {
+    alEscribir: (aviso) => avisar(`${aviso.tienda} escribió a soporte: «${aviso.texto}»`),
+  });
+  const contadores = { '/panel/soporte': noLeidosDueno, '/admin/soporte': sinResponder };
+  const pendientesSoporte = usuario.rol === 'SUPERADMIN' ? sinResponder : noLeidosDueno;
+
+  // El número también en la pestaña del navegador, para verlo aunque se esté en otra.
+  useEffect(() => {
+    const base = document.title.replace(/^\(\d+\+?\) /, '');
+    document.title = pendientesSoporte > 0 ? `(${pendientesSoporte}) ${base}` : base;
+  }, [pendientesSoporte]);
+
   // La búsqueda de arriba lleva a Productos con el texto escrito (como en Shopify).
   function buscar(evento) {
     evento.preventDefault();
@@ -117,7 +144,15 @@ export default function LayoutPanel() {
           }
         >
           {Icono && <Icono tamano={17} />}
-          {texto}
+          <span className="flex-1 truncate">{texto}</span>
+          {contadores[ruta] > 0 && (
+            <span
+              className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#e51c00] px-1.5 text-[11px] font-semibold text-white"
+              aria-label={`${contadores[ruta]} mensaje(s) sin leer`}
+            >
+              {contadores[ruta] > 9 ? '9+' : contadores[ruta]}
+            </span>
+          )}
         </NavLink>
       ))}
 
@@ -153,7 +188,7 @@ export default function LayoutPanel() {
   );
 
   return (
-    <ToastProvider>
+    <>
       <div className="flex min-h-screen flex-col bg-[#0a0a0a] text-[#303030]">
         {/* Barra superior oscura: queda fija arriba aunque la página baje (como en Shopify) */}
         <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 bg-[#0a0a0a] px-3 md:px-4">
@@ -232,7 +267,7 @@ export default function LayoutPanel() {
           </main>
         </div>
       </div>
-    </ToastProvider>
+    </>
   );
 }
 

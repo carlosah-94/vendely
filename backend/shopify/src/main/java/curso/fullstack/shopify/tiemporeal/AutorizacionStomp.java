@@ -2,6 +2,7 @@ package curso.fullstack.shopify.tiemporeal;
 
 import curso.fullstack.shopify.entity.Login;
 import curso.fullstack.shopify.entity.PermisoTienda;
+import curso.fullstack.shopify.entity.RolUsuario;
 import curso.fullstack.shopify.exception.ApiException;
 import curso.fullstack.shopify.repository.LoginRepository;
 import curso.fullstack.shopify.security.JwtAuthFilter;
@@ -101,7 +102,14 @@ public class AutorizacionStomp implements ChannelInterceptor {
      */
     private boolean puedeVer(UsuarioAutenticado usuario, Long idTienda, String canal) {
         try {
-            if ("pedidos".equals(canal)) {
+            if ("soporte".equals(canal)) {
+                // La conversación con soporte: el dueño (no sus empleados), o soporte con acceso activo.
+                if (usuario.rol() == RolUsuario.SUPERADMIN) {
+                    verificadorTienda.acceso(usuario, idTienda);
+                } else {
+                    verificadorTienda.soloElDueno(usuario, idTienda);
+                }
+            } else if ("pedidos".equals(canal)) {
                 verificadorTienda.conPermiso(usuario, idTienda, PermisoTienda.PEDIDOS);
             } else {
                 verificadorTienda.conPermiso(usuario, idTienda, PermisoTienda.INVENTARIO, PermisoTienda.PRODUCTOS);

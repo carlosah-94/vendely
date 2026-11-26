@@ -38,6 +38,21 @@ class CanalesTest {
     }
 
     @Test
+    void elCanalDelEquipoDeSoporteEsSoloDelSuperadmin() {
+        assertTrue(Canales.puedeEscuchar(ADMIN, Canales.SOPORTE_EQUIPO, ES_DUENO));
+        assertFalse(Canales.puedeEscuchar(DUENO, Canales.SOPORTE_EQUIPO, ES_DUENO));
+        assertFalse(Canales.puedeEscuchar(CLIENTE, Canales.SOPORTE_EQUIPO, ES_DUENO));
+        assertFalse(Canales.puedeEscuchar(null, Canales.SOPORTE_EQUIPO, ES_DUENO));
+    }
+
+    @Test
+    void laConversacionConSoporteLaEscuchaElDuenoDeEsaTienda() {
+        assertTrue(Canales.puedeEscuchar(DUENO, "/topic/tiendas/1/soporte", ES_DUENO));
+        assertFalse(Canales.puedeEscuchar(DUENO, "/topic/tiendas/2/soporte", ES_DUENO));
+        assertFalse(Canales.puedeEscuchar(null, "/topic/tiendas/1/soporte", ES_DUENO));
+    }
+
+    @Test
     void sinSesionNoSeEscuchanLosCanalesPrivados() {
         assertFalse(Canales.puedeEscuchar(null, "/topic/tiendas/1/pedidos", ES_DUENO));
         assertFalse(Canales.puedeEscuchar(null, "/topic/tiendas/1/inventario", ES_DUENO));

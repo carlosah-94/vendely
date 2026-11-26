@@ -23,6 +23,14 @@ export async function enviarMensaje(idTienda, mensaje) {
   return (await api.post(`${base(idTienda)}/mensajes`, { mensaje })).data;
 }
 
+/**
+ * Bandeja del equipo de Vendely (solo superadmin): por tienda con acceso,
+ * [{ idTienda, sinResponder, ultimoTexto, ultimaFecha, ultimoDeSoporte }].
+ */
+export async function obtenerBandeja() {
+  return (await api.get('/admin/soporte/bandeja')).data;
+}
+
 /** Quita el acceso al instante. */
 export async function quitarSoporte(idTienda) {
   return (await api.delete(base(idTienda))).data;

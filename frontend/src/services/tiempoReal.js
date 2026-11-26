@@ -104,5 +104,7 @@ export const canales = {
   pedidosDeTienda: (idTienda) => `/topic/tiendas/${idTienda}/pedidos`,
   inventarioDeTienda: (idTienda) => `/topic/tiendas/${idTienda}/inventario`,
   stockDeTienda: (idTienda) => `/topic/tiendas/${idTienda}/stock`,
+  soporteDeTienda: (idTienda) => `/topic/tiendas/${idTienda}/soporte`,
+  soporteEquipo: '/topic/soporte',
   misPedidos: '/user/queue/pedidos',
 };
