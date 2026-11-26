@@ -35,16 +35,18 @@ public class AvisoSoporte {
 
     /** El dueño escribió: aviso a cada superadmin activo, con el mensaje y cómo contestarle. */
     @Async
-    public void alEquipo(String tienda, String subdominio, String dueno, String correoDueno, String texto) {
+    public void alEquipo(String tienda, String subdominio, String dueno, String correoDueno, String texto,
+                         String nombreAdjunto, String urlAdjunto) {
         List<String> destinatarios = loginRepository
                 .findByIdRolAndEstado(RolUsuario.SUPERADMIN.getId(), (short) 1).stream()
                 .map(Login::getCorreo)
                 .toList();
         String html = marco("Mensaje de " + tienda, """
                 <p><strong>%s</strong> (%s) escribió desde su tienda <strong>%s</strong> (/tienda/%s):</p>
-                %s
+                %s%s
                 <p><a href="%s/admin/soporte">Abrir Soporte a tiendas</a> para responder y entrar a la tienda.</p>
-                """.formatted(e(dueno), e(correoDueno), e(tienda), e(subdominio), cita(texto), frontendUrl));
+                """.formatted(e(dueno), e(correoDueno), e(tienda), e(subdominio), cita(texto),
+                        adjunto(nombreAdjunto, urlAdjunto), frontendUrl));
         for (String para : destinatarios) {
             enviar(para, "Soporte · " + tienda + " necesita ayuda", html);
         }
@@ -52,12 +54,12 @@ public class AvisoSoporte {
 
     /** Soporte respondió: aviso al dueño. */
     @Async
-    public void alDueno(String correoDueno, String tienda, String texto) {
+    public void alDueno(String correoDueno, String tienda, String texto, String nombreAdjunto, String urlAdjunto) {
         String html = marco("Soporte de Vendely te respondió", """
                 <p>Sobre tu tienda <strong>%s</strong>:</p>
-                %s
+                %s%s
                 <p><a href="%s/panel/soporte">Abrir Soporte de Vendely</a> para contestar.</p>
-                """.formatted(e(tienda), cita(texto), frontendUrl));
+                """.formatted(e(tienda), cita(texto), adjunto(nombreAdjunto, urlAdjunto), frontendUrl));
         enviar(correoDueno, "Soporte de Vendely te respondió · " + tienda, html);
     }
 
@@ -95,8 +97,19 @@ public class AvisoSoporte {
 
     /** El mensaje tal cual lo escribieron, con sus saltos de línea. */
     private static String cita(String texto) {
+        if (texto == null || texto.isBlank()) {
+            return "";   // solo mandaron un archivo
+        }
         return "<blockquote style=\"margin:12px 0;padding:12px 16px;background:#f6f6f7;border-left:3px solid #101010\">"
                 + e(texto).replace("\n", "<br>") + "</blockquote>";
+    }
+
+    /** "Adjuntó: productos.xlsx", con el enlace para descargarlo. */
+    private static String adjunto(String nombre, String url) {
+        if (nombre == null || url == null) {
+            return "";
+        }
+        return "<p>📎 Adjuntó: <a href=\"" + e(url) + "\">" + e(nombre) + "</a></p>";
     }
 
     private static String e(String s) {

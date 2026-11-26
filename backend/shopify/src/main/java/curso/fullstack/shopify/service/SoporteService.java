@@ -1,6 +1,7 @@
 package curso.fullstack.shopify.service;
 
 import curso.fullstack.shopify.dto.BandejaSoporteResponse;
+import curso.fullstack.shopify.dto.ImagenSubidaResponse;
 import curso.fullstack.shopify.dto.MensajeSoporteResponse;
 import curso.fullstack.shopify.dto.SoporteResponse;
 import curso.fullstack.shopify.entity.Login;
@@ -26,6 +27,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -55,11 +59,13 @@ public class SoporteService {
     private final PropietarioRepository propietarioRepository;
     private final AvisoSoporte aviso;
     private final TiempoRealSoporte enVivo;
+    private final CloudinaryClient cloudinary;
+    private final TransactionTemplate transaccion;
 
     public SoporteService(VerificadorTienda verificadorTienda, TiendaRepository tiendaRepository,
             RegistroSoporteRepository registroRepository, MensajeSoporteRepository mensajeRepository,
             LoginRepository loginRepository, PropietarioRepository propietarioRepository, AvisoSoporte aviso,
-            TiempoRealSoporte enVivo) {
+            TiempoRealSoporte enVivo, CloudinaryClient cloudinary, TransactionTemplate transaccion) {
         this.verificadorTienda = verificadorTienda;
         this.tiendaRepository = tiendaRepository;
         this.registroRepository = registroRepository;
@@ -68,6 +74,8 @@ public class SoporteService {
         this.propietarioRepository = propietarioRepository;
         this.aviso = aviso;
         this.enVivo = enVivo;
+        this.cloudinary = cloudinary;
+        this.transaccion = transaccion;
     }
 
     @Transactional(readOnly = true)
@@ -88,7 +96,7 @@ public class SoporteService {
         log.info("Acceso de soporte permitido: idTienda={}, dias={}", idTienda, dias);
         String texto = limpio(mensaje);
         if (texto != null) {
-            guardarDelDueno(yo, t, texto);
+            guardar(yo, t, texto, null);
         } else {
             String tienda = t.getNombre();
             despuesDeGuardar(() -> enVivo.acceso(idTienda, tienda));
@@ -128,27 +136,57 @@ public class SoporteService {
      */
     @Transactional
     public List<MensajeSoporteResponse> escribir(UsuarioAutenticado yo, Long idTienda, String mensaje) {
-        Tienda t = duenoOSoporte(yo, idTienda);
+        Tienda t = puedeEscribir(yo, idTienda);
         String texto = limpio(mensaje);
         if (texto == null) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Escribe tu mensaje");
         }
-        if (yo.rol() == RolUsuario.SUPERADMIN) {
-            mensajeRepository.save(MensajeSoporte.de(idTienda, yo.idLogin(), true, texto));
-            String correoDueno = correoDelDueno(t);
-            String tienda = t.getNombre();
-            despuesDeGuardar(() -> {
-                enVivo.mensaje(idTienda, tienda, true, texto);
-                aviso.alDueno(correoDueno, tienda, texto);
-            });
-            log.info("Soporte respondió: idTienda={}", idTienda);
-        } else {
-            if (!t.soporteActivo()) {
-                throw new ApiException(HttpStatus.CONFLICT, DA_ACCESO_PRIMERO);
-            }
-            guardarDelDueno(yo, t, texto);
-        }
+        guardar(yo, t, texto, null);
         return conversacion(idTienda);
+    }
+
+    /**
+     * Escribe con un archivo adjunto (V26): el Excel de productos, las fotos, un PDF... El texto
+     * es opcional. Mismas reglas que escribir.
+     *
+     * No es @Transactional a propósito: subir a Cloudinary puede tardar unos segundos y no tiene
+     * sentido tener una conexión de la base tomada mientras tanto. Primero se revisan los
+     * permisos y el archivo, después se sube, y recién ahí se guarda (en su propia transacción).
+     * Si guardar falla, el archivo se borra de Cloudinary para no dejarlo huérfano.
+     */
+    public List<MensajeSoporteResponse> escribirConAdjunto(UsuarioAutenticado yo, Long idTienda, String mensaje,
+                                                           MultipartFile archivo) {
+        puedeEscribir(yo, idTienda);
+        if (!cloudinary.estaConfigurado()) {
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Adjuntar archivos no está disponible por ahora. Puedes pegar el enlace (Drive, Dropbox...) en tu mensaje");
+        }
+        ArchivoSoporte.Valido valido = ArchivoSoporte.validar(archivo);
+        String texto = limpio(mensaje);
+
+        ImagenSubidaResponse subida;
+        try {
+            subida = cloudinary.subirArchivo(valido.contenido(), valido.nombre(),
+                    "vendely/t" + idTienda + "/soporte", valido.esImagen());
+        } catch (RestClientException e) {
+            log.error("Cloudinary falló al subir un adjunto de soporte: idTienda={}, motivo={}", idTienda, e.getMessage());
+            subida = null;
+        }
+        if (subida == null) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "No se pudo subir el archivo. Inténtalo de nuevo");
+        }
+        Adjunto adjunto = new Adjunto(subida.url(), subida.publicId(), valido.nombre(), valido.tipo(),
+                valido.contenido().length);
+        try {
+            return transaccion.execute(estado -> {
+                // Se vuelve a revisar dentro de la transacción: el acceso pudo vencer mientras subía.
+                guardar(yo, puedeEscribir(yo, idTienda), texto, adjunto);
+                return conversacion(idTienda);
+            });
+        } catch (RuntimeException e) {
+            cloudinary.borrar(subida.publicId(), valido.esImagen());
+            throw e;
+        }
     }
 
     /**
@@ -180,7 +218,7 @@ public class SoporteService {
                 sinResponder++;
             }
             MensajeSoporte ultimo = lista.get(0);
-            return new BandejaSoporteResponse(e.getKey(), sinResponder, ultimo.getTexto(), ultimo.getFecha(),
+            return new BandejaSoporteResponse(e.getKey(), sinResponder, ultimo.resumen(), ultimo.getFecha(),
                     Boolean.TRUE.equals(ultimo.getDeSoporte()));
         }).toList();
     }
@@ -199,19 +237,61 @@ public class SoporteService {
                 : verificadorTienda.soloElDueno(yo, idTienda);
     }
 
-    private void guardarDelDueno(UsuarioAutenticado yo, Tienda t, String texto) {
-        mensajeRepository.save(MensajeSoporte.de(t.getIdTienda(), yo.idLogin(), false, texto));
-        Login dueno = loginRepository.findById(yo.idLogin()).orElse(null);
-        String nombre = dueno == null ? "El dueño" : (dueno.getNombres() + " " + dueno.getPrimerApellido()).trim();
-        String correo = dueno == null ? t.getCorreoContacto() : dueno.getCorreo();
-        String tienda = t.getNombre();
-        String subdominio = t.getSubdominio();
+    /** El archivo ya subido a Cloudinary que acompaña un mensaje. */
+    private record Adjunto(String url, String publicId, String nombre, String tipo, long bytes) {
+    }
+
+    /**
+     * Quién puede escribir: el dueño con el acceso activo (si no, soporte no podría leerlo), o
+     * soporte mientras tenga acceso. Devuelve la tienda.
+     */
+    private Tienda puedeEscribir(UsuarioAutenticado yo, Long idTienda) {
+        Tienda t = duenoOSoporte(yo, idTienda);
+        if (yo.rol() != RolUsuario.SUPERADMIN && !t.soporteActivo()) {
+            throw new ApiException(HttpStatus.CONFLICT, DA_ACCESO_PRIMERO);
+        }
+        return t;
+    }
+
+    /**
+     * Guarda el mensaje (texto puede ser null si hay adjunto) y, cuando la transacción termina
+     * bien, avisa en vivo y por correo al otro lado.
+     */
+    private void guardar(UsuarioAutenticado yo, Tienda t, String texto, Adjunto adjunto) {
+        boolean deSoporte = yo.rol() == RolUsuario.SUPERADMIN;
         Long idTienda = t.getIdTienda();
-        despuesDeGuardar(() -> {
-            enVivo.mensaje(idTienda, tienda, false, texto);
-            aviso.alEquipo(tienda, subdominio, nombre, correo, texto);
-        });
-        log.info("Mensaje del dueño a soporte: idTienda={}", t.getIdTienda());
+        MensajeSoporte m = MensajeSoporte.de(idTienda, yo.idLogin(), deSoporte, texto);
+        if (adjunto != null) {
+            m.setAdjuntoUrl(adjunto.url());
+            m.setAdjuntoPublicId(adjunto.publicId());
+            m.setAdjuntoNombre(adjunto.nombre());
+            m.setAdjuntoTipo(adjunto.tipo());
+            m.setAdjuntoBytes(adjunto.bytes());
+        }
+        mensajeRepository.save(m);
+
+        String tienda = t.getNombre();
+        String resumen = m.resumen();
+        String nombreAdjunto = adjunto == null ? null : adjunto.nombre();
+        String urlAdjunto = adjunto == null ? null : adjunto.url();
+        if (deSoporte) {
+            String correoDueno = correoDelDueno(t);
+            despuesDeGuardar(() -> {
+                enVivo.mensaje(idTienda, tienda, true, resumen);
+                aviso.alDueno(correoDueno, tienda, texto, nombreAdjunto, urlAdjunto);
+            });
+            log.info("Soporte respondió: idTienda={}, adjunto={}", idTienda, adjunto != null);
+        } else {
+            Login dueno = loginRepository.findById(yo.idLogin()).orElse(null);
+            String nombre = dueno == null ? "El dueño" : (dueno.getNombres() + " " + dueno.getPrimerApellido()).trim();
+            String correo = dueno == null ? t.getCorreoContacto() : dueno.getCorreo();
+            String subdominio = t.getSubdominio();
+            despuesDeGuardar(() -> {
+                enVivo.mensaje(idTienda, tienda, false, resumen);
+                aviso.alEquipo(tienda, subdominio, nombre, correo, texto, nombreAdjunto, urlAdjunto);
+            });
+            log.info("Mensaje del dueño a soporte: idTienda={}, adjunto={}", idTienda, adjunto != null);
+        }
     }
 
     /** El correo de la cuenta del dueño; si no se encuentra, el de contacto de la tienda. */

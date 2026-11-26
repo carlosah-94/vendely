@@ -104,10 +104,50 @@ public class CloudinaryClient {
     }
 
     /**
+     * Sube un archivo de la conversación con soporte (V26). Las fotos van como imagen; el resto
+     * (Excel, PDF, ZIP...) como "raw", que Cloudinary guarda tal cual y entrega para descargar.
+     * use_filename: el enlace conserva el nombre y la extensión ("productos_x8k2.xlsx"), así
+     * el archivo baja con un nombre que se entiende.
+     */
+    public ImagenSubidaResponse subirArchivo(byte[] contenido, String nombreArchivo, String carpeta, boolean esImagen) {
+        Map<String, String> firmados = new TreeMap<>();     // ordenado: la firma lo exige
+        firmados.put("folder", carpeta);
+        firmados.put("timestamp", String.valueOf(System.currentTimeMillis() / 1000));
+        firmados.put("unique_filename", "true");
+        firmados.put("use_filename", "true");
+
+        MultiValueMap<String, Object> cuerpo = new LinkedMultiValueMap<>();
+        cuerpo.add("file", new ByteArrayResource(contenido) {
+            @Override
+            public String getFilename() {
+                return nombreArchivo;
+            }
+        });
+        firmados.forEach(cuerpo::add);
+        cuerpo.add("api_key", apiKey);
+        cuerpo.add("signature", firmar(firmados));
+
+        Map<String, Object> r = http.post().uri(esImagen ? "/image/upload" : "/raw/upload")
+                .contentType(MediaType.MULTIPART_FORM_DATA)
+                .body(cuerpo)
+                .retrieve()
+                .body(JSON);
+
+        String url = r == null ? null : texto(r.get("secure_url"));
+        String publicId = r == null ? null : texto(r.get("public_id"));
+        return (url == null || publicId == null) ? null : new ImagenSubidaResponse(url, publicId);
+    }
+
+    /**
      * Pide que se borre una foto. Devuelve true si Cloudinary confirma que ya no está.
      * Nunca lanza: borrar la foto es limpieza, y que falle no puede impedir guardar el producto.
      */
     public boolean borrar(String publicId) {
+        return borrar(publicId, true);
+    }
+
+    /** Igual que borrar(publicId), para una foto (esImagen) o un archivo "raw" (Excel, PDF...). */
+    public boolean borrar(String publicId, boolean esImagen) {
         if (!configurado || publicId == null || publicId.isBlank()) {
             return false;
         }
@@ -120,7 +160,7 @@ public class CloudinaryClient {
         cuerpo.add("api_key", apiKey);
         cuerpo.add("signature", firmar(firmados));
         try {
-            Map<String, Object> r = http.post().uri("/image/destroy")
+            Map<String, Object> r = http.post().uri(esImagen ? "/image/destroy" : "/raw/destroy")
                     .contentType(MediaType.MULTIPART_FORM_DATA)
                     .body(cuerpo)
                     .retrieve()
